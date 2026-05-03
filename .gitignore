@@ -1,0 +1,37 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.userosscache
+*.sln.docstates
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# Secrets — NUNCA subir
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+*.pfx
+*.key
+
+# Frontend (cuando lo agreguemos)
+node_modules/
+dist/
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.db-journal
