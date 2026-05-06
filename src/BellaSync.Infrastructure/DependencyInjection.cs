@@ -1,0 +1,45 @@
+using BellaSync.Application.Common.Interfaces;
+using BellaSync.Infrastructure.Auth;
+using BellaSync.Infrastructure.Persistence;
+using BellaSync.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace BellaSync.Infrastructure;
+
+/// <summary>
+/// Registro de servicios de Infrastructure en el contenedor DI.
+/// </summary>
+public static class DependencyInjection
+{
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        // Configuración tipada de JWT
+        services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+
+        // EF Core con PostgreSQL
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException(
+                "ConnectionStrings:DefaultConnection no está configurada.");
+
+        services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseNpgsql(connectionString, npg =>
+            {
+                npg.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
+            }));
+
+        services.AddScoped<IApplicationDbContext>(sp =>
+            sp.GetRequiredService<ApplicationDbContext>());
+
+        // Servicios de aplicación
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentTenantService, CurrentTenantService>();
+        services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
+        services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+        return services;
+    }
+}
