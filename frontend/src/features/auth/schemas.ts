@@ -44,5 +44,35 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, 'La contraseña debe incluir al menos un número.'),
 })
 
-export type LoginFormData    = z.infer<typeof loginSchema>
-export type RegisterFormData = z.infer<typeof registerSchema>
+/** Solo email — primer paso de "olvidé mi contraseña" */
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'El correo electrónico es obligatorio.')
+    .email('Formato de correo electrónico inválido.'),
+})
+
+/**
+ * Nueva contraseña + confirmación — paso final del flujo de reset.
+ * Mismas reglas que el backend (FluentValidation: ResetPasswordValidator).
+ */
+export const resetPasswordSchema = z
+  .object({
+    password: z
+      .string()
+      .min(8, 'La contraseña debe tener al menos 8 caracteres.')
+      .max(100, 'La contraseña no puede superar los 100 caracteres.')
+      .regex(/[A-Z]/, 'La contraseña debe incluir al menos una letra mayúscula.')
+      .regex(/[a-z]/, 'La contraseña debe incluir al menos una letra minúscula.')
+      .regex(/[0-9]/, 'La contraseña debe incluir al menos un número.'),
+    confirmPassword: z.string().min(1, 'Confirma tu contraseña.'),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Las contraseñas no coinciden.',
+    path: ['confirmPassword'],
+  })
+
+export type LoginFormData          = z.infer<typeof loginSchema>
+export type RegisterFormData       = z.infer<typeof registerSchema>
+export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>
+export type ResetPasswordFormData  = z.infer<typeof resetPasswordSchema>

@@ -1,29 +1,36 @@
-import { useState } from 'react'
+import { forwardRef, useState, type InputHTMLAttributes, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowRight, ArrowLeft, Eye, EyeOff, MessageCircle, AlertCircle } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Eye, EyeOff, AlertCircle, Mail } from 'lucide-react'
 
 import { cls } from '@/lib/cls'
-import { loginSchema, type LoginFormData } from '@/features/auth/schemas'
+import {
+  loginSchema,
+  forgotPasswordSchema,
+  type LoginFormData,
+  type ForgotPasswordFormData,
+} from '@/features/auth/schemas'
 import { useAuth } from '@/features/auth/useAuth'
+import { forgotPassword as apiForgotPassword } from '@/api/auth'
 import { extractApiError } from '@/lib/extractApiError'
 
 /**
- * Página de Login.
+ * Página de Login con flujo de recuperación de contraseña.
  *
- * Replica la variación VarCard del mockup login.jsx:
- *  - Fondo cream con 3 gradientes blur atmosféricos
- *  - Card centrada redondeada con shadow-pop
- *  - Logo BellaSync arriba del card
- *  - Footer con link de ayuda WhatsApp
+ * Replica la variación VarCard del mockup login.jsx con 3 stages:
+ *  - login   → formulario email + password (POST /api/Auth/login)
+ *  - forgot  → pedir email (POST /api/Auth/forgot-password)
+ *  - sent    → confirmación de envío
  *
- * El stage "login" está conectado al backend real (POST /api/Auth/login).
- * El link "¿Olvidaste tu contraseña?" abre un panel inline con instrucciones
- * de WhatsApp (mientras el backend no implemente reset password).
+ * El stage "reset" (crear nueva contraseña) vive en /reset-password — se
+ * accede desde el enlace que el usuario recibe por email.
  */
+type Stage = 'login' | 'forgot' | 'sent'
+
 export function Login() {
-  const [showForgotPanel, setShowForgotPanel] = useState(false)
+  const [stage, setStage] = useState<Stage>('login')
+  const [resetEmail, setResetEmail] = useState('')
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-cream flex items-center justify-center px-6 py-10">
@@ -49,10 +56,24 @@ export function Login() {
 
         {/* Card */}
         <div className="rounded-3xl bg-white border border-warm-150 shadow-pop p-8 lg:p-10">
-          {showForgotPanel ? (
-            <ForgotPasswordPanel onBack={() => setShowForgotPanel(false)} />
-          ) : (
-            <LoginPanel onForgot={() => setShowForgotPanel(true)} />
+          {stage === 'login' && (
+            <LoginPanel onForgot={() => setStage('forgot')} />
+          )}
+          {stage === 'forgot' && (
+            <ForgotPanel
+              onBack={() => setStage('login')}
+              onSent={(email) => {
+                setResetEmail(email)
+                setStage('sent')
+              }}
+            />
+          )}
+          {stage === 'sent' && (
+            <SentPanel
+              email={resetEmail}
+              onBack={() => setStage('login')}
+              onResend={() => setStage('forgot')}
+            />
           )}
         </div>
 
@@ -74,14 +95,10 @@ export function Login() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Login panel — formulario real conectado al backend                        */
+/*  Stage: login                                                              */
 /* -------------------------------------------------------------------------- */
 
-interface LoginPanelProps {
-  onForgot: () => void
-}
-
-function LoginPanel({ onForgot }: LoginPanelProps) {
+function LoginPanel({ onForgot }: { onForgot: () => void }) {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -130,40 +147,21 @@ function LoginPanel({ onForgot }: LoginPanelProps) {
           </div>
         )}
 
-        {/* Email */}
-        <div>
-          <div className="flex items-baseline justify-between mb-1.5">
-            <label className="text-[12.5px] font-medium text-warm-700">
-              Correo electrónico
-            </label>
-          </div>
-          <input
+        <FormField label="Correo electrónico" error={errors.email?.message}>
+          <BareInput
             type="email"
             autoComplete="email"
             autoFocus
             placeholder="tu@salon.co"
-            className={cls(
-              'w-full px-3.5 py-2.5 rounded-lg bg-white border text-[14px] text-warm-800 placeholder:text-warm-400 focus:ring-2 focus:ring-brand-100 outline-none transition',
-              errors.email
-                ? 'border-terra-300 focus:border-terra-500'
-                : 'border-warm-200 focus:border-brand-500',
-            )}
+            error={!!errors.email}
             {...register('email')}
           />
-          {errors.email && (
-            <div className="text-[11px] text-terra-500 mt-1 flex items-center gap-1">
-              <AlertCircle size={11} />
-              {errors.email.message}
-            </div>
-          )}
-        </div>
+        </FormField>
 
-        {/* Password */}
-        <div>
-          <div className="flex items-baseline justify-between mb-1.5">
-            <label className="text-[12.5px] font-medium text-warm-700">
-              Contraseña
-            </label>
+        <FormField
+          label="Contraseña"
+          error={errors.password?.message}
+          right={
             <button
               type="button"
               onClick={onForgot}
@@ -171,19 +169,16 @@ function LoginPanel({ onForgot }: LoginPanelProps) {
             >
               ¿Olvidaste tu contraseña?
             </button>
-          </div>
+          }
+        >
           <div className="relative">
-            <input
+            <BareInput
               type={showPwd ? 'text' : 'password'}
               autoComplete="current-password"
               placeholder="••••••••"
-              className={cls(
-                'w-full px-3.5 py-2.5 pr-10 rounded-lg bg-white border text-[14px] text-warm-800 placeholder:text-warm-400 focus:ring-2 focus:ring-brand-100 outline-none transition',
-                errors.password
-                  ? 'border-terra-300 focus:border-terra-500'
-                  : 'border-warm-200 focus:border-brand-500',
-              )}
+              error={!!errors.password}
               {...register('password')}
+              className="pr-10"
             />
             <button
               type="button"
@@ -194,15 +189,8 @@ function LoginPanel({ onForgot }: LoginPanelProps) {
               {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          {errors.password && (
-            <div className="text-[11px] text-terra-500 mt-1 flex items-center gap-1">
-              <AlertCircle size={11} />
-              {errors.password.message}
-            </div>
-          )}
-        </div>
+        </FormField>
 
-        {/* Mantener sesión */}
         <label className="flex items-center gap-2 text-[12.5px] text-warm-600 select-none cursor-pointer">
           <input
             type="checkbox"
@@ -212,7 +200,6 @@ function LoginPanel({ onForgot }: LoginPanelProps) {
           Mantener sesión iniciada
         </label>
 
-        {/* Submit */}
         <button
           type="submit"
           disabled={isSubmitting}
@@ -234,14 +221,37 @@ function LoginPanel({ onForgot }: LoginPanelProps) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Forgot password panel — placeholder hasta que backend implemente reset    */
+/*  Stage: forgot                                                             */
 /* -------------------------------------------------------------------------- */
 
-interface ForgotPanelProps {
+function ForgotPanel({
+  onBack,
+  onSent,
+}: {
   onBack: () => void
-}
+  onSent: (email: string) => void
+}) {
+  const [serverError, setServerError] = useState<string | null>(null)
 
-function ForgotPasswordPanel({ onBack }: ForgotPanelProps) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ForgotPasswordFormData>({
+    resolver: zodResolver(forgotPasswordSchema),
+    defaultValues: { email: '' },
+  })
+
+  const onSubmit = async (data: ForgotPasswordFormData) => {
+    setServerError(null)
+    try {
+      await apiForgotPassword({ email: data.email })
+      onSent(data.email)
+    } catch (e) {
+      setServerError(extractApiError(e, 'No se pudo enviar el enlace.'))
+    }
+  }
+
   return (
     <div className="anim-fade">
       <button
@@ -253,36 +263,164 @@ function ForgotPasswordPanel({ onBack }: ForgotPanelProps) {
         Volver al login
       </button>
 
-      <div className="text-center">
-        <div className="w-16 h-16 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center mx-auto mb-5">
-          <MessageCircle size={32} strokeWidth={1.5} />
-        </div>
-
+      <div className="mb-6">
         <div className="text-[11px] tracking-[0.2em] uppercase text-gold-600 font-medium">
           Recuperar acceso
         </div>
-        <h3 className="font-serif text-[28px] text-warm-800 mt-2 leading-tight">
-          Te ayudamos por WhatsApp
-        </h3>
-        <p className="text-[13.5px] text-warm-600 mt-3 leading-relaxed">
-          Escríbenos al número de soporte y te enviaremos las instrucciones para
-          restablecer tu contraseña.
+        <h1 className="font-serif text-[32px] leading-tight text-warm-800 mt-2">
+          ¿Olvidaste tu contraseña?
+        </h1>
+        <p className="text-[13.5px] text-warm-500 mt-2">
+          Sin problema. Te enviamos un enlace al correo.
         </p>
+      </div>
 
-        <a
-          href="https://wa.me/573001234567?text=Hola,%20necesito%20recuperar%20mi%20contraseña%20de%20BellaSync"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-6 w-full px-5 py-3 rounded-xl bg-brand-700 hover:bg-brand-800 text-white text-[14px] font-medium flex items-center justify-center gap-2 shadow-soft"
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        {serverError && (
+          <div
+            role="alert"
+            className="rounded-lg bg-terra-100/50 border border-terra-300/60 px-3.5 py-2.5 text-[12.5px] text-terra-500 flex items-start gap-2"
+          >
+            <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
+            <span>{serverError}</span>
+          </div>
+        )}
+
+        <FormField
+          label="Correo electrónico"
+          error={errors.email?.message}
+          hint="Te enviaremos un enlace para restablecer tu contraseña"
         >
-          <MessageCircle size={16} />
-          Contactar por WhatsApp
-        </a>
+          <BareInput
+            type="email"
+            autoComplete="email"
+            autoFocus
+            placeholder="tu@salon.co"
+            error={!!errors.email}
+            {...register('email')}
+          />
+        </FormField>
 
-        <p className="text-[11.5px] text-warm-500 mt-4">
-          +57 300 123 4567 · respondemos en menos de 5 min en horario hábil
-        </p>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full px-5 py-3 rounded-xl bg-brand-700 hover:bg-brand-800 text-white text-[14px] font-medium flex items-center justify-center gap-2 shadow-soft transition disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? 'Enviando…' : 'Enviar enlace'}
+          {!isSubmitting && <ArrowRight size={14} />}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Stage: sent — confirmación de envío                                       */
+/* -------------------------------------------------------------------------- */
+
+function SentPanel({
+  email,
+  onBack,
+  onResend,
+}: {
+  email: string
+  onBack: () => void
+  onResend: () => void
+}) {
+  return (
+    <div className="text-center anim-fade">
+      <div className="w-16 h-16 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center mx-auto">
+        <Mail size={32} strokeWidth={1.4} />
+      </div>
+      <h3 className="font-serif text-[28px] text-warm-800 mt-5 leading-tight">
+        Revisa tu correo
+      </h3>
+      <p className="text-[13.5px] text-warm-600 mt-2 leading-relaxed">
+        Enviamos un enlace a{' '}
+        <span className="font-medium text-warm-800 break-all">
+          {email || 'tu correo'}
+        </span>
+        . Sigue las instrucciones para restablecer tu contraseña.
+      </p>
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-6 w-full px-5 py-3 rounded-xl bg-brand-700 hover:bg-brand-800 text-white text-[14px] font-medium flex items-center justify-center gap-2 shadow-soft"
+      >
+        <ArrowLeft size={14} />
+        Volver al login
+      </button>
+
+      <div className="mt-6 pt-5 border-t border-warm-150 text-[11.5px] text-warm-500">
+        ¿No te llegó?{' '}
+        <button type="button" onClick={onResend} className="underline hover:text-warm-800">
+          Reenviar
+        </button>{' '}
+        ·{' '}
+        <button type="button" onClick={onResend} className="underline hover:text-warm-800">
+          Cambiar correo
+        </button>
       </div>
     </div>
   )
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Sub-primitives reutilizadas                                               */
+/* -------------------------------------------------------------------------- */
+
+function FormField({
+  label,
+  error,
+  hint,
+  right,
+  children,
+}: {
+  label: string
+  error?: string
+  hint?: string
+  right?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <label className="text-[12.5px] font-medium text-warm-700">{label}</label>
+        {right}
+      </div>
+      {children}
+      {error && (
+        <div className="text-[11px] text-terra-500 mt-1 flex items-center gap-1">
+          <AlertCircle size={11} />
+          {error}
+        </div>
+      )}
+      {hint && !error && (
+        <div className="text-[11.5px] text-warm-500 mt-1">{hint}</div>
+      )}
+    </div>
+  )
+}
+
+interface BareInputProps extends InputHTMLAttributes<HTMLInputElement> {
+  error?: boolean
+}
+
+const BareInput = forwardRef<HTMLInputElement, BareInputProps>(
+  function BareInput({ error, className = '', ...rest }, ref) {
+    return (
+      <input
+        ref={ref}
+        {...rest}
+        className={cls(
+          'w-full px-3.5 py-2.5 rounded-lg bg-white border text-[14px] text-warm-800 placeholder:text-warm-400 focus:ring-2 focus:ring-brand-100 outline-none transition',
+          error
+            ? 'border-terra-300 focus:border-terra-500'
+            : 'border-warm-200 focus:border-brand-500',
+          className,
+        )}
+      />
+    )
+  },
+)
