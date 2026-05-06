@@ -13,6 +13,8 @@ public interface IApplicationDbContext
     DbSet<Tenant> Tenants { get; }
     DbSet<User> Users { get; }
     DbSet<Service> Services { get; }
+    DbSet<Stylist> Stylists { get; }
+    DbSet<StylistService> StylistServices { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
