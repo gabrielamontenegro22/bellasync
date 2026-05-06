@@ -28,6 +28,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Service> Services => Set<Service>();
     public DbSet<Stylist> Stylists => Set<Stylist>();
     public DbSet<StylistService> StylistServices => Set<StylistService>();
+    public DbSet<Customer> Customers => Set<Customer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
