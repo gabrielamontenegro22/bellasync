@@ -12,6 +12,7 @@ public interface IApplicationDbContext
 {
     DbSet<Tenant> Tenants { get; }
     DbSet<User> Users { get; }
+    DbSet<Service> Services { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
