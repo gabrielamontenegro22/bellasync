@@ -29,6 +29,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Stylist> Stylists => Set<Stylist>();
     public DbSet<StylistService> StylistServices => Set<StylistService>();
     public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

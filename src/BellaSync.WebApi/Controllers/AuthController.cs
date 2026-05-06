@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using BellaSync.Application.Common.Interfaces;
@@ -7,6 +8,7 @@ using BellaSync.Domain.Entities;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace BellaSync.WebApi.Controllers;
 
@@ -23,6 +25,10 @@ public class AuthController : ControllerBase
     private readonly IJwtTokenService _jwt;
     private readonly IValidator<RegisterSalonRequest> _registerValidator;
     private readonly IValidator<LoginRequest> _loginValidator;
+    private readonly IValidator<ForgotPasswordRequest> _forgotValidator;
+    private readonly IValidator<ResetPasswordRequest> _resetValidator;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -31,6 +37,10 @@ public class AuthController : ControllerBase
         IJwtTokenService jwt,
         IValidator<RegisterSalonRequest> registerValidator,
         IValidator<LoginRequest> loginValidator,
+        IValidator<ForgotPasswordRequest> forgotValidator,
+        IValidator<ResetPasswordRequest> resetValidator,
+        IEmailService emailService,
+        IConfiguration configuration,
         ILogger<AuthController> logger)
     {
         _db = db;
@@ -38,6 +48,10 @@ public class AuthController : ControllerBase
         _jwt = jwt;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
+        _forgotValidator = forgotValidator;
+        _resetValidator = resetValidator;
+        _emailService = emailService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -200,6 +214,100 @@ public class AuthController : ControllerBase
             TenantName = user.Tenant?.Name ?? string.Empty,
             TenantSlug = user.Tenant?.Slug ?? string.Empty
         });
+    }
+
+    /// <summary>
+    /// Solicita el envío de un enlace de reseteo de contraseña.
+    /// Siempre responde 200 OK aunque el email no exista (no revelar enumeration).
+    /// </summary>
+    [HttpPost("forgot-password")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPassword(
+        [FromBody] ForgotPasswordRequest request,
+        CancellationToken ct)
+    {
+        var validation = await _forgotValidator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+        {
+            return ValidationProblem(BuildModelState(validation));
+        }
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        var user = await _db.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
+
+        if (user is null || !user.IsActive)
+        {
+            _logger.LogInformation(
+                "Forgot password solicitado para email no existente o inactivo: {Email}",
+                normalizedEmail);
+            return Ok();
+        }
+
+        // Generar token hex de 64 chars (32 bytes random)
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32))
+            .ToLowerInvariant();
+
+        var entity = new PasswordResetToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = token,
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
+            CreatedAt = DateTime.UtcNow,
+        };
+        _db.PasswordResetTokens.Add(entity);
+        await _db.SaveChangesAsync(ct);
+
+        var frontendBaseUrl = _configuration["Frontend:BaseUrl"] ?? "http://localhost:5173";
+        var resetUrl = $"{frontendBaseUrl.TrimEnd('/')}/reset-password?token={token}";
+
+        await _emailService.SendPasswordResetAsync(user.Email, user.FullName, resetUrl, ct);
+
+        return Ok();
+    }
+
+    /// <summary>
+    /// Guarda la nueva contraseña usando un token recibido por email.
+    /// El token es de un solo uso (se invalida con UsedAt) y expira a la hora.
+    /// </summary>
+    [HttpPost("reset-password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword(
+        [FromBody] ResetPasswordRequest request,
+        CancellationToken ct)
+    {
+        var validation = await _resetValidator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+        {
+            return ValidationProblem(BuildModelState(validation));
+        }
+
+        var entity = await _db.PasswordResetTokens
+            .IgnoreQueryFilters()
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Token == request.Token, ct);
+
+        if (entity is null || entity.UsedAt.HasValue || entity.ExpiresAt < DateTime.UtcNow)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Token inválido",
+                Detail = "El enlace expiró o ya fue usado. Solicita uno nuevo.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        entity.User.PasswordHash = _passwordHasher.Hash(request.NewPassword);
+        entity.UsedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Password reset completado para {Email}", entity.User.Email);
+        return NoContent();
     }
 
     private static Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary BuildModelState(

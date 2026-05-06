@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IEmailService, LoggingEmailService>();
 
         return services;
     }

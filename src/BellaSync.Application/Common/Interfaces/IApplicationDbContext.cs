@@ -16,6 +16,7 @@ public interface IApplicationDbContext
     DbSet<Stylist> Stylists { get; }
     DbSet<StylistService> StylistServices { get; }
     DbSet<Customer> Customers { get; }
+    DbSet<PasswordResetToken> PasswordResetTokens { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
