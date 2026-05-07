@@ -20,6 +20,9 @@ public class ServiceResponse
     public string? Color { get; set; }
     public bool IsActive { get; set; }
 
+    public bool RequiresDeposit { get; set; }
+    public decimal DepositPercentage { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

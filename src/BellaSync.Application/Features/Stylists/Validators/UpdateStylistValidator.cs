@@ -13,10 +13,22 @@ public class UpdateStylistValidator : AbstractValidator<UpdateStylistRequest>
             .WithMessage($"El nombre debe tener al menos {StylistValidationRules.FullNameMinLength} caracteres.")
             .MaximumLength(StylistValidationRules.FullNameMaxLength);
 
+        RuleFor(x => x.Role)
+            .NotEmpty().WithMessage("El cargo es obligatorio.")
+            .MaximumLength(80).WithMessage("El cargo no puede superar los 80 caracteres.");
+
+        RuleFor(x => x.Email)
+            .EmailAddress().WithMessage("Formato de correo electrónico inválido.")
+            .MaximumLength(150)
+            .When(x => !string.IsNullOrWhiteSpace(x.Email));
+
         RuleFor(x => x.Phone)
             .Must(p => string.IsNullOrEmpty(p) || StylistValidationRules.PhoneRegex.IsMatch(p))
             .WithMessage("El teléfono no es válido.")
             .MaximumLength(StylistValidationRules.PhoneMaxLength);
+
+        RuleFor(x => x.IdNumber)
+            .MaximumLength(30).WithMessage("La cédula no puede superar los 30 caracteres.");
 
         RuleFor(x => x.Color)
             .Must(c => string.IsNullOrEmpty(c) || StylistValidationRules.HexColorRegex.IsMatch(c))
@@ -25,6 +37,9 @@ public class UpdateStylistValidator : AbstractValidator<UpdateStylistRequest>
         RuleFor(x => x.HireDate)
             .Must(d => !d.HasValue || d.Value <= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)))
             .WithMessage("La fecha de ingreso no puede ser futura.");
+
+        RuleFor(x => x.Status)
+            .IsInEnum().WithMessage("Estado inválido.");
 
         RuleFor(x => x.ServiceIds)
             .Must(ids => ids.Distinct().Count() == ids.Count)

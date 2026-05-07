@@ -37,6 +37,11 @@ public class ServiceConfiguration : IEntityTypeConfiguration<Service>
             .IsRequired()
             .HasColumnType("numeric(5,2)");
 
+        builder.Property(s => s.RequiresDeposit).IsRequired();
+        builder.Property(s => s.DepositPercentage)
+            .IsRequired()
+            .HasColumnType("numeric(5,2)");
+
         builder.Property(s => s.Color)
             .HasMaxLength(7); // #RRGGBB
 

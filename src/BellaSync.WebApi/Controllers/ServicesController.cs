@@ -113,6 +113,8 @@ public class ServicesController : ControllerBase
             Price = request.Price,
             CommissionPercentage = request.CommissionPercentage,
             Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim(),
+            RequiresDeposit = request.RequiresDeposit,
+            DepositPercentage = request.DepositPercentage,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -173,6 +175,8 @@ public class ServicesController : ControllerBase
         service.Price = request.Price;
         service.CommissionPercentage = request.CommissionPercentage;
         service.Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim();
+        service.RequiresDeposit = request.RequiresDeposit;
+        service.DepositPercentage = request.DepositPercentage;
         service.IsActive = request.IsActive;
 
         await _db.SaveChangesAsync(ct);
@@ -223,6 +227,8 @@ public class ServicesController : ControllerBase
         CommissionPercentage = s.CommissionPercentage,
         Color = s.Color,
         IsActive = s.IsActive,
+        RequiresDeposit = s.RequiresDeposit,
+        DepositPercentage = s.DepositPercentage,
         CreatedAt = s.CreatedAt,
         UpdatedAt = s.UpdatedAt
     };

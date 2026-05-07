@@ -54,4 +54,17 @@ public class Service : BaseEntity, ITenantEntity
     /// de "disponibles" pero sigue referenciado por citas históricas.
     /// </summary>
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Si es true, el servicio requiere que el cliente haga un pago parcial
+    /// (anticipo) para confirmar la cita. El monto se calcula con DepositPercentage.
+    /// </summary>
+    public bool RequiresDeposit { get; set; } = false;
+
+    /// <summary>
+    /// Porcentaje del precio que se cobra como anticipo (0 a 100).
+    /// Solo se aplica cuando RequiresDeposit es true.
+    /// Si RequiresDeposit es false, este valor se ignora (típicamente 0).
+    /// </summary>
+    public decimal DepositPercentage { get; set; } = 0m;
 }

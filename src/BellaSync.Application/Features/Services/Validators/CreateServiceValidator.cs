@@ -32,6 +32,10 @@ public class CreateServiceValidator : AbstractValidator<CreateServiceRequest>
             .InclusiveBetween(0m, 100m)
             .WithMessage("La comisión debe estar entre 0 y 100 por ciento.");
 
+        RuleFor(x => x.DepositPercentage)
+            .InclusiveBetween(0m, 100m)
+            .WithMessage("El anticipo debe estar entre 0 y 100 por ciento.");
+
         RuleFor(x => x.Color)
             .Must(c => string.IsNullOrEmpty(c) || ServiceValidationRules.HexColorRegex.IsMatch(c))
             .WithMessage("El color debe estar en formato hexadecimal (#RRGGBB o #RGB).");

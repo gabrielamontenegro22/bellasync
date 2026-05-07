@@ -22,11 +22,21 @@ public class StylistResponse
     public Guid Id { get; set; }
     public string FullName { get; set; } = string.Empty;
 
+    public string Role { get; set; } = string.Empty;
+
+    public string? Email { get; set; }
     public string? Phone { get; set; }
+    public string? IdNumber { get; set; }
     public string? Color { get; set; }
 
     public DateOnly? HireDate { get; set; }
-    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// "Active" / "Vacation" / "Inactive".
+    /// Se serializa como string gracias al JsonStringEnumConverter,
+    /// pero acá lo declaramos como string para mayor claridad en el contrato.
+    /// </summary>
+    public string Status { get; set; } = string.Empty;
 
     public Guid? UserId { get; set; }
 

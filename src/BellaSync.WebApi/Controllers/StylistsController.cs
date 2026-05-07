@@ -53,7 +53,7 @@ public class StylistsController : ControllerBase
 
         IQueryable<Stylist> filtered = includeInactive
             ? query
-            : query.Where(s => s.IsActive);
+            : query.Where(s => s.Status != StylistStatus.Inactive);
 
         var stylists = await filtered
             .OrderBy(s => s.FullName)
@@ -93,7 +93,7 @@ public class StylistsController : ControllerBase
         var fullName = request.FullName.Trim();
 
         var nameTaken = await _db.Stylists
-            .AnyAsync(s => s.IsActive && s.FullName == fullName, ct);
+            .AnyAsync(s => s.Status != StylistStatus.Inactive && s.FullName == fullName, ct);
         if (nameTaken)
         {
             return Conflict(new ProblemDetails
@@ -129,10 +129,13 @@ public class StylistsController : ControllerBase
             Id = Guid.NewGuid(),
             TenantId = _currentTenant.TenantId,
             FullName = fullName,
+            Role = request.Role.Trim(),
+            Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant(),
             Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
+            IdNumber = string.IsNullOrWhiteSpace(request.IdNumber) ? null : request.IdNumber.Trim(),
             Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim(),
             HireDate = request.HireDate,
-            IsActive = true,
+            Status = StylistStatus.Active,
             UserId = null,
             CreatedAt = DateTime.UtcNow
         };
@@ -192,10 +195,10 @@ public class StylistsController : ControllerBase
         var fullName = request.FullName.Trim();
 
         var nameChanged = !string.Equals(stylist.FullName, fullName, StringComparison.OrdinalIgnoreCase);
-        if (request.IsActive && nameChanged)
+        if (request.Status != StylistStatus.Inactive && nameChanged)
         {
             var nameTaken = await _db.Stylists
-                .AnyAsync(s => s.Id != id && s.IsActive && s.FullName == fullName, ct);
+                .AnyAsync(s => s.Id != id && s.Status != StylistStatus.Inactive && s.FullName == fullName, ct);
             if (nameTaken)
             {
                 return Conflict(new ProblemDetails
@@ -230,10 +233,13 @@ public class StylistsController : ControllerBase
 
         // Aplicar cambios escalares
         stylist.FullName = fullName;
+        stylist.Role = request.Role.Trim();
+        stylist.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant();
         stylist.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        stylist.IdNumber = string.IsNullOrWhiteSpace(request.IdNumber) ? null : request.IdNumber.Trim();
         stylist.Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim();
         stylist.HireDate = request.HireDate;
-        stylist.IsActive = request.IsActive;
+        stylist.Status = request.Status;
 
         // Sincronizar relación M:N con servicios
         var currentServiceIds = stylist.StylistServices.Select(ss => ss.ServiceId).ToHashSet();
@@ -282,9 +288,9 @@ public class StylistsController : ControllerBase
         var stylist = await _db.Stylists.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (stylist is null) return NotFound();
 
-        if (!stylist.IsActive) return NoContent();
+        if (stylist.Status == StylistStatus.Inactive) return NoContent();
 
-        stylist.IsActive = false;
+        stylist.Status = StylistStatus.Inactive;
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
@@ -298,10 +304,13 @@ public class StylistsController : ControllerBase
     {
         Id = s.Id,
         FullName = s.FullName,
+        Role = s.Role,
+        Email = s.Email,
         Phone = s.Phone,
+        IdNumber = s.IdNumber,
         Color = s.Color,
         HireDate = s.HireDate,
-        IsActive = s.IsActive,
+        Status = s.Status.ToString(),
         UserId = s.UserId,
         CreatedAt = s.CreatedAt,
         UpdatedAt = s.UpdatedAt,

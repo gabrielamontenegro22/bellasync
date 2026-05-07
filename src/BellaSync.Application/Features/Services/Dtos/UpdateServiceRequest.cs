@@ -19,5 +19,8 @@ public class UpdateServiceRequest
 
     public string? Color { get; set; }
 
+    public bool RequiresDeposit { get; set; } = false;
+    public decimal DepositPercentage { get; set; } = 0m;
+
     public bool IsActive { get; set; } = true;
 }

@@ -18,7 +18,17 @@ public class StylistConfiguration : IEntityTypeConfiguration<Stylist>
             .IsRequired()
             .HasMaxLength(150);
 
+        builder.Property(s => s.Role)
+            .IsRequired()
+            .HasMaxLength(80);
+
+        builder.Property(s => s.Email)
+            .HasMaxLength(150);
+
         builder.Property(s => s.Phone)
+            .HasMaxLength(30);
+
+        builder.Property(s => s.IdNumber)
             .HasMaxLength(30);
 
         builder.Property(s => s.Color)
@@ -27,16 +37,20 @@ public class StylistConfiguration : IEntityTypeConfiguration<Stylist>
         builder.Property(s => s.HireDate)
             .HasColumnType("date");
 
-        builder.Property(s => s.IsActive).IsRequired();
+        builder.Property(s => s.Status)
+            .IsRequired()
+            .HasConversion<int>();
+
         builder.Property(s => s.UserId);
 
         builder.Property(s => s.CreatedAt).IsRequired();
         builder.Property(s => s.UpdatedAt);
 
-        // Nombre único entre estilistas ACTIVOS del mismo tenant.
+        // Nombre único entre estilistas NO inactivos del mismo tenant.
+        // Permite reutilizar nombres si un estilista es archivado (Status=2).
         builder.HasIndex(s => new { s.TenantId, s.FullName })
             .IsUnique()
-            .HasFilter("\"IsActive\" = true");
+            .HasFilter("\"Status\" <> 2");
 
         builder.HasIndex(s => s.TenantId);
 

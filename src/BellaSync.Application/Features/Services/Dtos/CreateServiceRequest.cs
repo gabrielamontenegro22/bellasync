@@ -19,4 +19,10 @@ public class CreateServiceRequest
 
     /// <summary>Color hex en formato #RRGGBB (ej. "#1f5d50"). Opcional.</summary>
     public string? Color { get; set; }
+
+    /// <summary>Si es true, el servicio requiere anticipo para confirmar la cita.</summary>
+    public bool RequiresDeposit { get; set; } = false;
+
+    /// <summary>Porcentaje del precio cobrado como anticipo (0-100).</summary>
+    public decimal DepositPercentage { get; set; } = 0m;
 }
