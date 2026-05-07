@@ -30,8 +30,14 @@ try
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
 
-    // Controllers + JSON
-    builder.Services.AddControllers();
+    // Controllers + JSON. JsonStringEnumConverter permite que el cliente
+    // envíe los enums como string (ej. "Cabello") además de como número (0).
+    builder.Services.AddControllers()
+        .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(
+                new System.Text.Json.Serialization.JsonStringEnumConverter());
+        });
     builder.Services.AddEndpointsApiExplorer();
 
     // CORS para el frontend (Vite/CRA en desarrollo)
