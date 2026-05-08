@@ -35,3 +35,6 @@ Thumbs.db
 # Database
 *.db
 *.db-journal
+
+# Claude Code worktrees (sesiones de agente, no son código del proyecto)
+.claude/worktrees/
