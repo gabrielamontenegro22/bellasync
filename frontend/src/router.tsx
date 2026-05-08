@@ -4,15 +4,16 @@ import { Login } from '@/pages/Login'
 import { ResetPassword } from '@/pages/ResetPassword'
 import { Dashboard } from '@/pages/Dashboard'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
+import { ConfigLayout } from '@/pages/Settings/ConfigLayout'
+import { ServicesPage } from '@/features/services/ServicesPage'
+import { StylistsPage } from '@/features/stylists/StylistsPage'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { useAuth } from '@/features/auth/useAuth'
 
 /**
  * Si la usuaria ya está autenticada y entra a /login o /register,
- * la mandamos al dashboard. Evita ver login cuando ya hay sesión.
- *
- * /reset-password NO se considera "publico-only" porque alguien con sesión
- * activa puede recibir un link de reset y querer usarlo igual.
+ * la mandamos al dashboard. /reset-password queda accesible siempre
+ * (puede llegar un link al email mientras tiene sesión).
  */
 function PublicOnly({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -27,11 +28,23 @@ export function AppRouter() {
       <Route path="/register"       element={<PublicOnly><OnboardingWizard /></PublicOnly>} />
       <Route path="/reset-password" element={<ResetPassword />} />
 
-      {/* Protegidas */}
+      {/* Dashboard placeholder */}
       <Route
         path="/dashboard"
         element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
       />
+
+      {/* Configuración (layout con outlet) */}
+      <Route
+        path="/configuracion"
+        element={<ProtectedRoute><ConfigLayout /></ProtectedRoute>}
+      >
+        {/* /configuracion → redirige a /configuracion/servicios */}
+        <Route index element={<Navigate to="servicios" replace />} />
+        <Route path="servicios"  element={<ServicesPage />} />
+        <Route path="estilistas" element={<StylistsPage />} />
+        {/* Aquí se agregarán: general, horario, pagos, whatsapp, suscripcion */}
+      </Route>
 
       {/* Defaults */}
       <Route path="/"  element={<Navigate to="/dashboard" replace />} />
