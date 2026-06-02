@@ -39,9 +39,10 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 
         // Teléfono único entre clientes ACTIVOS del mismo tenant.
         // Permite reutilizar un teléfono si el cliente fue archivado.
+        // Filtro snake_case porque el schema usa UseSnakeCaseNamingConvention.
         builder.HasIndex(c => new { c.TenantId, c.Phone })
             .IsUnique()
-            .HasFilter("\"IsActive\" = true");
+            .HasFilter("is_active = true");
 
         // Índices para búsqueda por nombre y filtrado rápido por tenant
         builder.HasIndex(c => c.TenantId);

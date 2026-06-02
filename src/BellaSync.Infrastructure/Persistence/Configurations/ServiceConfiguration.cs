@@ -52,9 +52,10 @@ public class ServiceConfiguration : IEntityTypeConfiguration<Service>
 
         // Nombre único entre servicios ACTIVOS del mismo tenant.
         // Permite reutilizar el nombre de un servicio archivado.
+        // Filtro snake_case porque el schema usa UseSnakeCaseNamingConvention.
         builder.HasIndex(s => new { s.TenantId, s.Name })
             .IsUnique()
-            .HasFilter("\"IsActive\" = true");
+            .HasFilter("is_active = true");
 
         // Índice general por tenant para filtrado rápido
         builder.HasIndex(s => s.TenantId);
