@@ -127,21 +127,16 @@ public class StylistsController : ControllerBase
             }
         }
 
-        var stylist = new Stylist
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _currentTenant.TenantId,
-            FullName = fullName,
-            Role = request.Role.Trim(),
-            Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant(),
-            Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
-            IdNumber = string.IsNullOrWhiteSpace(request.IdNumber) ? null : request.IdNumber.Trim(),
-            Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim(),
-            HireDate = request.HireDate,
-            Status = StylistStatus.Active,
-            UserId = null,
-            CreatedAt = DateTime.UtcNow
-        };
+        // Factory del dominio con invariantes validadas (nombre + cargo obligatorios).
+        var stylist = Stylist.Create(
+            tenantId: _currentTenant.TenantId,
+            fullName: fullName,
+            role: request.Role,
+            email: request.Email,
+            phone: request.Phone,
+            idNumber: request.IdNumber,
+            color: request.Color,
+            hireDate: request.HireDate);
 
         foreach (var serviceId in request.ServiceIds.Distinct())
         {
@@ -235,15 +230,20 @@ public class StylistsController : ControllerBase
             }
         }
 
-        // Aplicar cambios escalares
-        stylist.FullName = fullName;
-        stylist.Role = request.Role.Trim();
-        stylist.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant();
-        stylist.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
-        stylist.IdNumber = string.IsNullOrWhiteSpace(request.IdNumber) ? null : request.IdNumber.Trim();
-        stylist.Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim();
-        stylist.HireDate = request.HireDate;
-        stylist.Status = request.Status;
+        // Aplicar cambios escalares via métodos verbales.
+        stylist.Rename(fullName);
+        stylist.ChangeRole(request.Role);
+        stylist.UpdateContact(request.Email, request.Phone, request.IdNumber);
+        stylist.UpdateColor(request.Color);
+        stylist.SetHireDate(request.HireDate);
+
+        // Transición de estado: cada método encapsula la regla.
+        switch (request.Status)
+        {
+            case StylistStatus.Active: stylist.Reactivate(); break;
+            case StylistStatus.Vacation: stylist.GoOnVacation(); break;
+            case StylistStatus.Inactive: stylist.Archive(); break;
+        }
 
         // Sincronizar relación M:N con servicios
         var currentServiceIds = stylist.StylistServices.Select(ss => ss.ServiceId).ToHashSet();
@@ -295,7 +295,7 @@ public class StylistsController : ControllerBase
 
         if (stylist.Status == StylistStatus.Inactive) return NoContent();
 
-        stylist.Status = StylistStatus.Inactive;
+        stylist.Archive();
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
@@ -327,7 +327,7 @@ public class StylistsController : ControllerBase
                 Name = ss.Service.Name,
                 Category = ss.Service.Category.ToString(),
                 DurationMinutes = ss.Service.DurationMinutes,
-                Price = ss.Service.Price
+                Price = ss.Service.Price.Amount
             })
             .OrderBy(x => x.Name)
             .ToList()

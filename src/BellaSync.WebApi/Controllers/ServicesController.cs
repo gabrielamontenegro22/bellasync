@@ -1,6 +1,7 @@
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Features.Services.Dtos;
 using BellaSync.Domain.Entities;
+using BellaSync.Domain.ValueObjects;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -105,22 +106,25 @@ public class ServicesController : ControllerBase
             });
         }
 
-        var service = new Service
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _currentTenant.TenantId,
-            Name = name,
-            Description = request.Description?.Trim(),
-            Category = request.Category,
-            DurationMinutes = request.DurationMinutes,
-            Price = request.Price,
-            CommissionPercentage = request.CommissionPercentage,
-            Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim(),
-            RequiresDeposit = request.RequiresDeposit,
-            DepositPercentage = request.DepositPercentage,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
-        };
+        // Factory del dominio: valida invariantes (nombre no vacío, duración > 0,
+        // coherencia entre RequiresDeposit y DepositPercentage). El TenantId
+        // lo seteamos explícitamente; el SaveChangesAsync lo confirmaría de
+        // todos modos vía auto-set como red de seguridad.
+        var deposit = request.RequiresDeposit
+            ? Percentage.Create(request.DepositPercentage)
+            : Percentage.Zero;
+
+        var service = Service.Create(
+            tenantId: _currentTenant.TenantId,
+            name: name,
+            category: request.Category,
+            durationMinutes: request.DurationMinutes,
+            price: Money.Create(request.Price),
+            commission: Percentage.Create(request.CommissionPercentage),
+            description: request.Description,
+            color: request.Color,
+            requiresDeposit: request.RequiresDeposit,
+            depositPercentage: deposit);
 
         _db.Services.Add(service);
         await _db.SaveChangesAsync(ct);
@@ -172,16 +176,24 @@ public class ServicesController : ControllerBase
             }
         }
 
-        service.Name = newName;
-        service.Description = request.Description?.Trim();
-        service.Category = request.Category;
-        service.DurationMinutes = request.DurationMinutes;
-        service.Price = request.Price;
-        service.CommissionPercentage = request.CommissionPercentage;
-        service.Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim();
-        service.RequiresDeposit = request.RequiresDeposit;
-        service.DepositPercentage = request.DepositPercentage;
-        service.IsActive = request.IsActive;
+        // Mutación vía métodos verbales: cada uno valida sus invariantes
+        // (Rename rechaza vacío, EnableDeposit rechaza percentage 0, etc.).
+        service.Rename(newName);
+        service.UpdateDescription(request.Description);
+        service.Recategorize(request.Category);
+        service.UpdateDuration(request.DurationMinutes);
+        service.UpdatePricing(
+            Money.Create(request.Price),
+            Percentage.Create(request.CommissionPercentage));
+        service.UpdateColor(request.Color);
+
+        if (request.RequiresDeposit)
+            service.EnableDeposit(Percentage.Create(request.DepositPercentage));
+        else
+            service.DisableDeposit();
+
+        if (request.IsActive) service.Reactivate();
+        else service.Archive();
 
         await _db.SaveChangesAsync(ct);
 
@@ -211,7 +223,7 @@ public class ServicesController : ControllerBase
             return NoContent();
         }
 
-        service.IsActive = false;
+        service.Archive();
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
@@ -228,12 +240,13 @@ public class ServicesController : ControllerBase
         Description = s.Description,
         Category = s.Category.ToString(),
         DurationMinutes = s.DurationMinutes,
-        Price = s.Price,
-        CommissionPercentage = s.CommissionPercentage,
+        // Desempaquetar los VOs a primitivos para el contrato JSON.
+        Price = s.Price.Amount,
+        CommissionPercentage = s.CommissionPercentage.Value,
         Color = s.Color,
         IsActive = s.IsActive,
         RequiresDeposit = s.RequiresDeposit,
-        DepositPercentage = s.DepositPercentage,
+        DepositPercentage = s.DepositPercentage.Value,
         CreatedAt = s.CreatedAt,
         UpdatedAt = s.UpdatedAt
     };

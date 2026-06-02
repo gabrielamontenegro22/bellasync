@@ -1,4 +1,5 @@
 using BellaSync.Domain.Entities;
+using BellaSync.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -27,20 +28,31 @@ public class ServiceConfiguration : IEntityTypeConfiguration<Service>
 
         builder.Property(s => s.DurationMinutes).IsRequired();
 
-        // Precio en COP — sin centavos en moneda colombiana, igualmente
-        // dejamos espacio decimal por si el día de mañana se necesita.
+        // Money y Percentage son Value Objects. HasConversion los aplana a
+        // una columna decimal en BD, manteniendo el schema idéntico al pre-VO.
+        // Esto significa que NO hay migración EF necesaria — el cambio es
+        // 100% código.
         builder.Property(s => s.Price)
             .IsRequired()
-            .HasColumnType("numeric(12,2)");
+            .HasColumnType("numeric(12,2)")
+            .HasConversion(
+                vo => vo.Amount,
+                amount => Money.Create(amount));
 
         builder.Property(s => s.CommissionPercentage)
             .IsRequired()
-            .HasColumnType("numeric(5,2)");
+            .HasColumnType("numeric(5,2)")
+            .HasConversion(
+                vo => vo.Value,
+                value => Percentage.Create(value));
 
         builder.Property(s => s.RequiresDeposit).IsRequired();
         builder.Property(s => s.DepositPercentage)
             .IsRequired()
-            .HasColumnType("numeric(5,2)");
+            .HasColumnType("numeric(5,2)")
+            .HasConversion(
+                vo => vo.Value,
+                value => Percentage.Create(value));
 
         builder.Property(s => s.Color)
             .HasMaxLength(7); // #RRGGBB
