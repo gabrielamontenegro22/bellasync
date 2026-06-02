@@ -12,11 +12,13 @@ namespace BellaSync.WebApi.Controllers;
 /// CRUD del catálogo de estilistas del salón.
 /// La asignación de servicios al estilista se maneja en los mismos endpoints
 /// (POST y PUT reciben ServiceIds[] que sincroniza la relación M:N).
-/// Todos los endpoints requieren autenticación con rol SalonAdmin.
+/// Lectura abierta a SalonAdmin y Receptionist (la recepción necesita ver
+/// el equipo al agendar). Escritura solo SalonAdmin (gestión del equipo es
+/// responsabilidad del admin).
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "SalonAdmin")]
+[Authorize(Roles = "SalonAdmin,Receptionist")]
 public class StylistsController : ControllerBase
 {
     private readonly IApplicationDbContext _db;
@@ -79,6 +81,7 @@ public class StylistsController : ControllerBase
 
     /// <summary>Crea un estilista nuevo y opcionalmente le asigna servicios.</summary>
     [HttpPost]
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(StylistResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -173,6 +176,7 @@ public class StylistsController : ControllerBase
     /// las asignaciones actuales (sincronización del set).
     /// </summary>
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(StylistResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -281,6 +285,7 @@ public class StylistsController : ControllerBase
 
     /// <summary>Borrado lógico: marca el estilista como inactivo.</summary>
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
