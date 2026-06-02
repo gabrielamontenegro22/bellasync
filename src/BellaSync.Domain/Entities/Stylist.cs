@@ -162,6 +162,36 @@ public class Stylist : BaseEntity, ITenantEntity
     /// <summary>Soft delete: marca como Inactive. Idempotente.</summary>
     public void Archive() => Status = StylistStatus.Inactive;
 
+    /// <summary>
+    /// Asigna un servicio al estilista. Idempotente: si ya estaba asignado,
+    /// no duplica. La entidad raíz controla su agregado.
+    /// </summary>
+    public void AssignService(Guid serviceId, DateTime utcNow)
+    {
+        if (StylistServices.Any(ss => ss.ServiceId == serviceId)) return;
+
+        StylistServices.Add(new StylistService
+        {
+            StylistId = Id,
+            ServiceId = serviceId,
+            TenantId = TenantId,
+            AssignedAt = utcNow,
+        });
+    }
+
+    /// <summary>
+    /// Quita la asignación de un servicio. Devuelve la entidad removida (o null)
+    /// para que el caller pueda hacer `_db.StylistServices.Remove(...)` si trabaja
+    /// con un DbContext con cambios trackeados.
+    /// </summary>
+    public StylistService? UnassignService(Guid serviceId)
+    {
+        var existing = StylistServices.FirstOrDefault(ss => ss.ServiceId == serviceId);
+        if (existing is null) return null;
+        StylistServices.Remove(existing);
+        return existing;
+    }
+
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

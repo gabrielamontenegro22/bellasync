@@ -9,35 +9,29 @@ namespace BellaSync.Application.Features.Auth.Shared;
 /// <summary>
 /// Centraliza la emisión de access + refresh tokens y la construcción de
 /// AuthResponse. Reutilizado por RegisterSalon, Login y RefreshAccessToken.
-///
-/// Por qué clase concreta (no interface): toda la lógica es de Application
-/// pura — combinar IJwtTokenService + IRefreshTokenGenerator + persistir +
-/// armar DTO. No hay nada técnico que mockear; los handlers pueden testearse
-/// reemplazando las dependencias subyacentes.
 /// </summary>
 public sealed class AuthTokenIssuer
 {
     private readonly IApplicationDbContext _db;
     private readonly IJwtTokenService _jwt;
     private readonly IRefreshTokenGenerator _refreshTokenGenerator;
+    private readonly IClock _clock;
     private readonly JwtSettings _jwtSettings;
 
     public AuthTokenIssuer(
         IApplicationDbContext db,
         IJwtTokenService jwt,
         IRefreshTokenGenerator refreshTokenGenerator,
+        IClock clock,
         IOptions<JwtSettings> jwtSettings)
     {
         _db = db;
         _jwt = jwt;
         _refreshTokenGenerator = refreshTokenGenerator;
+        _clock = clock;
         _jwtSettings = jwtSettings.Value;
     }
 
-    /// <summary>
-    /// Emite access JWT + refresh token, persiste el refresh y devuelve
-    /// el AuthResponse listo para devolver al cliente.
-    /// </summary>
     public async Task<AuthResponse> IssueAsync(
         User user,
         Tenant? tenant,
@@ -48,7 +42,7 @@ public sealed class AuthTokenIssuer
         var (accessToken, accessExpiresAt) = _jwt.GenerateToken(user);
 
         var (refreshPlaintext, refreshHash) = _refreshTokenGenerator.Generate();
-        var refreshExpiresAt = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenDays);
+        var refreshExpiresAt = _clock.UtcNow.AddDays(_jwtSettings.RefreshTokenDays);
 
         var refresh = RefreshToken.Create(
             userId: user.Id,
@@ -76,10 +70,7 @@ public sealed class AuthTokenIssuer
         };
     }
 
-    /// <summary>
-    /// Hashea un refresh token plaintext. Útil para los handlers que
-    /// necesitan registrar la cadena de reemplazo (RefreshAccessToken).
-    /// </summary>
+    /// <summary>Hashea un refresh token plaintext (lookup en BD).</summary>
     public string HashRefreshToken(string plaintext) =>
         _refreshTokenGenerator.Hash(plaintext);
 }

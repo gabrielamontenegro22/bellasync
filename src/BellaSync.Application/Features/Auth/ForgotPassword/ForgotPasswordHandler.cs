@@ -9,27 +9,25 @@ using Microsoft.Extensions.Logging;
 
 namespace BellaSync.Application.Features.Auth.ForgotPassword;
 
-/// <summary>
-/// Solicita el envío de un enlace de reset por email.
-/// SIEMPRE devuelve Success aunque el email no exista (no revelar enumeration).
-/// Invalida tokens previos no usados del mismo user (solo uno activo a la vez).
-/// </summary>
 public sealed class ForgotPasswordHandler : ICommandHandler<ForgotPasswordCommand>
 {
     private readonly IApplicationDbContext _db;
     private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
+    private readonly IClock _clock;
     private readonly ILogger<ForgotPasswordHandler> _logger;
 
     public ForgotPasswordHandler(
         IApplicationDbContext db,
         IEmailService emailService,
         IConfiguration configuration,
+        IClock clock,
         ILogger<ForgotPasswordHandler> logger)
     {
         _db = db;
         _emailService = emailService;
         _configuration = configuration;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -49,24 +47,22 @@ public sealed class ForgotPasswordHandler : ICommandHandler<ForgotPasswordComman
             return Result.Success();
         }
 
-        // Invalidar tokens previos no usados — solo el más reciente queda activo.
-        var now = DateTime.UtcNow;
+        var now = _clock.UtcNow;
+
+        // Invalidar tokens previos no usados. Método verbal MarkUsed es idempotente.
         var previousActive = await _db.PasswordResetTokens
             .Where(t => t.UserId == user.Id && t.UsedAt == null && t.ExpiresAt > now)
             .ToListAsync(ct);
-        foreach (var prev in previousActive) prev.UsedAt = now;
+        foreach (var prev in previousActive) prev.MarkUsed(now);
 
         // Token hex 64 chars (32 bytes random crypto)
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
-        var entity = new PasswordResetToken
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            Token = token,
-            ExpiresAt = now.AddHours(1),
-            CreatedAt = now,
-        };
+        var entity = PasswordResetToken.Create(
+            userId: user.Id,
+            token: token,
+            expiresAtUtc: now.AddHours(1));
+
         _db.PasswordResetTokens.Add(entity);
         await _db.SaveChangesAsync(ct);
 

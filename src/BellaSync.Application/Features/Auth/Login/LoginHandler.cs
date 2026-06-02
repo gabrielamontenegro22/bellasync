@@ -13,30 +13,29 @@ public sealed class LoginHandler : ICommandHandler<LoginCommand, AuthResponse>
     private readonly IApplicationDbContext _db;
     private readonly IPasswordHasher _passwordHasher;
     private readonly AuthTokenIssuer _tokenIssuer;
+    private readonly IClock _clock;
 
     public LoginHandler(
         IApplicationDbContext db,
         IPasswordHasher passwordHasher,
-        AuthTokenIssuer tokenIssuer)
+        AuthTokenIssuer tokenIssuer,
+        IClock clock)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _tokenIssuer = tokenIssuer;
+        _clock = clock;
     }
 
     public async Task<Result<AuthResponse>> HandleAsync(LoginCommand command, CancellationToken ct)
     {
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
 
-        // Login es anónimo → necesita IgnoreQueryFilters para encontrar el user
-        // sin saber su tenant todavía.
         var user = await _db.Users
             .IgnoreQueryFilters()
             .Include(u => u.Tenant)
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
 
-        // Mismo error genérico para "no existe" y "password incorrecto":
-        // no queremos revelar qué emails están registrados.
         if (user is null || !user.IsActive)
         {
             return ApplicationError.Unauthorized("auth.invalid_credentials", "Credenciales inválidas.");
@@ -54,7 +53,8 @@ public sealed class LoginHandler : ICommandHandler<LoginCommand, AuthResponse>
             return ApplicationError.Unauthorized("auth.invalid_credentials", "Credenciales inválidas.");
         }
 
-        user.LastLoginAt = DateTime.UtcNow;
+        // Método verbal: la entidad protege la mutación de LastLoginAt.
+        user.MarkLogin(_clock.UtcNow);
         await _db.SaveChangesAsync(ct);
 
         var response = await _tokenIssuer.IssueAsync(

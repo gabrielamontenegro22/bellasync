@@ -14,15 +14,18 @@ public sealed class CreateStylistHandler : ICommandHandler<CreateStylistCommand,
 {
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
+    private readonly IClock _clock;
     private readonly ILogger<CreateStylistHandler> _logger;
 
     public CreateStylistHandler(
         IApplicationDbContext db,
         ICurrentTenantService currentTenant,
+        IClock clock,
         ILogger<CreateStylistHandler> logger)
     {
         _db = db;
         _currentTenant = currentTenant;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -40,7 +43,6 @@ public sealed class CreateStylistHandler : ICommandHandler<CreateStylistCommand,
                 $"Ya existe un estilista activo con el nombre \"{fullName}\".");
         }
 
-        // Validar que todos los serviceIds existan y estén activos en este tenant
         if (command.ServiceIds.Count > 0)
         {
             var validIds = await _db.Services
@@ -67,15 +69,12 @@ public sealed class CreateStylistHandler : ICommandHandler<CreateStylistCommand,
             color: command.Color,
             hireDate: command.HireDate);
 
+        // Método verbal de la raíz del agregado: protege el invariante
+        // "no asignar el mismo servicio dos veces".
+        var now = _clock.UtcNow;
         foreach (var serviceId in command.ServiceIds.Distinct())
         {
-            stylist.StylistServices.Add(new StylistService
-            {
-                StylistId = stylist.Id,
-                ServiceId = serviceId,
-                TenantId = _currentTenant.TenantId,
-                AssignedAt = DateTime.UtcNow,
-            });
+            stylist.AssignService(serviceId, now);
         }
 
         _db.Stylists.Add(stylist);
@@ -85,7 +84,6 @@ public sealed class CreateStylistHandler : ICommandHandler<CreateStylistCommand,
             "Estilista {FullName} ({StylistId}) creado en tenant {TenantId} con {Count} servicios",
             stylist.FullName, stylist.Id, stylist.TenantId, stylist.StylistServices.Count);
 
-        // Releer con includes para devolver respuesta completa con datos de servicios
         var created = await _db.Stylists
             .AsNoTracking()
             .Include(s => s.StylistServices)

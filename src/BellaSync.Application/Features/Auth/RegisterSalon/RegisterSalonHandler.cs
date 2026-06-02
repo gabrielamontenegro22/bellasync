@@ -35,7 +35,6 @@ public sealed class RegisterSalonHandler : ICommandHandler<RegisterSalonCommand,
         var normalizedEmail = command.AdminEmail.Trim().ToLowerInvariant();
         var slug = SlugGenerator.Generate(command.SalonName);
 
-        // Si el slug colisiona, le añadimos un sufijo aleatorio corto.
         var slugExists = await _db.Tenants
             .IgnoreQueryFilters()
             .AnyAsync(t => t.Slug == slug, ct);
@@ -54,26 +53,16 @@ public sealed class RegisterSalonHandler : ICommandHandler<RegisterSalonCommand,
                 "Ya existe un usuario con ese correo electrónico.");
         }
 
-        var tenant = new Tenant
-        {
-            Id = Guid.NewGuid(),
-            Name = command.SalonName.Trim(),
-            Slug = slug,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-        };
+        // Factories del dominio: validan invariantes (nombres no vacíos,
+        // emails normalizados, etc.) con setters privados protegidos.
+        var tenant = Tenant.Create(name: command.SalonName, slug: slug);
 
-        var adminUser = new User
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenant.Id,
-            Email = normalizedEmail,
-            PasswordHash = _passwordHasher.Hash(command.AdminPassword),
-            FullName = command.AdminFullName.Trim(),
-            Role = UserRole.SalonAdmin,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-        };
+        var adminUser = User.Create(
+            tenantId: tenant.Id,
+            email: normalizedEmail,
+            passwordHash: _passwordHasher.Hash(command.AdminPassword),
+            fullName: command.AdminFullName,
+            role: UserRole.SalonAdmin);
 
         _db.Tenants.Add(tenant);
         _db.Users.Add(adminUser);
