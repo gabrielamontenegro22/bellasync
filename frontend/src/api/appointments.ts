@@ -62,6 +62,12 @@ export interface CreateAppointmentRequest {
   serviceId: string
   startAtUtc: string  // ISO
   notes?: string | null
+  /**
+   * Saltar la regla de "al menos 30 min de anticipación". Pensado para
+   * walk-ins. El backend solo lo respeta si el JWT tiene rol SalonAdmin;
+   * Receptionist lo manda y queda silenciosamente ignorado.
+   */
+  bypassAdvanceWindow?: boolean
 }
 
 /** GET /api/Appointments?date=YYYY-MM-DD[&stylistId=guid] */
