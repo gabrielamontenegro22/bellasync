@@ -12,11 +12,12 @@ namespace BellaSync.WebApi.Controllers;
 /// <summary>
 /// CRM de clientes del salón.
 /// Listado paginado con búsqueda por nombre/teléfono.
-/// Todos los endpoints requieren autenticación con rol SalonAdmin.
+/// CRUD completo abierto a SalonAdmin y Receptionist — la recepción
+/// gestiona los clientes en el día a día.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "SalonAdmin")]
+[Authorize(Roles = "SalonAdmin,Receptionist")]
 public class CustomersController : ControllerBase
 {
     private const int DefaultPageSize = 20;

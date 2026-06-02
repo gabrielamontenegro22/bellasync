@@ -10,13 +10,15 @@ namespace BellaSync.WebApi.Controllers;
 
 /// <summary>
 /// CRUD del catálogo de servicios del salón.
-/// Todos los endpoints requieren autenticación con rol SalonAdmin.
+/// Lectura abierta a SalonAdmin y Receptionist (la recepción necesita ver
+/// el catálogo al agendar). Escritura solo SalonAdmin (catálogo es
+/// configuración del salón).
 /// El TenantId se toma del JWT — el filtro global multi-tenant
 /// garantiza que cada salón solo opere sobre sus propios servicios.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "SalonAdmin")]
+[Authorize(Roles = "SalonAdmin,Receptionist")]
 public class ServicesController : ControllerBase
 {
     private readonly IApplicationDbContext _db;
@@ -77,6 +79,7 @@ public class ServicesController : ControllerBase
 
     /// <summary>Crea un nuevo servicio en el catálogo del salón actual.</summary>
     [HttpPost]
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(ServiceResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -131,6 +134,7 @@ public class ServicesController : ControllerBase
 
     /// <summary>Edita un servicio existente. Permite reactivar servicios archivados.</summary>
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(ServiceResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -193,6 +197,7 @@ public class ServicesController : ControllerBase
     /// Las citas históricas siguen referenciándolo correctamente.
     /// </summary>
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
