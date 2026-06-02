@@ -58,5 +58,14 @@ public class StylistConfiguration : IEntityTypeConfiguration<Stylist>
         builder.HasIndex(s => s.UserId)
             .IsUnique()
             .HasFilter("\"UserId\" IS NOT NULL");
+
+        // FK física a tenants — garantía de integridad referencial multi-tenant
+        // a nivel de BD (defensa en profundidad). Sin navegación inversa para
+        // no contaminar Tenant con colecciones de cada entidad hija.
+        // OnDelete=Restrict: borrar un tenant con estilistas asociados falla.
+        builder.HasOne<Tenant>()
+            .WithMany()
+            .HasForeignKey(s => s.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

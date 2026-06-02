@@ -37,7 +37,13 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
         // Filtro global multi-tenant: cualquier entidad que implemente
         // ITenantEntity sólo devuelve filas cuyo TenantId == TenantId del request.
-        // Si HasTenant es false (registro/login anónimos), el filtro se desactiva.
+        //
+        // SEMÁNTICA DEFAULT-CERRADA (cambiado el 2026-06):
+        // Si no hay tenant en el JWT (request anónimo o sesión vencida),
+        // el filtro evalúa "TenantId == Guid.Empty" → no devuelve nada.
+        // Los endpoints anónimos legítimos (login, register, forgot/reset password)
+        // deben usar IgnoreQueryFilters() explícitamente para escapar el filtro.
+        // Esto previene fugas accidentales en cualquier endpoint anónimo nuevo.
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             if (typeof(ITenantEntity).IsAssignableFrom(entityType.ClrType))
@@ -55,12 +61,31 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     private void SetTenantFilter<TEntity>(ModelBuilder modelBuilder) where TEntity : class, ITenantEntity
     {
+        // Default-cerrado: siempre filtra por el TenantId actual.
+        // Si HasTenant=false, TenantId devuelve Guid.Empty y la query no devuelve filas.
         modelBuilder.Entity<TEntity>().HasQueryFilter(e =>
-            !_currentTenant.HasTenant || e.TenantId == _currentTenant.TenantId);
+            e.TenantId == _currentTenant.TenantId);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        // Auto-asignación de TenantId para entidades nuevas (defensa en profundidad).
+        // Si un handler olvida setear TenantId al crear una entidad ITenantEntity,
+        // se completa automáticamente desde el contexto del request actual.
+        // Si HasTenant=false (sin sesión), no se toca — el INSERT fallará con
+        // violación NOT NULL/FK y la operación se aborta. Comportamiento seguro.
+        if (_currentTenant.HasTenant)
+        {
+            var tenantId = _currentTenant.TenantId;
+            foreach (var entry in ChangeTracker.Entries<ITenantEntity>())
+            {
+                if (entry.State == EntityState.Added && entry.Entity.TenantId == Guid.Empty)
+                {
+                    entry.Entity.TenantId = tenantId;
+                }
+            }
+        }
+
         // Auditoría automática de UpdatedAt para entidades modificadas.
         foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {

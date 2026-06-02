@@ -2,6 +2,7 @@ using System.Text;
 using BellaSync.Application;
 using BellaSync.Infrastructure;
 using BellaSync.Infrastructure.Auth;
+using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -29,6 +30,12 @@ try
     // Capas Application e Infrastructure
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
+
+    // Handler global para violaciones de constraint único (PG SQLSTATE 23505).
+    // Traduce race conditions a 409 Conflict en vez de 500 Internal Server Error.
+    // Vive en WebApi porque depende de tipos HTTP.
+    builder.Services.AddExceptionHandler<UniqueViolationExceptionHandler>();
+    builder.Services.AddProblemDetails();
 
     // Controllers + JSON. JsonStringEnumConverter permite que el cliente
     // envíe los enums como string (ej. "Cabello") además de como número (0).
@@ -116,6 +123,10 @@ try
     var app = builder.Build();
 
     // Pipeline
+    // ExceptionHandler PRIMERO: convierte unique violations (PG 23505) que
+    // escaparon a 409 Conflict en lugar de 500. Registrado en AddInfrastructure().
+    app.UseExceptionHandler();
+
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();

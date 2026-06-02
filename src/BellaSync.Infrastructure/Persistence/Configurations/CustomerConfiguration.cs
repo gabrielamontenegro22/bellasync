@@ -46,5 +46,14 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         // Índices para búsqueda por nombre y filtrado rápido por tenant
         builder.HasIndex(c => c.TenantId);
         builder.HasIndex(c => new { c.TenantId, c.FullName });
+
+        // FK física a tenants — garantía de integridad referencial multi-tenant
+        // a nivel de BD (defensa en profundidad). Sin navegación inversa para
+        // no contaminar Tenant con colecciones de cada entidad hija.
+        // OnDelete=Restrict: borrar un tenant con clientes asociados falla.
+        builder.HasOne<Tenant>()
+            .WithMany()
+            .HasForeignKey(c => c.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
