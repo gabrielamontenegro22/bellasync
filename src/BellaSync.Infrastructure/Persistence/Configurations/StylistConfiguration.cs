@@ -48,16 +48,17 @@ public class StylistConfiguration : IEntityTypeConfiguration<Stylist>
 
         // Nombre único entre estilistas NO inactivos del mismo tenant.
         // Permite reutilizar nombres si un estilista es archivado (Status=2).
+        // Filtro snake_case porque el schema usa UseSnakeCaseNamingConvention.
         builder.HasIndex(s => new { s.TenantId, s.FullName })
             .IsUnique()
-            .HasFilter("\"Status\" <> 2");
+            .HasFilter("status <> 2");
 
         builder.HasIndex(s => s.TenantId);
 
         // Si el estilista tiene un User asociado, debe ser único en todo el sistema
         builder.HasIndex(s => s.UserId)
             .IsUnique()
-            .HasFilter("\"UserId\" IS NOT NULL");
+            .HasFilter("user_id IS NOT NULL");
 
         // FK física a tenants — garantía de integridad referencial multi-tenant
         // a nivel de BD (defensa en profundidad). Sin navegación inversa para

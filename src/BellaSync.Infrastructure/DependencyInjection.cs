@@ -29,7 +29,11 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npg =>
             {
                 npg.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
-            }));
+            })
+            // Naming convention snake_case: tablas y columnas idiomáticas
+            // de PostgreSQL ("created_at" en vez de "CreatedAt"). Cualquier
+            // SQL crudo desde pgAdmin/psql es legible sin necesidad de quotes.
+            .UseSnakeCaseNamingConvention());
 
         services.AddScoped<IApplicationDbContext>(sp =>
             sp.GetRequiredService<ApplicationDbContext>());
