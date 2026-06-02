@@ -18,6 +18,7 @@ public interface IApplicationDbContext
     DbSet<Customer> Customers { get; }
     DbSet<PasswordResetToken> PasswordResetTokens { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
+    DbSet<Appointment> Appointments { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

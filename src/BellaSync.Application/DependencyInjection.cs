@@ -1,5 +1,6 @@
 using System.Reflection;
 using BellaSync.Application.Common.Handlers;
+using BellaSync.Application.Features.Appointments.Shared;
 using BellaSync.Application.Features.Auth.Shared;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,6 +30,10 @@ public static class DependencyInjection
         // de emisión de tokens para evitar duplicación entre Register, Login,
         // RefreshAccessToken).
         services.AddScoped<AuthTokenIssuer>();
+
+        // Validador de citas: chequea slot overlap, servicio activo, stylist
+        // disponible, etc. Reutilizado por CreateAppointment y CreatePublic.
+        services.AddScoped<AppointmentValidator>();
 
         return services;
     }

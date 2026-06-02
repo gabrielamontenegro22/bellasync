@@ -31,6 +31,14 @@ try
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
 
+    // Política de citas (hold, anticipación mínima, etc.)
+    builder.Services.Configure<BellaSync.Application.Auth.AppointmentSettings>(
+        builder.Configuration.GetSection(BellaSync.Application.Auth.AppointmentSettings.SectionName));
+
+    // Token compartido para endpoints internos (cron de release-expired-holds, etc.)
+    builder.Services.Configure<BellaSync.WebApi.Controllers.InternalSettings>(
+        builder.Configuration.GetSection(BellaSync.WebApi.Controllers.InternalSettings.SectionName));
+
     // Handler global para violaciones de constraint único (PG SQLSTATE 23505).
     // Traduce race conditions a 409 Conflict en vez de 500 Internal Server Error.
     // Vive en WebApi porque depende de tipos HTTP.
