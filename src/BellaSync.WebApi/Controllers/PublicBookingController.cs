@@ -1,6 +1,9 @@
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Features.Appointments.CreatePublicAppointment;
 using BellaSync.Application.Features.Appointments.Dtos;
+using BellaSync.Application.Features.PublicCatalog.Dtos;
+using BellaSync.Application.Features.PublicCatalog.ListPublicServices;
+using BellaSync.Application.Features.PublicCatalog.ListPublicStylists;
 using BellaSync.WebApi.Infrastructure;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +18,30 @@ namespace BellaSync.WebApi.Controllers;
 [Route("api/[controller]")]
 public class PublicBookingController : ControllerBase
 {
+    [HttpGet("{tenantSlug}/services")]
+    [ProducesResponseType(typeof(IEnumerable<PublicServiceItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetServices(
+        string tenantSlug,
+        [FromServices] IQueryHandler<ListPublicServicesQuery, IReadOnlyList<PublicServiceItem>> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new ListPublicServicesQuery(tenantSlug), ct);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("{tenantSlug}/stylists")]
+    [ProducesResponseType(typeof(IEnumerable<PublicStylistItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetStylists(
+        string tenantSlug,
+        [FromServices] IQueryHandler<ListPublicStylistsQuery, IReadOnlyList<PublicStylistItem>> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new ListPublicStylistsQuery(tenantSlug), ct);
+        return result.ToActionResult();
+    }
+
     [HttpPost("{tenantSlug}")]
     [ProducesResponseType(typeof(PublicBookingResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
