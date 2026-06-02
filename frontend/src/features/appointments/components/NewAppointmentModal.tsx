@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, Card, Input } from '@/components/ui'
 import { listServices, type ServiceResponse } from '@/api/services'
 import { listStylists, type StylistResponse } from '@/api/stylists'
-import { listCustomers, type CustomerResponse } from '@/api/customers'
+import { createCustomer, listCustomers, type CustomerResponse } from '@/api/customers'
 import { useCreateAppointment } from '../hooks'
 
 /**
@@ -143,6 +143,7 @@ function CustomerAutocomplete({
 }: { selected: CustomerResponse | null; onSelect: (c: CustomerResponse | null) => void }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
+  const [createMode, setCreateMode] = useState<{ name: string } | null>(null)
 
   // Debounced — espera 250ms antes de buscar
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -178,6 +179,25 @@ function CustomerAutocomplete({
     )
   }
 
+  // Modo "crear cliente nuevo inline"
+  if (createMode) {
+    return (
+      <InlineCreateCustomer
+        initialName={createMode.name}
+        onCancel={() => setCreateMode(null)}
+        onCreated={c => {
+          onSelect(c)
+          setCreateMode(null)
+          setSearch('')
+          setOpen(false)
+        }}
+      />
+    )
+  }
+
+  const noResults = query.data && query.data.items.length === 0
+  const searchLooksLikePhone = /^[\d\s\-+]{4,}$/.test(search.trim())
+
   return (
     <div className="relative">
       <Input
@@ -190,9 +210,20 @@ function CustomerAutocomplete({
       {open && search.length >= 2 && (
         <div className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-md border border-warm-200 bg-white shadow-lg">
           {query.isLoading && <p className="px-3 py-2 text-sm text-warm-500">Buscando…</p>}
-          {query.data?.items.length === 0 && (
-            <p className="px-3 py-2 text-sm text-warm-500">Sin resultados.</p>
+
+          {noResults && (
+            <div className="px-3 py-2 text-sm">
+              <p className="mb-2 text-warm-500">Sin resultados para "{search}".</p>
+              <button
+                type="button"
+                onClick={() => setCreateMode({ name: searchLooksLikePhone ? '' : search })}
+                className="w-full rounded-md bg-brand-50 px-3 py-2 text-left text-brand-700 hover:bg-brand-100"
+              >
+                + Crear cliente nuevo
+              </button>
+            </div>
           )}
+
           {query.data?.items.map(c => (
             <button
               key={c.id}
@@ -206,6 +237,78 @@ function CustomerAutocomplete({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Form inline para crear un cliente nuevo sin salir del modal de Nueva cita.
+ * Solo pide nombre + teléfono (lo mínimo del CreateCustomerValidator).
+ * Después del éxito, llama onCreated con el customer recién persistido.
+ */
+function InlineCreateCustomer({
+  initialName, onCreated, onCancel,
+}: {
+  initialName: string
+  onCreated: (c: CustomerResponse) => void
+  onCancel: () => void
+}) {
+  const [fullName, setFullName] = useState(initialName)
+  const [phone, setPhone] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit() {
+    setError(null)
+    setSubmitting(true)
+    try {
+      const created = await createCustomer({ fullName: fullName.trim(), phone: phone.trim() })
+      onCreated(created)
+    } catch (e: any) {
+      setError(
+        e?.response?.data?.detail
+        ?? e?.response?.data?.title
+        ?? 'No se pudo crear el cliente.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-brand-300 bg-brand-50/30 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-xs uppercase tracking-wide text-warm-500">Nuevo cliente</label>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-xs text-warm-400 hover:text-warm-600"
+        >
+          Cancelar
+        </button>
+      </div>
+      <div className="space-y-2">
+        <Input
+          placeholder="Nombre completo"
+          value={fullName}
+          onChange={e => setFullName(e.target.value)}
+        />
+        <Input
+          placeholder="Teléfono (WhatsApp)"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+        />
+        {error && <p className="rounded bg-terra-100 p-2 text-xs text-terra-700">{error}</p>}
+        <Button
+          onClick={submit}
+          loading={submitting}
+          disabled={fullName.trim().length < 3 || !phone.trim()}
+          fullWidth
+          size="sm"
+        >
+          Crear y seleccionar
+        </Button>
+      </div>
     </div>
   )
 }

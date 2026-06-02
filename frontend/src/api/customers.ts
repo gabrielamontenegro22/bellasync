@@ -39,3 +39,21 @@ export async function listCustomers(params: {
   const { data } = await api.get<PaginatedCustomers>('/api/Customers', { params })
   return data
 }
+
+/** Body del POST /api/Customers — espejo de CreateCustomerRequest del backend. */
+export interface CreateCustomerRequest {
+  fullName: string
+  phone: string
+  email?: string
+  birthday?: string  // YYYY-MM-DD
+  documentNumber?: string
+  address?: string
+  notes?: string
+  acceptsMarketing?: boolean
+}
+
+/** POST /api/Customers — crea un cliente. */
+export async function createCustomer(req: CreateCustomerRequest): Promise<CustomerResponse> {
+  const { data } = await api.post<CustomerResponse>('/api/Customers', req)
+  return data
+}
