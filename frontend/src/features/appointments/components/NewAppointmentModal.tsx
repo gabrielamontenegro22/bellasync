@@ -4,6 +4,7 @@ import { Button, Card, Input } from '@/components/ui'
 import { listServices, type ServiceResponse } from '@/api/services'
 import { listStylists, type StylistResponse } from '@/api/stylists'
 import { createCustomer, listCustomers, type CustomerResponse } from '@/api/customers'
+import { useAuth } from '@/features/auth/useAuth'
 import { useCreateAppointment } from '../hooks'
 
 /**
@@ -14,11 +15,15 @@ import { useCreateAppointment } from '../hooks'
 export function NewAppointmentModal({
   defaultDate, onClose,
 }: { defaultDate: string; onClose: () => void }) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'SalonAdmin'
+
   const [customer, setCustomer] = useState<CustomerResponse | null>(null)
   const [serviceId, setServiceId] = useState('')
   const [stylistId, setStylistId] = useState('')
   const [startAtLocal, setStartAtLocal] = useState(`${defaultDate}T10:00`)
   const [notes, setNotes] = useState('')
+  const [bypassAdvance, setBypassAdvance] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const servicesQ = useQuery({ queryKey: ['services'], queryFn: () => listServices() })
@@ -52,6 +57,9 @@ export function NewAppointmentModal({
         stylistId,
         startAtUtc: new Date(startAtLocal).toISOString(),
         notes: notes || null,
+        // Solo se manda si el user es admin Y marcó el checkbox.
+        // Si lo manda un Receptionist, el backend lo silencia igual.
+        bypassAdvanceWindow: isAdmin && bypassAdvance,
       })
       onClose()
     } catch (e: any) {
@@ -115,6 +123,24 @@ export function NewAppointmentModal({
           value={startAtLocal}
           onChange={e => setStartAtLocal(e.target.value)}
         />
+
+        {isAdmin && (
+          <label className="flex items-start gap-2 rounded-md bg-gold-50/50 p-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={bypassAdvance}
+              onChange={e => setBypassAdvance(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium text-gold-700">Cita imprevista (walk-in)</span>
+              <span className="block text-xs text-warm-600">
+                Saltar la regla de 30 min de anticipación. Útil cuando el cliente
+                llega al salón sin cita previa.
+              </span>
+            </span>
+          </label>
+        )}
 
         <Input label="Notas (opcional)" value={notes} onChange={e => setNotes(e.target.value)} />
 

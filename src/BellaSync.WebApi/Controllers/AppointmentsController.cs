@@ -65,6 +65,13 @@ public class AppointmentsController : ControllerBase
         if (!validation.IsValid)
             return ValidationProblem(BuildModelState(validation));
 
+        // BypassAdvanceWindow es privilegio de SalonAdmin (walk-ins).
+        // Si lo manda un Receptionist, lo silenciamos a false antes del handler.
+        if (command.BypassAdvanceWindow && !User.IsInRole("SalonAdmin"))
+        {
+            command = command with { BypassAdvanceWindow = false };
+        }
+
         var result = await handler.HandleAsync(command, ct);
         return result.ToCreatedAtAction(nameof(GetById), v => new { id = v.Id });
     }

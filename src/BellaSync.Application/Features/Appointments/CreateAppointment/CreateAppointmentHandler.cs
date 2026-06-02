@@ -50,12 +50,18 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
                 "El cliente está archivado.");
 
         // Resolver y validar service + stylist + overlap.
+        // Si bypass activo (walk-in autorizado por admin), pasamos minAdvance=0
+        // para que el validator no rechace por "muy próximo". El factory del
+        // dominio sigue rechazando startAt en el pasado, así que el peor caso
+        // es agendar a "ahora mismo + 1 segundo".
+        var minAdvance = command.BypassAdvanceWindow ? 0 : _settings.MinAdvanceMinutes;
+
         var refsResult = await _validator.ResolveAndValidateAsync(
             stylistId: command.StylistId,
             serviceId: command.ServiceId,
             startAtUtc: command.StartAtUtc,
             utcNow: _clock.UtcNow,
-            minAdvanceMinutes: _settings.MinAdvanceMinutes,
+            minAdvanceMinutes: minAdvance,
             excludeAppointmentId: null,
             ct: ct);
 
