@@ -46,3 +46,42 @@ export async function publicBook(
   )
   return data
 }
+
+// ===== Catálogo público (anónimo) =====
+
+export interface PublicService {
+  id: string
+  name: string
+  description: string | null
+  category: string
+  durationMinutes: number
+  price: number
+  color: string | null
+  requiresDeposit: boolean
+  depositPercentage: number
+  depositAmount: number
+}
+
+export interface PublicStylist {
+  id: string
+  fullName: string
+  role: string
+  color: string | null
+  serviceIds: string[]
+}
+
+/** GET /api/PublicBooking/{slug}/services — lista servicios activos del salón. */
+export async function getPublicServices(tenantSlug: string): Promise<PublicService[]> {
+  const { data } = await publicApi.get<PublicService[]>(
+    `/api/PublicBooking/${encodeURIComponent(tenantSlug)}/services`,
+  )
+  return data
+}
+
+/** GET /api/PublicBooking/{slug}/stylists — lista estilistas disponibles del salón. */
+export async function getPublicStylists(tenantSlug: string): Promise<PublicStylist[]> {
+  const { data } = await publicApi.get<PublicStylist[]>(
+    `/api/PublicBooking/${encodeURIComponent(tenantSlug)}/stylists`,
+  )
+  return data
+}
