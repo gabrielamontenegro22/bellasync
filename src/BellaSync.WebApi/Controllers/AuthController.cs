@@ -1,4 +1,7 @@
+using BellaSync.Application.Auth;
 using BellaSync.Application.Common.Handlers;
+using BellaSync.Application.Common.Interfaces;
+using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Auth.Dtos;
 using BellaSync.Application.Features.Auth.ForgotPassword;
 using BellaSync.Application.Features.Auth.Login;
@@ -8,6 +11,8 @@ using BellaSync.Application.Features.Auth.ResetPassword;
 using BellaSync.WebApi.Infrastructure;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace BellaSync.WebApi.Controllers;
 
@@ -16,14 +21,34 @@ namespace BellaSync.WebApi.Controllers;
 /// FluentValidation, mapea el DTO a un Command/Query y despacha al handler.
 /// Todos los endpoints son anónimos.
 ///
-/// Nota: register-salon ahora devuelve 200 OK (era 201). Como no hay endpoint
-/// GET /salons/{id} al cual apuntar Location, no aplicaba el contrato
-/// estándar de CreatedAtAction. El cuerpo (AuthResponse) es idéntico.
+/// REFRESH TOKEN COMO COOKIE HTTPONLY:
+/// register/login/refresh setean el refresh token en una cookie HttpOnly
+/// (inalcanzable desde JavaScript → mitiga XSS). El body de respuesta sigue
+/// incluyendo el refreshToken para compatibilidad con clientes legacy.
+/// El endpoint /refresh prefiere la cookie sobre el body si ambos existen.
+/// /logout borra la cookie.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
+    /// <summary>Nombre de la cookie HttpOnly que guarda el refresh token.</summary>
+    public const string RefreshCookieName = "bellasync_refresh";
+
+    private readonly IClock _clock;
+    private readonly JwtSettings _jwtSettings;
+    private readonly IHostEnvironment _env;
+
+    public AuthController(
+        IClock clock,
+        IOptions<JwtSettings> jwtSettings,
+        IHostEnvironment env)
+    {
+        _clock = clock;
+        _jwtSettings = jwtSettings.Value;
+        _env = env;
+    }
+
     private string? RemoteIp => HttpContext.Connection.RemoteIpAddress?.ToString();
 
     [HttpPost("register-salon")]
@@ -48,6 +73,7 @@ public class AuthController : ControllerBase
             RemoteIp);
 
         var result = await handler.HandleAsync(command, ct);
+        SetRefreshCookieIfSuccess(result);
         return result.ToActionResult();
     }
 
@@ -67,29 +93,51 @@ public class AuthController : ControllerBase
 
         var result = await handler.HandleAsync(
             new LoginCommand(request.Email, request.Password, RemoteIp), ct);
+        SetRefreshCookieIfSuccess(result);
         return result.ToActionResult();
     }
 
     /// <summary>
-    /// Rota un refresh token: lo invalida y emite uno nuevo + un nuevo access.
-    /// Detección de reuse: si se usa un token revocado, se revoca toda la cadena.
+    /// Rota un refresh token. Lee el token de:
+    ///  1. Cookie HttpOnly "bellasync_refresh" (preferido)
+    ///  2. Body { refreshToken } como fallback (clientes legacy)
+    ///
+    /// Setea la nueva cookie con el refresh rotado.
+    /// Detección de reuse: si se usa un token revocado, revoca toda la cadena.
     /// </summary>
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(
-        [FromBody] RefreshTokenRequest request,
-        [FromServices] IValidator<RefreshTokenRequest> validator,
+        [FromBody] RefreshTokenRequest? request,
         [FromServices] ICommandHandler<RefreshAccessTokenCommand, AuthResponse> handler,
         CancellationToken ct)
     {
-        var validation = await validator.ValidateAsync(request, ct);
-        if (!validation.IsValid)
-            return ValidationProblem(BuildModelState(validation));
+        // Prefer cookie sobre body. Si ninguno → 400.
+        var tokenFromCookie = Request.Cookies[RefreshCookieName];
+        var refreshToken = !string.IsNullOrWhiteSpace(tokenFromCookie)
+            ? tokenFromCookie
+            : request?.RefreshToken;
+
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Refresh token requerido",
+                Detail = "No se encontró refresh token ni en la cookie ni en el body.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
 
         var result = await handler.HandleAsync(
-            new RefreshAccessTokenCommand(request.RefreshToken, RemoteIp), ct);
+            new RefreshAccessTokenCommand(refreshToken, RemoteIp), ct);
+
+        // Si el refresh falla, borrar la cookie para que el cliente no quede
+        // con un cookie inválido pegado (el handler revoca la cadena en reuse).
+        if (result.IsFailure) ClearRefreshCookie();
+        else SetRefreshCookieIfSuccess(result);
+
         return result.ToActionResult();
     }
 
@@ -125,7 +173,76 @@ public class AuthController : ControllerBase
 
         var result = await handler.HandleAsync(
             new ResetPasswordCommand(request.Token, request.NewPassword), ct);
+
+        // El reset revoca todos los refresh tokens → la cookie ya no sirve.
+        if (result.IsSuccess) ClearRefreshCookie();
+
         return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Cierra sesión: revoca el refresh token actual (si está en la cookie)
+    /// y borra la cookie. Siempre devuelve 204 — idempotente.
+    /// </summary>
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Logout(
+        [FromServices] IApplicationDbContext db,
+        [FromServices] Application.Features.Auth.Shared.AuthTokenIssuer tokenIssuer,
+        CancellationToken ct)
+    {
+        var cookieToken = Request.Cookies[RefreshCookieName];
+        if (!string.IsNullOrWhiteSpace(cookieToken))
+        {
+            var hash = tokenIssuer.HashRefreshToken(cookieToken);
+            var existing = await db.RefreshTokens
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+            if (existing is not null && existing.RevokedAt is null)
+            {
+                existing.Revoke(_clock.UtcNow);
+                await db.SaveChangesAsync(ct);
+            }
+        }
+
+        ClearRefreshCookie();
+        return NoContent();
+    }
+
+    // ===== Helpers privados de cookie =====
+
+    private void SetRefreshCookieIfSuccess(Result<AuthResponse> result)
+    {
+        if (result.IsFailure || result.Value is null) return;
+
+        Response.Cookies.Append(
+            RefreshCookieName,
+            result.Value.RefreshToken,
+            BuildCookieOptions(expiresAt: result.Value.RefreshTokenExpiresAtUtc));
+    }
+
+    private void ClearRefreshCookie()
+    {
+        // Para borrar una cookie hay que setearla con MaxAge=0 + mismas opciones
+        // de Path/SameSite/Secure que se usaron al crearla.
+        Response.Cookies.Delete(RefreshCookieName, BuildCookieOptions(expiresAt: null));
+    }
+
+    private CookieOptions BuildCookieOptions(DateTime? expiresAt)
+    {
+        return new CookieOptions
+        {
+            HttpOnly = true,
+            // En producción exigimos HTTPS. En desarrollo (HTTP) Secure debe
+            // ser false o el browser ignora la cookie.
+            Secure = !_env.IsDevelopment(),
+            // Lax: la cookie se envía en navegación top-level y same-site
+            // POST. Frontend va a /api via Vite proxy (mismo origen).
+            SameSite = SameSiteMode.Lax,
+            // Path mínimo: la cookie solo se envía a endpoints de auth.
+            Path = "/api/Auth",
+            Expires = expiresAt,
+        };
     }
 
     private static Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary BuildModelState(

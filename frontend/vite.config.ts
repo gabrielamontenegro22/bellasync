@@ -12,4 +12,15 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    proxy: {
+      // En dev, todas las llamadas a /api/... se proxean al backend.
+      // Mismo origen lógico → la cookie HttpOnly del refresh token va y
+      // viene sin problemas de SameSite/CORS.
+      '/api': {
+        target: 'http://localhost:5059',
+        changeOrigin: true,
+      },
+    },
+  },
 })
