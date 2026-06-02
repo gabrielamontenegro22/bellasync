@@ -1,5 +1,6 @@
 using System.Reflection;
 using BellaSync.Application.Common.Handlers;
+using BellaSync.Application.Features.Auth.Shared;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -23,6 +24,11 @@ public static class DependencyInjection
         // las 3 variantes de la interfaz. Cada handler se registra como scoped
         // (consistente con DbContext).
         RegisterHandlers(services, assembly);
+
+        // Servicios compartidos entre handlers de Auth (centralizan lógica
+        // de emisión de tokens para evitar duplicación entre Register, Login,
+        // RefreshAccessToken).
+        services.AddScoped<AuthTokenIssuer>();
 
         return services;
     }
