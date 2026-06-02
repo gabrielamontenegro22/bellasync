@@ -128,21 +128,17 @@ public class CustomersController : ControllerBase
             });
         }
 
-        var customer = new Customer
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _currentTenant.TenantId,
-            FullName = request.FullName.Trim(),
-            Phone = phone,
-            Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant(),
-            Birthday = request.Birthday,
-            DocumentNumber = string.IsNullOrWhiteSpace(request.DocumentNumber) ? null : request.DocumentNumber.Trim(),
-            Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim(),
-            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-            AcceptsMarketing = request.AcceptsMarketing,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
-        };
+        // Factory del dominio con invariantes validadas (nombre + phone obligatorios).
+        var customer = Customer.Create(
+            tenantId: _currentTenant.TenantId,
+            fullName: request.FullName,
+            phone: phone,
+            email: request.Email,
+            birthday: request.Birthday,
+            documentNumber: request.DocumentNumber,
+            address: request.Address,
+            notes: request.Notes,
+            acceptsMarketing: request.AcceptsMarketing);
 
         _db.Customers.Add(customer);
         await _db.SaveChangesAsync(ct);
@@ -192,15 +188,16 @@ public class CustomersController : ControllerBase
             }
         }
 
-        customer.FullName = request.FullName.Trim();
-        customer.Phone = newPhone;
-        customer.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant();
-        customer.Birthday = request.Birthday;
-        customer.DocumentNumber = string.IsNullOrWhiteSpace(request.DocumentNumber) ? null : request.DocumentNumber.Trim();
-        customer.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
-        customer.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
-        customer.AcceptsMarketing = request.AcceptsMarketing;
-        customer.IsActive = request.IsActive;
+        // Mutación vía métodos verbales que preservan invariantes.
+        customer.Rename(request.FullName);
+        customer.UpdateContact(newPhone, request.Email, request.Address);
+        customer.UpdateProfile(request.DocumentNumber, request.Birthday, request.Notes);
+
+        if (request.AcceptsMarketing) customer.OptInMarketing();
+        else customer.OptOutMarketing();
+
+        if (request.IsActive) customer.Reactivate();
+        else customer.Archive();
 
         await _db.SaveChangesAsync(ct);
 
@@ -222,7 +219,7 @@ public class CustomersController : ControllerBase
 
         if (!customer.IsActive) return NoContent();
 
-        customer.IsActive = false;
+        customer.Archive();
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
