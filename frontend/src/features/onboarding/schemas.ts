@@ -37,8 +37,10 @@ export const step2Schema = z.object({
 
 export const step3Schema = z.object({
   hoursPreset: z.enum(['classic', 'martes_dom', 'lun_dom', 'custom']),
-  // Validamos que al menos un día esté abierto
+  // Validamos que al menos un día esté abierto.
+  // z.record en Zod 4 requiere keySchema + valueSchema explícitos.
   hours: z.record(
+    z.string(),
     z.union([z.tuple([z.number(), z.number()]), z.null()]),
   ).refine(
     (h) => Object.values(h).some(Boolean),

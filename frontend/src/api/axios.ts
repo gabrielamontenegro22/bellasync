@@ -107,8 +107,9 @@ api.interceptors.response.use(
     }
 
     original._retry = true
-    original.headers = new AxiosHeaders(original.headers)
-    ;(original.headers as AxiosHeaders).set('Authorization', `Bearer ${newToken}`)
+    const headers = new AxiosHeaders(original.headers as AxiosHeaders)
+    headers.set('Authorization', `Bearer ${newToken}`)
+    original.headers = headers
     return api(original)
   },
 )

@@ -66,6 +66,11 @@ export function OnboardingWizard() {
             price: fields.price,
             durationMinutes: fields.dur,
             category: mapWizardCategory(s.cat),
+            // Defaults agregados cuando el contrato de Service se enriqueció
+            // con comisión + anticipo. El wizard simple no los pregunta.
+            commissionPercentage: 0,
+            requiresDeposit: false,
+            depositPercentage: 0,
           }).catch((err) => {
             // Log silencioso — no rompemos el onboarding por un servicio individual.
             console.warn(`No se pudo crear el servicio "${s.name}":`, err)
