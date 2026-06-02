@@ -73,15 +73,18 @@ public class RefreshToken : BaseEntity
 
     // ===== MÉTODOS VERBALES =====
 
-    public bool IsActive() => RevokedAt is null && ExpiresAt > DateTime.UtcNow;
+    /// <summary>True si el token no fue revocado y no expiró.</summary>
+    public bool IsActive(DateTime utcNow) => RevokedAt is null && ExpiresAt > utcNow;
 
     /// <summary>
     /// Marca el token como revocado. Si fue rotado por otro, guarda el hash
-    /// del reemplazo para auditoría.
+    /// del reemplazo para auditoría. Idempotente: si ya estaba revocado, no
+    /// pisa la fecha original ni el replacedBy.
     /// </summary>
-    public void Revoke(string? replacedByHash = null)
+    public void Revoke(DateTime utcNow, string? replacedByHash = null)
     {
-        RevokedAt = DateTime.UtcNow;
+        if (RevokedAt is not null) return;
+        RevokedAt = utcNow;
         ReplacedByTokenHash = replacedByHash;
     }
 }

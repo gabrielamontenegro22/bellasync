@@ -10,23 +10,19 @@ using Microsoft.Extensions.Logging;
 
 namespace BellaSync.Application.Features.Stylists.UpdateStylist;
 
-/// <summary>
-/// Edita estilista. Sincroniza la relación M:N con Services: la lista
-/// ServiceIds REEMPLAZA completamente las asignaciones actuales.
-/// </summary>
 public sealed class UpdateStylistHandler : ICommandHandler<UpdateStylistCommand, StylistResponse>
 {
     private readonly IApplicationDbContext _db;
-    private readonly ICurrentTenantService _currentTenant;
+    private readonly IClock _clock;
     private readonly ILogger<UpdateStylistHandler> _logger;
 
     public UpdateStylistHandler(
         IApplicationDbContext db,
-        ICurrentTenantService currentTenant,
+        IClock clock,
         ILogger<UpdateStylistHandler> logger)
     {
         _db = db;
-        _currentTenant = currentTenant;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -90,25 +86,21 @@ public sealed class UpdateStylistHandler : ICommandHandler<UpdateStylistCommand,
             case StylistStatus.Inactive: stylist.Archive(); break;
         }
 
-        // Sincronizar relación M:N con servicios
+        // Sincronizar relación M:N vía métodos verbales del agregado.
+        // El agregado controla qué se asigna y qué no.
+        var now = _clock.UtcNow;
         var currentServiceIds = stylist.StylistServices.Select(ss => ss.ServiceId).ToHashSet();
         var requestedSet = requestedServiceIds.ToHashSet();
 
-        var toRemove = stylist.StylistServices
-            .Where(ss => !requestedSet.Contains(ss.ServiceId))
-            .ToList();
-        foreach (var ss in toRemove) _db.StylistServices.Remove(ss);
-
-        var toAdd = requestedSet.Except(currentServiceIds);
-        foreach (var newServiceId in toAdd)
+        foreach (var toRemoveId in currentServiceIds.Except(requestedSet))
         {
-            stylist.StylistServices.Add(new StylistService
-            {
-                StylistId = stylist.Id,
-                ServiceId = newServiceId,
-                TenantId = _currentTenant.TenantId,
-                AssignedAt = DateTime.UtcNow,
-            });
+            var removed = stylist.UnassignService(toRemoveId);
+            if (removed is not null) _db.StylistServices.Remove(removed);
+        }
+
+        foreach (var toAddId in requestedSet.Except(currentServiceIds))
+        {
+            stylist.AssignService(toAddId, now);
         }
 
         await _db.SaveChangesAsync(ct);

@@ -9,24 +9,22 @@ using Microsoft.Extensions.Logging;
 
 namespace BellaSync.Application.Features.Auth.RefreshAccessToken;
 
-/// <summary>
-/// Rota un refresh token: lo invalida y emite uno nuevo + un nuevo access.
-/// Detección de reuse: si alguien intenta usar un refresh ya revocado, se
-/// asume que fue robado y se revoca TODA la cadena del user (defense in depth).
-/// </summary>
 public sealed class RefreshAccessTokenHandler : ICommandHandler<RefreshAccessTokenCommand, AuthResponse>
 {
     private readonly IApplicationDbContext _db;
     private readonly AuthTokenIssuer _tokenIssuer;
+    private readonly IClock _clock;
     private readonly ILogger<RefreshAccessTokenHandler> _logger;
 
     public RefreshAccessTokenHandler(
         IApplicationDbContext db,
         AuthTokenIssuer tokenIssuer,
+        IClock clock,
         ILogger<RefreshAccessTokenHandler> logger)
     {
         _db = db;
         _tokenIssuer = tokenIssuer;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -36,6 +34,7 @@ public sealed class RefreshAccessTokenHandler : ICommandHandler<RefreshAccessTok
         if (string.IsNullOrWhiteSpace(command.RefreshToken))
             return ApplicationError.Validation("auth.refresh_required", "Refresh token requerido.");
 
+        var now = _clock.UtcNow;
         var hash = _tokenIssuer.HashRefreshToken(command.RefreshToken);
 
         var existing = await _db.RefreshTokens
@@ -49,9 +48,9 @@ public sealed class RefreshAccessTokenHandler : ICommandHandler<RefreshAccessTok
             return ApplicationError.Unauthorized("auth.refresh_invalid", "Refresh token inválido.");
         }
 
-        // DETECCIÓN DE REUSE: el token ya estaba revocado (rotado o explícitamente
-        // invalidado). Asumir robo → revocar TODOS los tokens activos del user.
-        if (!existing.IsActive())
+        // DETECCIÓN DE REUSE: token revocado pero alguien lo intenta usar.
+        // Asumir robo → revocar TODOS los tokens activos del user.
+        if (!existing.IsActive(now))
         {
             _logger.LogWarning(
                 "Reuse de refresh token detectado para user {UserId}. Revocando toda la cadena.",
@@ -61,7 +60,7 @@ public sealed class RefreshAccessTokenHandler : ICommandHandler<RefreshAccessTok
                 .IgnoreQueryFilters()
                 .Where(t => t.UserId == existing.UserId && t.RevokedAt == null)
                 .ToListAsync(ct);
-            foreach (var t in allActive) t.Revoke();
+            foreach (var t in allActive) t.Revoke(now);
             await _db.SaveChangesAsync(ct);
 
             return ApplicationError.Unauthorized(
@@ -69,7 +68,6 @@ public sealed class RefreshAccessTokenHandler : ICommandHandler<RefreshAccessTok
                 "Token revocado. Por seguridad se cerraron todas las sesiones.");
         }
 
-        // User/tenant siguen activos
         if (!existing.User.IsActive || existing.User.Tenant is { IsActive: false })
         {
             return ApplicationError.Unauthorized(
@@ -85,7 +83,7 @@ public sealed class RefreshAccessTokenHandler : ICommandHandler<RefreshAccessTok
             createdByIp: command.CreatedByIp,
             ct: ct);
 
-        existing.Revoke(replacedByHash: _tokenIssuer.HashRefreshToken(response.RefreshToken));
+        existing.Revoke(now, replacedByHash: _tokenIssuer.HashRefreshToken(response.RefreshToken));
         await _db.SaveChangesAsync(ct);
 
         return Result<AuthResponse>.Success(response);

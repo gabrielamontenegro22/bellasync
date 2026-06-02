@@ -46,6 +46,10 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, LoggingEmailService>();
         services.AddScoped<IRefreshTokenGenerator, RefreshTokenGenerator>();
 
+        // Clock: stateless, una sola instancia para toda la app.
+        // En tests se reemplaza por FakeClock controlado.
+        services.AddSingleton<IClock, SystemClock>();
+
         return services;
     }
 }

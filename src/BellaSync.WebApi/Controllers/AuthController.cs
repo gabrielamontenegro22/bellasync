@@ -80,9 +80,14 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(
         [FromBody] RefreshTokenRequest request,
+        [FromServices] IValidator<RefreshTokenRequest> validator,
         [FromServices] ICommandHandler<RefreshAccessTokenCommand, AuthResponse> handler,
         CancellationToken ct)
     {
+        var validation = await validator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+            return ValidationProblem(BuildModelState(validation));
+
         var result = await handler.HandleAsync(
             new RefreshAccessTokenCommand(request.RefreshToken, RemoteIp), ct);
         return result.ToActionResult();
