@@ -1,7 +1,11 @@
-namespace BellaSync.Infrastructure.Auth;
+namespace BellaSync.Application.Auth;
 
 /// <summary>
 /// Sección "Jwt" en appsettings.json — bind con IOptions&lt;JwtSettings&gt;.
+///
+/// Vive en Application (no Infrastructure) porque define política de auth
+/// que tanto los handlers (en Application) como JwtTokenService (en
+/// Infrastructure) necesitan consultar.
 /// </summary>
 public class JwtSettings
 {

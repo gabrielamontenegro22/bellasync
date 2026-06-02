@@ -1,5 +1,5 @@
+using BellaSync.Application.Auth;
 using BellaSync.Application.Common.Interfaces;
-using BellaSync.Infrastructure.Auth;
 using BellaSync.Infrastructure.Persistence;
 using BellaSync.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;

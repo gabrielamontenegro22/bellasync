@@ -3,7 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Domain.Entities;
-using BellaSync.Infrastructure.Auth;
+using BellaSync.Application.Auth;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 

@@ -1,7 +1,7 @@
 using System.Text;
 using BellaSync.Application;
 using BellaSync.Infrastructure;
-using BellaSync.Infrastructure.Auth;
+using BellaSync.Application.Auth;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
