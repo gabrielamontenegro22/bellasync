@@ -1,5 +1,5 @@
 import { api } from './axios'
-import type { AuthResponse, LoginRequest, RegisterSalonRequest } from '@/types/auth'
+import type { AuthResponse, LoginRequest, RegisterSalonRequest, RefreshTokenRequest } from '@/types/auth'
 
 /**
  * Funciones que llaman a los endpoints de autenticación del backend.
@@ -15,6 +15,17 @@ export async function registerSalon(payload: RegisterSalonRequest): Promise<Auth
 /** POST /api/Auth/login — devuelve un JWT válido. */
 export async function login(payload: LoginRequest): Promise<AuthResponse> {
   const { data } = await api.post<AuthResponse>('/api/Auth/login', payload)
+  return data
+}
+
+/**
+ * POST /api/Auth/refresh — intercambia un refresh token por un nuevo access+refresh.
+ *
+ * El interceptor de axios lo llama automáticamente cuando un request falla
+ * con 401 y hay refresh token. NO debería llamarse manualmente desde la UI.
+ */
+export async function refreshAccessToken(payload: RefreshTokenRequest): Promise<AuthResponse> {
+  const { data } = await api.post<AuthResponse>('/api/Auth/refresh', payload)
   return data
 }
 

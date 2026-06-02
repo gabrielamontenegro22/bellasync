@@ -9,6 +9,14 @@ public class AuthResponse
     public string Token { get; set; } = string.Empty;
     public DateTime ExpiresAtUtc { get; set; }
 
+    /// <summary>
+    /// Refresh token plaintext. Vive en el cliente; se intercambia en
+    /// /api/Auth/refresh por un nuevo access+refresh (rotación).
+    /// El servidor solo guarda el SHA256 hash de este token.
+    /// </summary>
+    public string RefreshToken { get; set; } = string.Empty;
+    public DateTime RefreshTokenExpiresAtUtc { get; set; }
+
     public Guid UserId { get; set; }
     public string Email { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;

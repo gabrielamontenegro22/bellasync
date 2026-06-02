@@ -5,10 +5,12 @@ using System.Text.RegularExpressions;
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Features.Auth.Dtos;
 using BellaSync.Domain.Entities;
+using BellaSync.Infrastructure.Auth;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace BellaSync.WebApi.Controllers;
 
@@ -23,6 +25,8 @@ public class AuthController : ControllerBase
     private readonly IApplicationDbContext _db;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwt;
+    private readonly IRefreshTokenGenerator _refreshTokenGenerator;
+    private readonly JwtSettings _jwtSettings;
     private readonly IValidator<RegisterSalonRequest> _registerValidator;
     private readonly IValidator<LoginRequest> _loginValidator;
     private readonly IValidator<ForgotPasswordRequest> _forgotValidator;
@@ -35,6 +39,8 @@ public class AuthController : ControllerBase
         IApplicationDbContext db,
         IPasswordHasher passwordHasher,
         IJwtTokenService jwt,
+        IRefreshTokenGenerator refreshTokenGenerator,
+        IOptions<JwtSettings> jwtSettings,
         IValidator<RegisterSalonRequest> registerValidator,
         IValidator<LoginRequest> loginValidator,
         IValidator<ForgotPasswordRequest> forgotValidator,
@@ -46,6 +52,8 @@ public class AuthController : ControllerBase
         _db = db;
         _passwordHasher = passwordHasher;
         _jwt = jwt;
+        _refreshTokenGenerator = refreshTokenGenerator;
+        _jwtSettings = jwtSettings.Value;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
         _forgotValidator = forgotValidator;
@@ -126,21 +134,7 @@ public class AuthController : ControllerBase
             "Salón {SalonName} ({TenantId}) registrado con admin {Email}",
             tenant.Name, tenant.Id, adminUser.Email);
 
-        var (token, expiresAt) = _jwt.GenerateToken(adminUser);
-
-        var response = new AuthResponse
-        {
-            Token = token,
-            ExpiresAtUtc = expiresAt,
-            UserId = adminUser.Id,
-            Email = adminUser.Email,
-            FullName = adminUser.FullName,
-            Role = adminUser.Role.ToString(),
-            TenantId = tenant.Id,
-            TenantName = tenant.Name,
-            TenantSlug = tenant.Slug
-        };
-
+        var response = await IssueAuthResponseAsync(adminUser, tenant, replacesTokenHash: null, ct);
         return StatusCode(StatusCodes.Status201Created, response);
     }
 
@@ -200,20 +194,95 @@ public class AuthController : ControllerBase
         user.LastLoginAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        var (token, expiresAt) = _jwt.GenerateToken(user);
+        var response = await IssueAuthResponseAsync(user, user.Tenant, replacesTokenHash: null, ct);
+        return Ok(response);
+    }
 
-        return Ok(new AuthResponse
+    /// <summary>
+    /// Rota un refresh token: lo invalida y emite uno nuevo + un nuevo access token.
+    /// Endpoint anónimo (el access token está vencido al momento de llamar).
+    /// Si se detecta reuse de un token revocado, se revoca toda la cadena del user.
+    /// </summary>
+    [HttpPost("refresh")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Refresh(
+        [FromBody] RefreshTokenRequest request,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            Token = token,
-            ExpiresAtUtc = expiresAt,
-            UserId = user.Id,
-            Email = user.Email,
-            FullName = user.FullName,
-            Role = user.Role.ToString(),
-            TenantId = user.TenantId,
-            TenantName = user.Tenant?.Name ?? string.Empty,
-            TenantSlug = user.Tenant?.Slug ?? string.Empty
-        });
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Refresh token requerido",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        var hash = _refreshTokenGenerator.Hash(request.RefreshToken);
+
+        var existing = await _db.RefreshTokens
+            .IgnoreQueryFilters()
+            .Include(t => t.User)
+                .ThenInclude(u => u.Tenant)
+            .FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+
+        if (existing is null)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Title = "Refresh token inválido",
+                Status = StatusCodes.Status401Unauthorized
+            });
+        }
+
+        // Detección de token reuse: si el token ya fue revocado pero alguien
+        // lo intenta usar, el legítimo ya fue rotado. Indica posible robo.
+        // Defensa: revocar TODOS los refresh tokens activos del user.
+        if (!existing.IsActive())
+        {
+            _logger.LogWarning(
+                "Reuse de refresh token detectado para user {UserId}. Revocando toda la cadena.",
+                existing.UserId);
+
+            var allActive = await _db.RefreshTokens
+                .IgnoreQueryFilters()
+                .Where(t => t.UserId == existing.UserId && t.RevokedAt == null)
+                .ToListAsync(ct);
+            foreach (var t in allActive) t.Revoke();
+            await _db.SaveChangesAsync(ct);
+
+            return Unauthorized(new ProblemDetails
+            {
+                Title = "Refresh token inválido",
+                Detail = "Token revocado. Por seguridad se cerraron todas las sesiones.",
+                Status = StatusCodes.Status401Unauthorized
+            });
+        }
+
+        // Validar que el user/tenant sigan activos
+        if (!existing.User.IsActive || existing.User.Tenant is { IsActive: false })
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Title = "Sesión inválida",
+                Detail = "La cuenta ya no está activa.",
+                Status = StatusCodes.Status401Unauthorized
+            });
+        }
+
+        // Rotar: revocar el actual y emitir uno nuevo
+        var response = await IssueAuthResponseAsync(
+            existing.User,
+            existing.User.Tenant,
+            replacesTokenHash: hash,
+            ct);
+
+        existing.Revoke(replacedByHash: _refreshTokenGenerator.Hash(response.RefreshToken));
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(response);
     }
 
     /// <summary>
@@ -345,10 +414,64 @@ public class AuthController : ControllerBase
 
         entity.User.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         entity.UsedAt = DateTime.UtcNow;
+
+        // Cerrar #7c: al cambiar password, revocar TODOS los refresh tokens
+        // activos del user. Las sesiones existentes seguirán funcionando con
+        // su access token actual (corto: 15-30 min) y al expirar no podrán
+        // refrescar. Esto limita la ventana de exposición si la cuenta fue
+        // comprometida.
+        var activeRefreshTokens = await _db.RefreshTokens
+            .Where(t => t.UserId == entity.UserId && t.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var rt in activeRefreshTokens) rt.Revoke();
+
         await _db.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Password reset completado para {Email}", entity.User.Email);
+        _logger.LogInformation(
+            "Password reset completado para {Email}. Revocados {Count} refresh tokens.",
+            entity.User.Email, activeRefreshTokens.Count);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Helper: genera access + refresh tokens, persiste el refresh, y devuelve
+    /// la AuthResponse completa. Reutilizado por register, login y refresh.
+    /// </summary>
+    private async Task<AuthResponse> IssueAuthResponseAsync(
+        User user,
+        Tenant? tenant,
+        string? replacesTokenHash,
+        CancellationToken ct)
+    {
+        var (accessToken, accessExpiresAt) = _jwt.GenerateToken(user);
+
+        var (refreshPlaintext, refreshHash) = _refreshTokenGenerator.Generate();
+        var refreshExpiresAt = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenDays);
+
+        var refresh = RefreshToken.Create(
+            userId: user.Id,
+            tokenHash: refreshHash,
+            expiresAtUtc: refreshExpiresAt,
+            createdByIp: HttpContext.Connection.RemoteIpAddress?.ToString(),
+            replacesTokenHash: replacesTokenHash);
+
+        _db.RefreshTokens.Add(refresh);
+        await _db.SaveChangesAsync(ct);
+
+        return new AuthResponse
+        {
+            Token = accessToken,
+            ExpiresAtUtc = accessExpiresAt,
+            RefreshToken = refreshPlaintext,
+            RefreshTokenExpiresAtUtc = refreshExpiresAt,
+            UserId = user.Id,
+            Email = user.Email,
+            FullName = user.FullName,
+            Role = user.Role.ToString(),
+            TenantId = user.TenantId,
+            TenantName = tenant?.Name ?? string.Empty,
+            TenantSlug = tenant?.Slug ?? string.Empty,
+        };
     }
 
     private static Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary BuildModelState(

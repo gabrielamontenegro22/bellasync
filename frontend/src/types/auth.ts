@@ -3,10 +3,13 @@
  * Si cambia un DTO en C#, replicar acá.
  */
 
-/** Respuesta estándar de los endpoints register-salon y login. */
+/** Respuesta estándar de los endpoints register-salon, login y refresh. */
 export interface AuthResponse {
   token: string
   expiresAtUtc: string  // ISO 8601 — DateTime de C# se serializa así
+  /** Refresh token plaintext. Se intercambia en /api/Auth/refresh por uno nuevo. */
+  refreshToken: string
+  refreshTokenExpiresAtUtc: string
   userId: string
   email: string
   fullName: string
@@ -14,6 +17,11 @@ export interface AuthResponse {
   tenantId: string
   tenantName: string
   tenantSlug: string
+}
+
+/** Body del POST /api/Auth/refresh */
+export interface RefreshTokenRequest {
+  refreshToken: string
 }
 
 /** Body del POST /api/Auth/register-salon */
