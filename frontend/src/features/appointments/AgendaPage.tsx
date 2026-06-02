@@ -9,11 +9,13 @@ import {
   useMarkNoShow,
   useStartAppointment,
 } from './hooks'
+import { NewAppointmentModal } from './components/NewAppointmentModal'
 
 /** Agenda del día. Lista de citas + panel lateral con detalle de la seleccionada. */
 export function AgendaPage() {
   const [date, setDate] = useState(() => formatLocalDate(new Date()))
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showNewModal, setShowNewModal] = useState(false)
   const { data, isLoading, error } = useAgenda(date)
 
   const selected = data?.appointments.find(a => a.id === selectedId) ?? null
@@ -21,7 +23,11 @@ export function AgendaPage() {
   return (
     <div className="flex h-full gap-4 p-4">
       <main className="flex-1 space-y-4 overflow-auto">
-        <Header date={date} onDateChange={d => { setDate(d); setSelectedId(null) }} />
+        <Header
+          date={date}
+          onDateChange={d => { setDate(d); setSelectedId(null) }}
+          onNewAppointment={() => setShowNewModal(true)}
+        />
         <Metrics metrics={data?.metrics} />
 
         {isLoading && <p className="text-sm text-warm-500">Cargando agenda…</p>}
@@ -30,6 +36,7 @@ export function AgendaPage() {
         {data && data.appointments.length === 0 && (
           <Card className="p-8 text-center">
             <p className="text-warm-500">No hay citas para este día.</p>
+            <Button className="mt-3" onClick={() => setShowNewModal(true)}>+ Nueva cita</Button>
           </Card>
         )}
 
@@ -52,13 +59,19 @@ export function AgendaPage() {
           ? <DetailPanel appointment={selected} onClose={() => setSelectedId(null)} />
           : <EmptyDetail />}
       </aside>
+
+      {showNewModal && (
+        <NewAppointmentModal defaultDate={date} onClose={() => setShowNewModal(false)} />
+      )}
     </div>
   )
 }
 
 // ===== Subcomponentes =====
 
-function Header({ date, onDateChange }: { date: string; onDateChange: (d: string) => void }) {
+function Header({
+  date, onDateChange, onNewAppointment,
+}: { date: string; onDateChange: (d: string) => void; onNewAppointment: () => void }) {
   const today = formatLocalDate(new Date())
   const yesterday = formatLocalDate(addDays(new Date(date), -1))
   const tomorrow = formatLocalDate(addDays(new Date(date), 1))
@@ -77,6 +90,7 @@ function Header({ date, onDateChange }: { date: string; onDateChange: (d: string
         onChange={e => onDateChange(e.target.value)}
         className="rounded-md border border-warm-200 px-2 py-1 text-sm"
       />
+      <Button size="sm" onClick={onNewAppointment}>+ Nueva cita</Button>
     </Card>
   )
 }
