@@ -29,12 +29,12 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/agenda',                  label: 'Agenda',              icon: Calendar,  disabled: true  },
+  { to: '/agenda',                  label: 'Agenda',              icon: Calendar                 },
   { to: '/clientes',                label: 'Clientes',            icon: Users,     disabled: true  },
   { to: '/configuracion/servicios', label: 'Servicios',           icon: Sparkles                 },
   { to: '/configuracion/estilistas',label: 'Estilistas',          icon: Scissors                 },
   { to: '/inventario',              label: 'Inventario',          icon: Box,       disabled: true  },
-  { to: '/pagos',                   label: 'Validación de pagos', icon: Wallet,    disabled: true  },
+  { to: '/configuracion/validacion',label: 'Validación de pagos', icon: Wallet                   },
   { to: '/reportes',                label: 'Reportes',            icon: BarChart3, disabled: true  },
   { to: '/configuracion',           label: 'Configuración',       icon: Settings                 },
 ]

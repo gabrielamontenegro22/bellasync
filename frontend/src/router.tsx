@@ -7,6 +7,10 @@ import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { ConfigLayout } from '@/pages/Settings/ConfigLayout'
 import { ServicesPage } from '@/features/services/ServicesPage'
 import { StylistsPage } from '@/features/stylists/StylistsPage'
+import { AgendaPage } from '@/features/appointments/AgendaPage'
+import { ValidationQueuePage } from '@/features/vouchers/ValidationQueuePage'
+import { BookingPage } from '@/features/booking/BookingPage'
+import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { useAuth } from '@/features/auth/useAuth'
 
@@ -24,14 +28,27 @@ export function AppRouter() {
   return (
     <Routes>
       {/* Públicas */}
-      <Route path="/login"          element={<PublicOnly><Login /></PublicOnly>} />
-      <Route path="/register"       element={<PublicOnly><OnboardingWizard /></PublicOnly>} />
-      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/login"               element={<PublicOnly><Login /></PublicOnly>} />
+      <Route path="/register"            element={<PublicOnly><OnboardingWizard /></PublicOnly>} />
+      <Route path="/reset-password"      element={<ResetPassword />} />
+
+      {/* Portal público de booking — anónimo, sin AppShell */}
+      <Route path="/booking/:tenantSlug" element={<BookingPage />} />
 
       {/* Dashboard placeholder */}
       <Route
         path="/dashboard"
         element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
+      />
+
+      {/* Agenda (la nueva home tras login para recepción) */}
+      <Route
+        path="/agenda"
+        element={
+          <ProtectedRoute>
+            <AppShell><AgendaPage /></AppShell>
+          </ProtectedRoute>
+        }
       />
 
       {/* Configuración (layout con outlet) */}
@@ -43,6 +60,7 @@ export function AppRouter() {
         <Route index element={<Navigate to="servicios" replace />} />
         <Route path="servicios"  element={<ServicesPage />} />
         <Route path="estilistas" element={<StylistsPage />} />
+        <Route path="validacion" element={<ValidationQueuePage />} />
         {/* Aquí se agregarán: general, horario, pagos, whatsapp, suscripcion */}
       </Route>
 

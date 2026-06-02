@@ -20,6 +20,9 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    /* baseUrl está deprecado en TS 7 pero sigue funcionando — silenciamos
+       el warning para no romper el build hasta migrar a `paths` puro. */
+    "ignoreDeprecations": "6.0",
 
     /* Linting */
     "noUnusedLocals": true,
