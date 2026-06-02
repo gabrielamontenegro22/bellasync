@@ -10,6 +10,7 @@ import { StylistsPage } from '@/features/stylists/StylistsPage'
 import { AgendaPage } from '@/features/appointments/AgendaPage'
 import { ValidationQueuePage } from '@/features/vouchers/ValidationQueuePage'
 import { BookingPage } from '@/features/booking/BookingPage'
+import { CustomersPage } from '@/features/customers/CustomersPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { useAuth } from '@/features/auth/useAuth'
@@ -47,6 +48,16 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <AppShell><AgendaPage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* CRM de clientes */}
+      <Route
+        path="/clientes"
+        element={
+          <ProtectedRoute>
+            <AppShell><CustomersPage /></AppShell>
           </ProtectedRoute>
         }
       />

@@ -57,3 +57,28 @@ export async function createCustomer(req: CreateCustomerRequest): Promise<Custom
   const { data } = await api.post<CustomerResponse>('/api/Customers', req)
   return data
 }
+
+/**
+ * Body del PUT /api/Customers/{id}. Mismo shape que CreateCustomerRequest
+ * + isActive (permite reactivar un cliente archivado).
+ */
+export interface UpdateCustomerRequest extends CreateCustomerRequest {
+  isActive: boolean
+}
+
+/** GET /api/Customers/{id} */
+export async function getCustomer(id: string): Promise<CustomerResponse> {
+  const { data } = await api.get<CustomerResponse>(`/api/Customers/${id}`)
+  return data
+}
+
+/** PUT /api/Customers/{id} */
+export async function updateCustomer(id: string, req: UpdateCustomerRequest): Promise<CustomerResponse> {
+  const { data } = await api.put<CustomerResponse>(`/api/Customers/${id}`, req)
+  return data
+}
+
+/** DELETE /api/Customers/{id} — soft delete (marca isActive=false). */
+export async function deleteCustomer(id: string): Promise<void> {
+  await api.delete(`/api/Customers/${id}`)
+}

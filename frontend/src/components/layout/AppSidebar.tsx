@@ -30,7 +30,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/agenda',                  label: 'Agenda',              icon: Calendar                 },
-  { to: '/clientes',                label: 'Clientes',            icon: Users,     disabled: true  },
+  { to: '/clientes',                label: 'Clientes',            icon: Users                    },
   { to: '/configuracion/servicios', label: 'Servicios',           icon: Sparkles                 },
   { to: '/configuracion/estilistas',label: 'Estilistas',          icon: Scissors                 },
   { to: '/inventario',              label: 'Inventario',          icon: Box,       disabled: true  },
