@@ -247,6 +247,19 @@ public class AuthController : ControllerBase
             return Ok();
         }
 
+        // Invalidar tokens previos no usados del mismo usuario.
+        // Previene la situación donde alguien tiene N tokens válidos
+        // simultáneos por haber pedido forgot-password varias veces.
+        // Solo el más reciente queda activo.
+        var now = DateTime.UtcNow;
+        var previousActive = await _db.PasswordResetTokens
+            .Where(t => t.UserId == user.Id && t.UsedAt == null && t.ExpiresAt > now)
+            .ToListAsync(ct);
+        foreach (var prev in previousActive)
+        {
+            prev.UsedAt = now;
+        }
+
         // Generar token hex de 64 chars (32 bytes random)
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32))
             .ToLowerInvariant();
@@ -256,11 +269,18 @@ public class AuthController : ControllerBase
             Id = Guid.NewGuid(),
             UserId = user.Id,
             Token = token,
-            ExpiresAt = DateTime.UtcNow.AddHours(1),
-            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = now.AddHours(1),
+            CreatedAt = now,
         };
         _db.PasswordResetTokens.Add(entity);
         await _db.SaveChangesAsync(ct);
+
+        if (previousActive.Count > 0)
+        {
+            _logger.LogInformation(
+                "Forgot password: invalidados {Count} tokens previos del usuario {Email}",
+                previousActive.Count, user.Email);
+        }
 
         var frontendBaseUrl = _configuration["Frontend:BaseUrl"] ?? "http://localhost:5173";
         var resetUrl = $"{frontendBaseUrl.TrimEnd('/')}/reset-password?token={token}";
@@ -287,9 +307,13 @@ public class AuthController : ControllerBase
             return ValidationProblem(BuildModelState(validation));
         }
 
+        // Include User + Tenant para revalidar IsActive de ambos en el momento
+        // del uso del token (no solo cuando se solicitó). Cubre la ventana
+        // entre "solicitar reset" y "consumir reset".
         var entity = await _db.PasswordResetTokens
             .IgnoreQueryFilters()
             .Include(t => t.User)
+                .ThenInclude(u => u.Tenant)
             .FirstOrDefaultAsync(t => t.Token == request.Token, ct);
 
         if (entity is null || entity.UsedAt.HasValue || entity.ExpiresAt < DateTime.UtcNow)
@@ -298,6 +322,23 @@ public class AuthController : ControllerBase
             {
                 Title = "Token inválido",
                 Detail = "El enlace expiró o ya fue usado. Solicita uno nuevo.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        // Revalidar que el usuario y su tenant sigan activos en el momento de uso.
+        // Si fueron desactivados entre solicitar y usar el token, rechazar.
+        // Mensaje genérico para no diferenciar entre "tenant inactivo" y
+        // "usuario inactivo" — no es información que necesite el cliente.
+        if (!entity.User.IsActive || entity.User.Tenant is { IsActive: false })
+        {
+            _logger.LogWarning(
+                "Reset password rechazado por user/tenant inactivo: user={UserId} tenant={TenantId}",
+                entity.User.Id, entity.User.TenantId);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Token inválido",
+                Detail = "El enlace ya no es válido. Contacta al soporte si crees que es un error.",
                 Status = StatusCodes.Status400BadRequest
             });
         }
