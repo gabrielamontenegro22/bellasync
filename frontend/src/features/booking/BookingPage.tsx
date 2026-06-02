@@ -10,6 +10,7 @@ import {
   type PublicService,
   type PublicStylist,
 } from '@/api/publicBooking'
+import { extractApiError } from '@/lib/extractApiError'
 
 /**
  * Portal público anónimo de booking. URL: /booking/:tenantSlug.
@@ -62,12 +63,8 @@ export function BookingPage() {
         clientEmail: client.email || undefined,
       })
       setResult(resp)
-    } catch (e: any) {
-      setError(
-        e?.response?.data?.detail
-        ?? e?.response?.data?.title
-        ?? 'No se pudo agendar la cita.',
-      )
+    } catch (e) {
+      setError(extractApiError(e, 'No se pudo agendar la cita.'))
     } finally {
       setSubmitting(false)
     }

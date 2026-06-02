@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Button, Card, Input } from '@/components/ui'
 import type { CustomerResponse } from '@/api/customers'
+import { extractApiError } from '@/lib/extractApiError'
 import { useCreateCustomer, useUpdateCustomer } from '../hooks'
 
 interface CustomerModalProps {
@@ -76,12 +77,8 @@ export function CustomerModal({ customer, onClose }: CustomerModalProps) {
         await create.mutateAsync(payload)
       }
       onClose()
-    } catch (e: any) {
-      setError(
-        e?.response?.data?.detail
-        ?? e?.response?.data?.title
-        ?? 'No se pudo guardar el cliente.',
-      )
+    } catch (e) {
+      setError(extractApiError(e, 'No se pudo guardar el cliente.'))
     }
   }
 
