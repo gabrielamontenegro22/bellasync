@@ -28,5 +28,15 @@ public class StylistServiceConfiguration : IEntityTypeConfiguration<StylistServi
 
         builder.HasIndex(ss => ss.TenantId);
         builder.HasIndex(ss => ss.ServiceId);
+
+        // FK física a tenants — garantía de integridad referencial multi-tenant
+        // también para la tabla intermedia. Las FKs a Stylist y Service ya
+        // existen arriba; esta cierra el triángulo y previene asignaciones
+        // con TenantId huérfano.
+        // OnDelete=Restrict: la limpieza ya ocurre por Cascade de Stylist.
+        builder.HasOne<Tenant>()
+            .WithMany()
+            .HasForeignKey(ss => ss.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
