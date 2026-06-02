@@ -4,6 +4,7 @@ import { Button, Card, Input } from '@/components/ui'
 import { listServices, type ServiceResponse } from '@/api/services'
 import { listStylists, type StylistResponse } from '@/api/stylists'
 import { createCustomer, listCustomers, type CustomerResponse } from '@/api/customers'
+import { extractApiError } from '@/lib/extractApiError'
 import { useAuth } from '@/features/auth/useAuth'
 import { useCreateAppointment } from '../hooks'
 
@@ -62,12 +63,8 @@ export function NewAppointmentModal({
         bypassAdvanceWindow: isAdmin && bypassAdvance,
       })
       onClose()
-    } catch (e: any) {
-      setSubmitError(
-        e?.response?.data?.detail
-        ?? e?.response?.data?.title
-        ?? 'No se pudo crear la cita.',
-      )
+    } catch (e) {
+      setSubmitError(extractApiError(e, 'No se pudo crear la cita.'))
     }
   }
 
@@ -290,12 +287,8 @@ function InlineCreateCustomer({
     try {
       const created = await createCustomer({ fullName: fullName.trim(), phone: phone.trim() })
       onCreated(created)
-    } catch (e: any) {
-      setError(
-        e?.response?.data?.detail
-        ?? e?.response?.data?.title
-        ?? 'No se pudo crear el cliente.',
-      )
+    } catch (e) {
+      setError(extractApiError(e, 'No se pudo crear el cliente.'))
     } finally {
       setSubmitting(false)
     }
