@@ -20,9 +20,10 @@ public class PaymentResponse
     public Guid? RegisteredByUserId { get; set; }
     public DateTime RegisteredAt { get; set; }
 
-    // Snapshot mínimo del contexto de la cita — útil para tabla del CRM
-    // donde quieres mostrar "qué servicio se pagó" sin tener que hacer
-    // otra request por cada fila.
+    // Snapshot mínimo del contexto de la cita — útil para tablas/listas
+    // (CRM, cierre de caja) donde quieres mostrar quién pagó qué sin
+    // hacer otra request por cada fila.
+    public string CustomerName { get; set; } = string.Empty;
     public string ServiceName { get; set; } = string.Empty;
     public string StylistName { get; set; } = string.Empty;
     public DateTime AppointmentStartAt { get; set; }

@@ -27,6 +27,7 @@ export interface PaymentResponse {
   registeredByUserId: string | null
   registeredAt: string  // ISO
   // snapshot mínimo del contexto de la cita
+  customerName: string
   serviceName: string
   stylistName: string
   appointmentStartAt: string

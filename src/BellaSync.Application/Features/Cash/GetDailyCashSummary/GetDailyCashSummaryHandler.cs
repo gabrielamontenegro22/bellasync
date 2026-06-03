@@ -40,6 +40,7 @@ public sealed class GetDailyCashSummaryHandler
             .AsNoTracking()
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Service)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Stylist)
+            .Include(p => p.Appointment)!.ThenInclude(a => a!.Customer)
             .Where(p => p.RegisteredAt >= dayStartUtc && p.RegisteredAt < dayEndUtc)
             .OrderBy(p => p.RegisteredAt)
             .ToListAsync(ct);

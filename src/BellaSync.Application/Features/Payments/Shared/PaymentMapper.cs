@@ -7,7 +7,7 @@ internal static class PaymentMapper
 {
     /// <summary>
     /// Mapeo "rico" con info del appointment cargado vía Include.
-    /// Requiere que el caller incluya Appointment.Service y .Stylist.
+    /// Requiere que el caller incluya Appointment.Service, .Stylist y .Customer.
     /// </summary>
     public static PaymentResponse ToResponse(Payment p) => new()
     {
@@ -20,6 +20,7 @@ internal static class PaymentMapper
         Reference = p.Reference,
         RegisteredByUserId = p.RegisteredByUserId,
         RegisteredAt = p.RegisteredAt,
+        CustomerName = p.Appointment?.Customer?.FullName ?? "—",
         ServiceName = p.Appointment?.Service?.Name ?? "—",
         StylistName = p.Appointment?.Stylist?.FullName ?? "—",
         AppointmentStartAt = p.Appointment?.StartAt ?? DateTime.MinValue,
