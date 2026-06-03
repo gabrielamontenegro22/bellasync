@@ -25,6 +25,7 @@ import {
 } from './hooks'
 import { NewAppointmentModal } from './components/NewAppointmentModal'
 import { AgendaTimeline } from './components/AgendaTimeline'
+import { RescheduleModal } from './components/RescheduleModal'
 
 /**
  * Agenda del día — replica el layout de `mockups/Agendamiento_de_citas/app.jsx`.
@@ -350,6 +351,7 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
   const start = useStartAppointment()
   const complete = useCompleteAppointment()
   const noShow = useMarkNoShow()
+  const [showReschedule, setShowReschedule] = useState(false)
 
   // Historial reciente del cliente — últimas 3 citas completadas (excluyendo
   // la actual). Sirve para que la estilista vea de un vistazo qué le ha hecho
@@ -553,12 +555,18 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
           o "Confirmar" según en qué etapa está la cita, para no tener 6 botones.
           Los que no aplican quedan deshabilitados (gris). */}
       <div className="border-t border-warm-150 p-3 grid grid-cols-2 gap-2">
-        {/* Reagendar — no implementado todavía */}
+        {/* Reagendar — solo disponible para citas que aún no empezaron */}
         <button
           type="button"
-          disabled
-          title="Próximamente"
-          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-white border border-warm-200 text-warm-500 text-[12.5px] font-medium cursor-not-allowed opacity-60"
+          onClick={() => setShowReschedule(true)}
+          disabled={!canCancel}  // mismo gate que Cancelar: Pending/Confirmed
+          title={canCancel ? 'Mover la cita a otro día u hora' : 'No se puede reagendar en este estado'}
+          className={cls(
+            'flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-[12.5px] font-medium',
+            canCancel
+              ? 'bg-white border-warm-200 hover:border-warm-300 text-warm-700'
+              : 'bg-white border-warm-200 text-warm-500 cursor-not-allowed opacity-60',
+          )}
         >
           <CalendarReschedule /> Reagendar
         </button>
@@ -639,6 +647,13 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
           <MessageCircle size={14} /> Enviar WhatsApp
         </a>
       </div>
+
+      {showReschedule && (
+        <RescheduleModal
+          appointment={appointment}
+          onClose={() => setShowReschedule(false)}
+        />
+      )}
     </div>
   )
 }

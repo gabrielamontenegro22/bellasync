@@ -6,8 +6,10 @@ import {
   createAppointment,
   getAgenda,
   markNoShow,
+  rescheduleAppointment,
   startAppointment,
   type CreateAppointmentRequest,
+  type RescheduleAppointmentRequest,
 } from '@/api/appointments'
 
 const KEY = 'agenda'
@@ -48,3 +50,7 @@ export const useCompleteAppointment = () =>
 
 export const useMarkNoShow = () =>
   useAppointmentMutation((id: string) => markNoShow(id))
+
+export const useRescheduleAppointment = () =>
+  useAppointmentMutation(({ id, req }: { id: string; req: RescheduleAppointmentRequest }) =>
+    rescheduleAppointment(id, req))
