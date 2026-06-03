@@ -112,3 +112,24 @@ export async function markNoShow(id: string): Promise<AppointmentResponse> {
   const { data } = await api.post<AppointmentResponse>(`/api/Appointments/${id}/no-show`)
   return data
 }
+
+export interface RescheduleAppointmentRequest {
+  newStartAtUtc: string  // ISO
+  /** Saltar la regla de 30 min. Backend la silencia si el rol no es SalonAdmin. */
+  bypassAdvanceWindow?: boolean
+}
+
+/**
+ * POST /api/Appointments/{id}/reschedule
+ * Cambia el slot de una cita Pending/Confirmed. Mismo stylist/service/customer.
+ */
+export async function rescheduleAppointment(
+  id: string,
+  req: RescheduleAppointmentRequest,
+): Promise<AppointmentResponse> {
+  const { data } = await api.post<AppointmentResponse>(
+    `/api/Appointments/${id}/reschedule`,
+    req,
+  )
+  return data
+}

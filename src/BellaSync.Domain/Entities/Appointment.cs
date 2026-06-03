@@ -246,6 +246,49 @@ public class Appointment : BaseEntity, ITenantEntity
     }
 
     /// <summary>
+    /// Reagenda la cita a un nuevo horario. La duración del servicio se
+    /// preserva (EndAt = newStartAt + DurationOriginal).
+    ///
+    /// Reglas:
+    ///  - Solo Pending y Confirmed pueden reagendarse. InProgress / Completed /
+    ///    Cancelled / NoShow son estados terminales o en curso y no.
+    ///  - La nueva fecha debe ser estrictamente posterior a `utcNow`.
+    ///  - El hold (si aplica) se recalcula con la nueva proximidad: si la
+    ///    cita aún está esperando pago y el nuevo slot está más cerca que
+    ///    el hold actual, el hold se acorta.
+    ///
+    /// La validación de overlap NO vive acá — requiere acceso al DbContext
+    /// para conocer las otras citas del stylist. La hace el handler de
+    /// Application antes de llamar este método.
+    /// </summary>
+    public void Reschedule(
+        DateTime newStartAtUtc,
+        DateTime utcNow,
+        TimeSpan holdDuration,
+        TimeSpan holdMinBeforeAppointment)
+    {
+        if (Status != AppointmentStatus.Pending && Status != AppointmentStatus.Confirmed)
+            throw new DomainException(
+                $"No se puede reagendar una cita en estado {Status}.");
+
+        if (newStartAtUtc <= utcNow)
+            throw new DomainException("La nueva hora debe ser posterior a ahora.");
+
+        var duration = EndAt - StartAt;
+        StartAt = newStartAtUtc;
+        EndAt = newStartAtUtc.Add(duration);
+
+        // Recalcular hold si la cita aún espera anticipo. Mantenemos la
+        // misma lógica que el factory: min(now + holdDuration, newStart - holdMinBefore).
+        if (DepositStatus == AppointmentDepositStatus.AwaitingPayment)
+        {
+            var byDuration = utcNow.Add(holdDuration);
+            var byProximity = newStartAtUtc.Subtract(holdMinBeforeAppointment);
+            HoldExpiresAt = byDuration < byProximity ? byDuration : byProximity;
+        }
+    }
+
+    /// <summary>
     /// True si las dos citas se solapan en tiempo (intervalos cerrados-abiertos
     /// [start, end): permite que una cita termine exactamente cuando empieza la siguiente).
     /// </summary>

@@ -8,6 +8,7 @@ using BellaSync.Application.Features.Appointments.GetAgenda;
 using BellaSync.Application.Features.Appointments.GetAppointment;
 using BellaSync.Application.Features.Appointments.MarkInProgress;
 using BellaSync.Application.Features.Appointments.MarkNoShow;
+using BellaSync.Application.Features.Appointments.RescheduleAppointment;
 using BellaSync.WebApi.Infrastructure;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
@@ -144,6 +145,34 @@ public class AppointmentsController : ControllerBase
         var result = await handler.HandleAsync(new MarkNoShowCommand(id), ct);
         return result.ToActionResult();
     }
+
+    /// <summary>
+    /// Reagenda una cita Pending/Confirmed a un nuevo horario. Mismo
+    /// stylist/service/customer — solo cambia el slot. Valida overlap
+    /// excluyendo la propia cita.
+    /// </summary>
+    [HttpPost("{id:guid}/reschedule")]
+    [ProducesResponseType(typeof(AppointmentResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Reschedule(
+        Guid id,
+        [FromBody] RescheduleAppointmentRequest request,
+        [FromServices] ICommandHandler<RescheduleAppointmentCommand, AppointmentResponse> handler,
+        CancellationToken ct)
+    {
+        // BypassAdvanceWindow es privilegio de SalonAdmin — al igual que en Create,
+        // si lo manda un Receptionist lo silenciamos antes de pasar al handler.
+        var bypass = request.BypassAdvanceWindow && User.IsInRole("SalonAdmin");
+        var command = new RescheduleAppointmentCommand(id, request.NewStartAtUtc, bypass);
+        var result = await handler.HandleAsync(command, ct);
+        return result.ToActionResult();
+    }
+
+    public sealed record RescheduleAppointmentRequest(
+        DateTime NewStartAtUtc,
+        bool BypassAdvanceWindow = false);
 
     private static Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary BuildModelState(
         FluentValidation.Results.ValidationResult result)
