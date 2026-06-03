@@ -90,6 +90,7 @@ public sealed class RescheduleAppointmentHandler
             .Include(a => a.Service)
             .FirstAsync(a => a.Id == appointment.Id, ct);
 
-        return Result<AppointmentResponse>.Success(AppointmentMapper.ToResponse(updated));
+        return Result<AppointmentResponse>.Success(
+            await AppointmentMapper.ToResponseAsync(updated, _db, ct));
     }
 }

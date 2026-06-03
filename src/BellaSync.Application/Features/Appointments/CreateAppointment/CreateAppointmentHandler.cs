@@ -101,6 +101,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
             .Include(a => a.Service)
             .FirstAsync(a => a.Id == appointment.Id, ct);
 
-        return Result<AppointmentResponse>.Success(AppointmentMapper.ToResponse(created));
+        return Result<AppointmentResponse>.Success(
+            await AppointmentMapper.ToResponseAsync(created, _db, ct));
     }
 }

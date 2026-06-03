@@ -26,6 +26,7 @@ public sealed class GetAppointmentHandler : IQueryHandler<GetAppointmentQuery, A
             return ApplicationError.NotFound("appointment.not_found",
                 $"No existe una cita con id {query.Id}.");
 
-        return Result<AppointmentResponse>.Success(AppointmentMapper.ToResponse(appointment));
+        return Result<AppointmentResponse>.Success(
+            await AppointmentMapper.ToResponseAsync(appointment, _db, ct));
     }
 }

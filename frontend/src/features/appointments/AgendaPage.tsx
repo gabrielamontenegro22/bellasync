@@ -462,37 +462,80 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
           </div>
         </Section>
 
-        {/* Pago — alineado con el mockup. Muestra el tipo de pago (anticipo
-            online vs. pago en sitio) + el badge de estado validado/esperando. */}
+        {/* Estado del dinero de la cita — el cuadro completo:
+              Total servicio
+              − Anticipo (validado / esperando)
+              − Pagado en sitio (suma de Payments registrados)
+              = Falta cobrar (o "Cobro completo ✓" si 0)
+            Es la vista que la recepcionista mira para saber si tiene
+            que cobrar algo más antes de despedir a la cliente. */}
         <Section title="Pago">
-          <div className="rounded-lg border border-warm-150 p-3.5 bg-warm-50/40">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-[13.5px] text-warm-700 font-medium">
-                  {appointment.depositStatus === 'NotRequired'
-                    ? 'Pago en sitio'
-                    : `Anticipo · ${fmtCop(appointment.depositAmount)}`}
+          {(() => {
+            const total = appointment.priceSnapshot
+            const anticipoValidado = appointment.validatedDepositAmount
+            const cobradoEnSitio = totalPaid
+            const cubierto = anticipoValidado + cobradoEnSitio
+            const falta = Math.max(0, total - cubierto)
+            const cobroCompleto = falta === 0 && cubierto > 0
+            const esperandoAnticipo = appointment.depositStatus === 'AwaitingPayment'
+
+            return (
+              <div className="rounded-lg border border-warm-150 bg-warm-50/40 divide-y divide-warm-150">
+                {/* Total */}
+                <div className="flex justify-between items-center px-3.5 py-2 text-[13px]">
+                  <span className="text-warm-600">Total servicio</span>
+                  <span className="text-warm-800 tabular-nums font-medium">{fmtCop(total)}</span>
                 </div>
+
+                {/* Anticipo — solo si requiere anticipo */}
                 {appointment.depositStatus !== 'NotRequired' && (
-                  <div className="text-[11.5px] text-warm-500 mt-0.5">
-                    sobre total de {fmtCop(appointment.priceSnapshot)}
+                  <div className="flex justify-between items-center px-3.5 py-2 text-[13px]">
+                    <span className="flex items-center gap-2 text-warm-600">
+                      − Anticipo
+                      <span className={cls(
+                        'text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider border',
+                        appointment.depositStatus === 'Validated'
+                          ? 'bg-brand-50 text-brand-700 border-brand-100'
+                          : 'bg-gold-50 text-gold-600 border-gold-200',
+                      )}>
+                        {appointment.depositStatus === 'Validated' ? 'Validado' : 'Esperando'}
+                      </span>
+                    </span>
+                    <span className="text-warm-800 tabular-nums font-medium">
+                      {fmtCop(anticipoValidado || appointment.depositAmount)}
+                    </span>
                   </div>
                 )}
+
+                {/* Cobrado en sitio — solo si hay payments */}
+                {cobradoEnSitio > 0 && (
+                  <div className="flex justify-between items-center px-3.5 py-2 text-[13px]">
+                    <span className="text-warm-600">− Cobrado en sitio</span>
+                    <span className="text-warm-800 tabular-nums font-medium">{fmtCop(cobradoEnSitio)}</span>
+                  </div>
+                )}
+
+                {/* Falta cobrar — destacado */}
+                <div className={cls(
+                  'flex justify-between items-center px-3.5 py-2.5',
+                  cobroCompleto
+                    ? 'bg-brand-50/60 text-brand-800'
+                    : falta > 0
+                      ? 'bg-gold-50/60 text-gold-700'
+                      : 'text-warm-600',
+                )}>
+                  <span className="text-[12px] uppercase tracking-wide font-semibold">
+                    {cobroCompleto ? '✓ Cobro completo'
+                      : esperandoAnticipo && cobradoEnSitio === 0 ? 'Esperando anticipo'
+                        : 'Falta cobrar'}
+                  </span>
+                  {!cobroCompleto && (
+                    <span className="font-serif text-[18px] tabular-nums">{fmtCop(falta)}</span>
+                  )}
+                </div>
               </div>
-              <span className={cls(
-                'shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider border',
-                appointment.depositStatus === 'Validated'
-                  ? 'bg-brand-50 text-brand-700 border-brand-100'
-                  : appointment.depositStatus === 'AwaitingPayment'
-                    ? 'bg-gold-50 text-gold-600 border-gold-200'
-                    : 'bg-warm-100 text-warm-600 border-warm-200',
-              )}>
-                {appointment.depositStatus === 'Validated' ? 'Validado'
-                  : appointment.depositStatus === 'AwaitingPayment' ? 'Esperando'
-                    : 'Sin anticipo'}
-              </span>
-            </div>
-          </div>
+            )
+          })()}
         </Section>
 
         {/* Pagos recibidos para esta cita. Si no hay, se muestra hint sutil

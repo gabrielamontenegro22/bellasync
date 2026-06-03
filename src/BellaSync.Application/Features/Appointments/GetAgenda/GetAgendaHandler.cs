@@ -44,11 +44,19 @@ public sealed class GetAgendaHandler : IQueryHandler<GetAgendaQuery, AgendaRespo
             NoShow = appointments.Count(a => a.Status == AppointmentStatus.NoShow),
         };
 
+        // Batch para evitar N+1: 1 sola query agrupada por cita devuelve
+        // el total de anticipos validados de todas las citas del día.
+        var validatedAmounts = await AppointmentMapper.GetValidatedDepositAmountsAsync(
+            appointments.Select(a => a.Id).ToList(), _db, ct);
+
         var response = new AgendaResponse
         {
             Date = query.Date,
             Metrics = metrics,
-            Appointments = appointments.Select(AppointmentMapper.ToResponse).ToList(),
+            Appointments = appointments
+                .Select(a => AppointmentMapper.ToResponse(
+                    a, validatedAmounts.TryGetValue(a.Id, out var v) ? v : 0m))
+                .ToList(),
         };
 
         return Result<AgendaResponse>.Success(response);

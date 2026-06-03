@@ -39,6 +39,7 @@ public sealed class CompleteAppointmentHandler
         }
 
         await _db.SaveChangesAsync(ct);
-        return Result<AppointmentResponse>.Success(AppointmentMapper.ToResponse(appointment));
+        return Result<AppointmentResponse>.Success(
+            await AppointmentMapper.ToResponseAsync(appointment, _db, ct));
     }
 }

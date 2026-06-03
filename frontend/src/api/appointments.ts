@@ -30,6 +30,12 @@ export interface AppointmentResponse {
   priceSnapshot: number
   depositPercentage: number
   depositAmount: number
+  /**
+   * Suma de los vouchers Validated (anticipos online validados) para esta
+   * cita. Es el dinero que realmente entró al banco por anticipo. Se usa
+   * para calcular "lo que falta cobrar en sitio" = priceSnapshot - este.
+   */
+  validatedDepositAmount: number
   status: AppointmentStatus
   depositStatus: AppointmentDepositStatus
   channel: AppointmentChannel
