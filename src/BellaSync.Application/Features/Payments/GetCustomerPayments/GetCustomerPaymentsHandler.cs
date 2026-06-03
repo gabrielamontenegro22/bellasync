@@ -33,6 +33,7 @@ public sealed class GetCustomerPaymentsHandler
             .AsNoTracking()
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Service)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Stylist)
+            .Include(p => p.Appointment)!.ThenInclude(a => a!.Customer)
             .Where(p => p.Appointment!.CustomerId == query.CustomerId)
             .OrderByDescending(p => p.RegisteredAt)
             .ToListAsync(ct);

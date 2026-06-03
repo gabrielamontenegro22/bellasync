@@ -2,7 +2,8 @@ import { api } from './axios'
 import type { PaymentResponse, PaymentMethod } from './payments'
 
 export interface MethodBreakdownItem {
-  method: PaymentMethod
+  /** Viene como string del backend (PaymentMethod.ToString()). */
+  method: PaymentMethod | string
   count: number
   total: number
 }

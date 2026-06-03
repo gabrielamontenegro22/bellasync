@@ -1,462 +1,868 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Banknote, ChevronLeft, ChevronRight, CheckCircle, AlertCircle,
-  CreditCard, Smartphone, Wallet,
+  ArrowDownRight, ArrowUpRight,
+  Banknote, ChevronRight, Clock, CreditCard,
+  Download, Lock, Plus, Smartphone, CheckCircle2, X,
 } from 'lucide-react'
-import { Card, Input } from '@/components/ui'
 import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
-import {
-  getDailyCashSummary,
-  type DailyCashSummary,
-  type MethodBreakdownItem,
-} from '@/api/cash'
-import { METHOD_BADGE } from '@/features/payments/components/RegisterPaymentModal'
-import {
-  fmtCop, initialsOf, toneOf,
-} from '@/features/customers/lib/customerLook'
-import type { PaymentMethod } from '@/api/payments'
+import { fmtCop } from '@/features/customers/lib/customerLook'
+import { getDailyCashSummary, type DailyCashSummary } from '@/api/cash'
+import type { PaymentResponse } from '@/api/payments'
 
 /**
- * `/caja` — pantalla nocturna de cierre. Lo que la admin abre al
- * final del día para conciliar lo facturado contra los movimientos
- * del banco.
+ * `/caja` — réplica fiel del mockup Caja.html/caja.jsx.
  *
- * Estructura (alineada con el bullet del contexto que dio Gabriela:
- * "suma todo lo facturado, separa lo cobrado en efectivo de lo cobrado
- * por transferencia, y le pide que cruce contra el banco. Doble
- * validación humana antes de cerrar."):
+ * Lo que sí está conectado al backend hoy (vía /api/Cash/daily-summary):
+ *   - Total recaudado, # transacciones, propinas.
+ *   - Breakdown por método de pago.
+ *   - Lista de transacciones del día (cliente, servicio, estilista, hora).
+ *   - Ventas por estilista (agrupando los pagos del día en frontend).
+ *   - Cálculo de efectivo esperado en caja para el arqueo.
  *
- *  1. Date nav (Ayer / Hoy / Mañana) + date picker.
- *  2. Stats cards: Total facturado · # pagos · Propinas.
- *  3. Breakdown por método con barras de proporción.
- *  4. Input "Saldo del banco" con cruce automático: ✓ cuadra o
- *     ✗ diferencia $X (en rojo si negativa, verde si positiva).
- *  5. Tabla de pagos del día para drill-down.
+ * Lo que aún está como visual / próximamente:
+ *   - Egresos del día: no hay entidad Expense aún. Mostramos vacío con
+ *     CTA "Registrar egreso" deshabilitado.
+ *   - Historial de cierres: no hay entidad CashClosing aún.
+ *   - Caja abierta/cerrada como estado persistido. El cierre solo calcula
+ *     y muestra la diferencia, no se guarda.
+ *   - Base inicial: constante por ahora.
  */
 export function CashClosingPage() {
   const { user } = useAuth()
-  const [date, setDate] = useState(() => formatLocalDate(new Date()))
-  // Cruce con banco — solo client-side, no se persiste hoy.
-  const [bankBalance, setBankBalance] = useState<string>('')
+  const [tab, setTab] = useState<'hoy' | 'historial'>('hoy')
+  const [filterMethod, setFilterMethod] = useState<string>('all')
+  const [closeOpen, setCloseOpen] = useState(false)
+  const [closed, setClosed] = useState<{ counted: number; diff: number } | null>(null)
+
+  // Por ahora fijamos hoy. Cuando el endpoint acepte navegación,
+  // exponemos un date picker (ver TODO en /caja date nav).
+  const today = formatLocalDate(new Date())
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['cash', date],
-    queryFn: () => getDailyCashSummary(date),
+    queryKey: ['cash', today],
+    queryFn: () => getDailyCashSummary(today),
   })
 
-  const today = formatLocalDate(new Date())
-  const isToday = date === today
-  const yesterday = formatLocalDate(addDays(parseLocalDate(date), -1))
-  const tomorrow = formatLocalDate(addDays(parseLocalDate(date), 1))
-
-  // Cruce contra banco — diferencia entre lo declarado (saldo) y lo
-  // que tenemos registrado en payments digitales (excluyendo efectivo).
-  const cruce = useMemo(() => {
-    if (!data || !bankBalance.trim()) return null
-    const declared = Number(bankBalance)
-    if (!Number.isFinite(declared)) return null
-    const expected = data.byMethod
-      .filter(b => b.method !== 'Cash')  // efectivo NO entra al banco
-      .reduce((acc, b) => acc + b.total, 0)
-    const diff = declared - expected
-    return { expected, declared, diff, matches: Math.abs(diff) < 0.01 }
-  }, [data, bankBalance])
-
   return (
-    <div className="flex h-full min-h-0 bg-warm-50 overflow-hidden">
-      <div className="flex-1 min-w-0 overflow-y-auto">
-        {/* Header */}
-        <header className="px-5 lg:px-8 pt-5 lg:pt-7 pb-4 bg-white border-b border-warm-150">
-          <div className="text-[12px] uppercase tracking-[0.12em] text-warm-500 font-medium">
-            <span className="text-brand-700">{user?.tenantName ?? 'Salón'}</span>
-            <span className="text-warm-300 mx-2">•</span>
-            <span>Cierre de caja</span>
-          </div>
-          <div className="mt-1 flex items-baseline gap-3 flex-wrap">
-            <h1 className="font-serif text-[32px] lg:text-[40px] leading-[1.05] text-warm-800 tracking-tight">
-              {fmtDateLong(parseLocalDate(date))}
-            </h1>
-            {isToday && (
-              <span className="text-[11.5px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                Hoy
-              </span>
+    <div className="flex-1 min-w-0 bg-cream">
+      {/* Topbar */}
+      <header
+        className={cls(
+          'h-16 border-b border-warm-150 bg-cream/80 backdrop-blur',
+          'sticky top-0 z-30 flex items-center px-6 lg:px-8 gap-3',
+        )}
+      >
+        <div className="text-[12.5px] text-warm-500">
+          <span className="text-warm-700">{user?.tenantName ?? 'Salón'}</span> · Caja
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            disabled
+            title="Próximamente"
+            className={cls(
+              'px-3 py-2 rounded-lg border border-warm-200 text-warm-400',
+              'text-[12.5px] font-medium flex items-center gap-1.5 cursor-not-allowed',
             )}
-          </div>
-
-          {/* Day nav */}
-          <div className="mt-5 flex items-center gap-1.5 text-[13.5px] flex-wrap">
+          >
+            <Download size={14} strokeWidth={1.8} /> Exportar
+          </button>
+          {!closed && (
             <button
               type="button"
-              onClick={() => setDate(yesterday)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-warm-600 hover:text-warm-800 hover:bg-warm-100 rounded-md"
-            >
-              <ChevronLeft size={16} /> Ayer
-              <span className="text-warm-400 text-[12px] ml-1 tabular-nums">
-                {fmtDateShort(parseLocalDate(yesterday))}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDate(today)}
+              onClick={() => setCloseOpen(true)}
+              disabled={isLoading || !data}
               className={cls(
-                'px-3 py-1.5 rounded-md font-medium',
-                isToday
-                  ? 'bg-warm-800 text-warm-50'
-                  : 'bg-white border border-warm-200 text-warm-700 hover:border-warm-300',
+                'px-3.5 py-2 rounded-lg bg-brand-700 hover:bg-brand-800',
+                'text-white text-[12.5px] font-medium flex items-center gap-1.5 shadow-soft',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              Hoy
+              <Lock size={15} strokeWidth={1.8} /> Cerrar caja
             </button>
+          )}
+        </div>
+      </header>
+
+      {/* Page header */}
+      <div className="px-6 lg:px-8 pt-8 pb-5">
+        <div className="flex items-end justify-between flex-wrap gap-4">
+          <div>
+            <div className="text-[10.5px] tracking-[0.2em] uppercase text-gold-600 font-medium">
+              Movimiento del día
+            </div>
+            <h1 className="font-serif text-[42px] lg:text-[52px] leading-[1.02] tracking-tight text-warm-800 mt-1">
+              Caja de hoy
+            </h1>
+            <p className="text-[13.5px] text-warm-500 mt-1.5 flex items-center gap-2">
+              <Clock size={13} strokeWidth={1.8} />
+              {formatHumanDate(new Date())} · Abierta desde las 8:00 am
+            </p>
+          </div>
+          {closed ? (
+            <div className="rounded-xl bg-brand-50 ring-1 ring-brand-200 px-4 py-2.5 flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-full bg-brand-700 text-white flex items-center justify-center">
+                <CheckCircle2 size={15} strokeWidth={2.4} />
+              </span>
+              <div>
+                <div className="text-[12.5px] font-medium text-brand-800">Caja cerrada</div>
+                <div className="text-[11px] text-warm-600">
+                  Diferencia:{' '}
+                  {closed.diff === 0
+                    ? 'cuadró perfecto'
+                    : (closed.diff > 0 ? '+' : '') + fmtCop(closed.diff)}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-gold-50 ring-1 ring-gold-200 px-4 py-2.5 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-gold-400 animate-pulse" />
+              <span className="text-[12.5px] text-gold-600 font-medium">Caja abierta</span>
+            </div>
+          )}
+        </div>
+
+        {/* KPIs */}
+        <div className="mt-7 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-brand-700 text-white rounded-2xl p-5 shadow-soft">
+            <div className="text-[10.5px] tracking-[0.18em] uppercase text-brand-200 font-medium">
+              Total recaudado
+            </div>
+            <div className="font-serif text-[38px] leading-none tabular-nums mt-2">
+              {fmtCop(data?.totalAmount ?? 0)}
+            </div>
+            <div className="text-[11.5px] text-brand-100 mt-1.5">
+              {data?.paymentCount ?? 0} transacciones
+            </div>
+          </div>
+          <Kpi
+            label="Egresos del día"
+            value={fmtCop(0)}
+            sub="próximamente"
+            accent="terra"
+            icon={<ArrowDownRight size={14} strokeWidth={1.8} />}
+          />
+          <Kpi
+            label="Neto en caja"
+            value={fmtCop(data?.totalAmount ?? 0)}
+            sub="ventas − egresos"
+            accent="brand"
+            icon={<ArrowUpRight size={14} strokeWidth={1.8} />}
+          />
+          <Kpi
+            label="Efectivo esperado"
+            value={fmtCop(expectedCashFor(data))}
+            sub="incluye base inicial"
+            accent="gold"
+            icon={<Banknote size={14} strokeWidth={1.8} />}
+          />
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="px-6 lg:px-8 border-b border-warm-150">
+        <div className="flex items-center gap-1">
+          {(
+            [
+              ['hoy', 'Resumen de hoy'],
+              ['historial', 'Historial de cierres'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={cls(
+                'px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition',
+                tab === id
+                  ? 'border-brand-700 text-brand-800'
+                  : 'border-transparent text-warm-500 hover:text-warm-700',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Estado: error / loading se muestran dentro de los paneles para
+          que el header siga visible. */}
+
+      {tab === 'hoy' ? (
+        <TabHoy
+          data={data}
+          isLoading={isLoading}
+          error={error as Error | null}
+          filterMethod={filterMethod}
+          onFilterChange={setFilterMethod}
+          onOpenClose={() => setCloseOpen(true)}
+          closed={!!closed}
+        />
+      ) : (
+        <TabHistorial />
+      )}
+
+      <CloseModal
+        open={closeOpen}
+        onClose={() => setCloseOpen(false)}
+        expected={expectedCashFor(data)}
+        cashSales={cashSalesFor(data)}
+        onConfirm={(counted, diff) => {
+          setClosed({ counted, diff })
+          setCloseOpen(false)
+        }}
+      />
+    </div>
+  )
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Tab Hoy: filtros + transacciones + egresos | breakdown + ranking + arqueo
+// ───────────────────────────────────────────────────────────────────────
+
+function TabHoy({
+  data,
+  isLoading,
+  error,
+  filterMethod,
+  onFilterChange,
+  onOpenClose,
+  closed,
+}: {
+  data: DailyCashSummary | undefined
+  isLoading: boolean
+  error: Error | null
+  filterMethod: string
+  onFilterChange: (m: string) => void
+  onOpenClose: () => void
+  closed: boolean
+}) {
+  const txns = data?.payments ?? []
+  const totalAmount = data?.totalAmount ?? 0
+
+  // Conteo por método para los pills.
+  const countByMethod = useMemo(() => {
+    const m: Record<string, number> = {}
+    txns.forEach((t) => {
+      m[t.method] = (m[t.method] ?? 0) + 1
+    })
+    return m
+  }, [txns])
+
+  const filteredTxns =
+    filterMethod === 'all' ? txns : txns.filter((t) => t.method === filterMethod)
+
+  // Ventas por estilista (ordenado descendente).
+  const byStylist = useMemo(() => {
+    const m: Record<string, number> = {}
+    txns.forEach((t) => {
+      m[t.stylistName] = (m[t.stylistName] ?? 0) + t.total
+    })
+    return Object.entries(m).sort((a, b) => b[1] - a[1])
+  }, [txns])
+
+  // byMethod del backend ya viene ordenado descendente.
+  const breakdown = data?.byMethod ?? []
+
+  return (
+    <div className="px-6 lg:px-8 py-6 grid lg:grid-cols-3 gap-5">
+      {/* IZQ */}
+      <div className="lg:col-span-2 space-y-5">
+        {/* Filtro por método */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => onFilterChange('all')}
+            className={cls(
+              'px-3 py-1.5 rounded-lg text-[12px] font-medium transition',
+              filterMethod === 'all'
+                ? 'bg-warm-800 text-white'
+                : 'bg-white border border-warm-200 text-warm-600 hover:border-warm-300',
+            )}
+          >
+            Todas <span className="tabular-nums opacity-70">{txns.length}</span>
+          </button>
+          {Object.entries(countByMethod).map(([method, count]) => {
+            const m = METHOD_LOOK[method] ?? METHOD_LOOK.Other
+            return (
+              <button
+                key={method}
+                type="button"
+                onClick={() => onFilterChange(method)}
+                className={cls(
+                  'px-3 py-1.5 rounded-lg text-[12px] font-medium flex items-center gap-1.5 transition',
+                  filterMethod === method
+                    ? 'bg-warm-800 text-white'
+                    : 'bg-white border border-warm-200 text-warm-600 hover:border-warm-300',
+                )}
+              >
+                <span className={cls('w-1.5 h-1.5 rounded-full', m.dot)} />
+                {m.label} <span className="tabular-nums opacity-70">{count}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Lista de transacciones */}
+        <div className="bg-white rounded-2xl border border-warm-150 shadow-soft overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-warm-150 flex items-center justify-between">
+            <h3 className="font-serif text-[18px] text-warm-800">Transacciones</h3>
+            <span className="text-[11.5px] text-warm-500">
+              {filteredTxns.length} cobros
+            </span>
+          </div>
+          <div className="divide-y divide-warm-100 max-h-[420px] overflow-y-auto">
+            {error && (
+              <div className="px-5 py-8 text-center text-[13px] text-terra-500">
+                No se pudo cargar la caja.
+              </div>
+            )}
+            {isLoading && (
+              <div className="px-5 py-8 text-center text-[13px] text-warm-400">
+                Cargando…
+              </div>
+            )}
+            {!isLoading && !error && filteredTxns.length === 0 && (
+              <div className="px-5 py-10 text-center text-[13px] text-warm-500">
+                Aún no hay pagos registrados {filterMethod === 'all' ? 'hoy' : 'de ese método'}.
+              </div>
+            )}
+            {filteredTxns.map((t) => (
+              <TxnRow key={t.id} txn={t} />
+            ))}
+          </div>
+        </div>
+
+        {/* Egresos */}
+        <div className="bg-white rounded-2xl border border-warm-150 shadow-soft overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-warm-150 flex items-center justify-between">
+            <h3 className="font-serif text-[18px] text-warm-800">Egresos del día</h3>
             <button
               type="button"
-              onClick={() => setDate(tomorrow)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-warm-600 hover:text-warm-800 hover:bg-warm-100 rounded-md"
+              disabled
+              title="Próximamente"
+              className="text-[12px] text-warm-400 font-medium flex items-center gap-1 cursor-not-allowed"
             >
-              <span className="text-warm-400 text-[12px] mr-1 tabular-nums">
-                {fmtDateShort(parseLocalDate(tomorrow))}
-              </span>
-              Mañana <ChevronRight size={16} />
+              <Plus size={14} strokeWidth={2.2} /> Registrar egreso
             </button>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="ml-2 rounded-md border border-warm-200 bg-white px-2 py-1.5 text-[12.5px] text-warm-700"
-            />
           </div>
-        </header>
-
-        <div className="px-5 lg:px-8 py-5 space-y-5">
-          {isLoading && <p className="text-[13px] text-warm-500">Cargando caja…</p>}
-          {error && <p className="text-[13px] text-terra-500">No se pudo cargar el resumen.</p>}
-
-          {data && <StatsRow data={data} />}
-          {data && data.byMethod.length > 0 && <MethodBreakdown data={data} />}
-          {data && <BankReconcile
-            bankBalance={bankBalance}
-            onBankBalanceChange={setBankBalance}
-            cruce={cruce}
-          />}
-          {data && <PaymentsTable data={data} />}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ============================================================
-// Stats arriba: Total facturado · # pagos · Propinas
-// ============================================================
-function StatsRow({ data }: { data: DailyCashSummary }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <StatCard
-        icon={Wallet}
-        accent="bg-brand-50 text-brand-700 border-brand-100"
-        label="Total facturado"
-        value={fmtCop(data.totalAmount)}
-        hint={`${data.paymentCount} pago${data.paymentCount === 1 ? '' : 's'} registrado${data.paymentCount === 1 ? '' : 's'}`}
-      />
-      <StatCard
-        icon={Banknote}
-        accent="bg-warm-100 text-warm-700 border-warm-200"
-        label="Pagos del día"
-        value={data.paymentCount.toString()}
-        hint="incluye efectivo + digitales"
-      />
-      <StatCard
-        icon={CheckCircle}
-        accent="bg-gold-50 text-gold-600 border-gold-200"
-        label="Propinas"
-        value={fmtCop(data.totalTips)}
-        hint="ya incluidas en el total"
-      />
-    </div>
-  )
-}
-
-function StatCard({
-  icon: I, accent, label, value, hint,
-}: {
-  icon: React.ComponentType<{ size?: number }>
-  accent: string
-  label: string
-  value: string
-  hint: string
-}) {
-  return (
-    <div className="bg-white border border-warm-150 rounded-xl p-4 shadow-softer">
-      <div className={cls('w-10 h-10 rounded-lg border flex items-center justify-center', accent)}>
-        <I size={18} />
-      </div>
-      <div className="mt-3 text-[11px] tracking-[0.12em] uppercase text-warm-500 font-medium">
-        {label}
-      </div>
-      <div className="font-serif text-[28px] text-warm-800 leading-none mt-1.5 tabular-nums">
-        {value}
-      </div>
-      <div className="text-[12px] text-warm-500 mt-1.5">{hint}</div>
-    </div>
-  )
-}
-
-// ============================================================
-// Breakdown por método con barras de proporción
-// ============================================================
-function MethodBreakdown({ data }: { data: DailyCashSummary }) {
-  return (
-    <Card className="p-5">
-      <div className="text-[11px] tracking-[0.14em] uppercase text-warm-500 font-medium mb-4">
-        Desglose por método
-      </div>
-      <div className="space-y-3">
-        {data.byMethod.map(item => (
-          <MethodRow key={item.method} item={item} total={data.totalAmount} />
-        ))}
-      </div>
-    </Card>
-  )
-}
-
-function MethodRow({ item, total }: { item: MethodBreakdownItem; total: number }) {
-  const badge = METHOD_BADGE[item.method as PaymentMethod]
-  const pct = total > 0 ? (item.total / total) * 100 : 0
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1.5">
-        <div className="flex items-center gap-2.5">
-          <MethodIcon method={item.method as PaymentMethod} />
-          <span className={cls('text-[11.5px] px-2 py-0.5 rounded-md font-medium', badge.bg, badge.fg)}>
-            {badge.label}
-          </span>
-          <span className="text-[12px] text-warm-500 tabular-nums">
-            {item.count} {item.count === 1 ? 'pago' : 'pagos'}
-          </span>
-        </div>
-        <div className="flex items-baseline gap-2">
-          <span className="font-serif text-[18px] text-warm-800 tabular-nums">
-            {fmtCop(item.total)}
-          </span>
-          <span className="text-[11.5px] text-warm-400 tabular-nums">
-            {pct.toFixed(0)}%
-          </span>
-        </div>
-      </div>
-      <div className="h-1.5 rounded-full bg-warm-100 overflow-hidden">
-        <div
-          className={cls('h-full rounded-full', getBarColor(item.method as PaymentMethod))}
-          style={{ width: pct + '%' }}
-        />
-      </div>
-    </div>
-  )
-}
-
-function MethodIcon({ method }: { method: PaymentMethod }) {
-  const I =
-    method === 'Cash' ? Banknote
-    : method === 'CreditCard' || method === 'DebitCard' ? CreditCard
-    : Smartphone
-  return <I size={14} className="text-warm-500" />
-}
-
-function getBarColor(method: PaymentMethod): string {
-  switch (method) {
-    case 'Cash': return 'bg-brand-500'
-    case 'Bancolombia': return 'bg-[#fdda24]'
-    case 'Nequi': return 'bg-[#da1e8e]'
-    case 'Daviplata': return 'bg-[#e2231a]'
-    case 'CreditCard':
-    case 'DebitCard': return 'bg-warm-400'
-    default: return 'bg-warm-300'
-  }
-}
-
-// ============================================================
-// Cruce con saldo del banco
-// ============================================================
-function BankReconcile({
-  bankBalance, onBankBalanceChange, cruce,
-}: {
-  bankBalance: string
-  onBankBalanceChange: (v: string) => void
-  cruce: { expected: number; declared: number; diff: number; matches: boolean } | null
-}) {
-  return (
-    <Card className="p-5">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-warm-100 border border-warm-200 text-warm-700 flex items-center justify-center flex-shrink-0">
-          <CheckCircle size={18} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[14px] font-medium text-warm-800">Cruce con el banco</div>
-          <p className="text-[12.5px] text-warm-500 mt-1">
-            Mirá el saldo total que entró a la cuenta del salón hoy (suma de las
-            transferencias en la app del banco, sin contar lo de efectivo).
-            BellaSync compara contra los pagos digitales registrados acá.
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-[13px] text-warm-600 shrink-0">Saldo del banco:</span>
-            <Input
-              type="number"
-              min={0}
-              step={1000}
-              value={bankBalance}
-              onChange={e => onBankBalanceChange(e.target.value)}
-              placeholder="0"
-              className="w-40"
-            />
+          <div className="px-5 py-8 text-center text-[12.5px] text-warm-500">
+            Los egresos en efectivo del día —compras a proveedores, propinas,
+            domicilios— vivirán acá pronto.
           </div>
-          {cruce && (
-            <div className={cls(
-              'mt-3 rounded-lg p-3 text-[13px] flex items-start gap-2',
-              cruce.matches
-                ? 'bg-brand-50 border border-brand-100 text-brand-800'
-                : 'bg-terra-100 border border-terra-300 text-terra-500',
-            )}>
-              {cruce.matches
-                ? <CheckCircle size={16} className="mt-0.5 flex-shrink-0" />
-                : <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />}
-              <div className="flex-1 tabular-nums">
-                {cruce.matches ? (
-                  <span className="font-semibold">✓ Cuadra. Saldo del banco coincide con lo registrado.</span>
-                ) : (
-                  <>
-                    <div className="font-semibold">
-                      {cruce.diff > 0 ? 'Sobra' : 'Falta'} {fmtCop(Math.abs(cruce.diff))} en el banco.
+        </div>
+      </div>
+
+      {/* DER */}
+      <div className="space-y-5">
+        {/* Por método */}
+        <div className="bg-white rounded-2xl border border-warm-150 shadow-soft p-5">
+          <h3 className="font-serif text-[18px] text-warm-800 mb-4">Por método de pago</h3>
+          {breakdown.length === 0 ? (
+            <div className="text-[12.5px] text-warm-500 py-3 text-center">
+              Sin movimientos aún.
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              {breakdown.map((b) => {
+                const m = METHOD_LOOK[b.method] ?? METHOD_LOOK.Other
+                const pct = totalAmount > 0 ? (b.total / totalAmount) * 100 : 0
+                return (
+                  <div key={b.method}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 text-[12.5px] text-warm-700">
+                        <span
+                          className={cls(
+                            'w-6 h-6 rounded-md flex items-center justify-center',
+                            m.tone,
+                          )}
+                        >
+                          {m.icon}
+                        </span>
+                        {m.label}
+                      </div>
+                      <span className="text-[13px] font-medium text-warm-800 tabular-nums">
+                        {fmtCop(b.total)}
+                      </span>
                     </div>
-                    <div className="text-[12px] mt-0.5 opacity-80">
-                      Registrado en BellaSync: {fmtCop(cruce.expected)} ·
-                      Declarado del banco: {fmtCop(cruce.declared)}.
-                      {cruce.diff > 0 && ' Quizá hubo una transferencia que no se registró.'}
-                      {cruce.diff < 0 && ' Quizá se registró un pago que no llegó al banco.'}
+                    <div className="h-1.5 rounded-full bg-warm-100 overflow-hidden">
+                      <div
+                        className={cls('h-full rounded-full', m.dot)}
+                        style={{ width: pct + '%' }}
+                      />
                     </div>
-                  </>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Por estilista */}
+        <div className="bg-white rounded-2xl border border-warm-150 shadow-soft p-5">
+          <h3 className="font-serif text-[18px] text-warm-800 mb-4">Ventas por estilista</h3>
+          {byStylist.length === 0 ? (
+            <div className="text-[12.5px] text-warm-500 py-3 text-center">
+              Aún sin ventas.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {byStylist.map(([name, val], i) => (
+                <div key={name} className="flex items-center gap-3">
+                  <span className="font-serif text-[14px] text-warm-400 w-5 tabular-nums">
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 text-[13px] text-warm-700">{name}</span>
+                  <span className="text-[13px] font-medium text-warm-800 tabular-nums">
+                    {fmtCop(val)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Arqueo */}
+        <div className="bg-warm-800 text-white rounded-2xl p-5">
+          <div className="text-[10.5px] tracking-[0.18em] uppercase text-gold-300 font-medium">
+            Arqueo de efectivo
+          </div>
+          <div className="mt-3 space-y-1.5 text-[12.5px]">
+            <div className="flex justify-between">
+              <span className="text-warm-300">Base inicial</span>
+              <span className="tabular-nums">{fmtCop(BASE_INICIAL)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-warm-300">+ Ventas efectivo</span>
+              <span className="tabular-nums">{fmtCop(cashSalesFor(data))}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-warm-300">− Egresos efectivo</span>
+              <span className="tabular-nums">-{fmtCop(0)}</span>
+            </div>
+            <div className="pt-2 mt-1 border-t border-white/15 flex justify-between items-center">
+              <span className="font-medium">Esperado en caja</span>
+              <span className="font-serif text-[20px] tabular-nums">
+                {fmtCop(expectedCashFor(data))}
+              </span>
+            </div>
+          </div>
+          {!closed && (
+            <button
+              type="button"
+              onClick={onOpenClose}
+              disabled={isLoading || !data}
+              className={cls(
+                'mt-4 w-full px-4 py-2.5 rounded-lg bg-gold-300 hover:bg-gold-200',
+                'text-warm-800 text-[13px] font-medium flex items-center justify-center gap-2',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              <Lock size={15} strokeWidth={1.8} /> Hacer arqueo y cerrar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TxnRow({ txn }: { txn: PaymentResponse }) {
+  const m = METHOD_LOOK[txn.method] ?? METHOD_LOOK.Other
+  return (
+    <div className="px-5 py-3 flex items-center gap-3 hover:bg-warm-50/50 transition">
+      <div className="text-[11.5px] tabular-nums text-warm-400 w-10">
+        {formatHHmm(txn.registeredAt)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium text-warm-800 truncate">
+          {txn.customerName}
+        </div>
+        <div className="text-[11.5px] text-warm-500 truncate">
+          {txn.serviceName} · {txn.stylistName}
+        </div>
+      </div>
+      <div
+        className={cls(
+          'text-[10.5px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1',
+          m.tone,
+        )}
+      >
+        {m.label}
+      </div>
+      <div className="text-[13.5px] font-medium text-warm-800 tabular-nums w-24 text-right">
+        {fmtCop(txn.total)}
+      </div>
+    </div>
+  )
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Tab Historial — placeholder hasta que exista entidad CashClosing.
+// ───────────────────────────────────────────────────────────────────────
+
+function TabHistorial() {
+  return (
+    <div className="px-6 lg:px-8 py-6">
+      <div className="bg-white rounded-2xl border border-warm-150 shadow-soft overflow-hidden">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="bg-warm-50 border-b border-warm-150 text-[10.5px] tracking-[0.14em] uppercase text-warm-500">
+              <th className="text-left font-medium px-5 py-3">Fecha</th>
+              <th className="text-right font-medium px-5 py-3">Total</th>
+              <th className="text-right font-medium px-5 py-3 hidden sm:table-cell">
+                Transacciones
+              </th>
+              <th className="text-right font-medium px-5 py-3">Diferencia</th>
+              <th className="text-left font-medium px-5 py-3 hidden md:table-cell">
+                Cerrada por
+              </th>
+              <th className="px-5 py-3 w-10" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colSpan={6} className="px-5 py-16 text-center text-[13px] text-warm-500">
+                Cuando empieces a cerrar la caja cada noche, el historial
+                aparecerá acá. (próximamente)
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Modal de cierre / arqueo
+// ───────────────────────────────────────────────────────────────────────
+
+function CloseModal({
+  open,
+  onClose,
+  expected,
+  cashSales,
+  onConfirm,
+}: {
+  open: boolean
+  onClose: () => void
+  expected: number
+  cashSales: number
+  onConfirm: (counted: number, diff: number) => void
+}) {
+  const [counted, setCounted] = useState('')
+  useEffect(() => {
+    if (open) setCounted('')
+  }, [open])
+
+  if (!open) return null
+  const countedNum = parseInt(counted.replace(/[^0-9]/g, '')) || 0
+  const diff = countedNum - expected
+  const hasCount = counted !== ''
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-warm-900/40 backdrop-blur-sm anim-fade" />
+      <div
+        className="relative w-full max-w-md bg-white rounded-2xl shadow-pop overflow-hidden anim-fade"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 pt-6 pb-4 border-b border-warm-150 flex items-start justify-between">
+          <div>
+            <div className="text-[10.5px] tracking-[0.18em] uppercase text-gold-600 font-medium">
+              Arqueo de efectivo
+            </div>
+            <h3 className="font-serif text-[26px] text-warm-800 mt-1 leading-tight">
+              Cerrar caja del día
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-md hover:bg-warm-100 text-warm-500 flex items-center justify-center"
+            aria-label="Cerrar"
+          >
+            <X size={18} strokeWidth={2} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div className="rounded-xl bg-warm-50 border border-warm-150 p-4 space-y-2">
+            <Row k="Base inicial" v={fmtCop(BASE_INICIAL)} />
+            <Row k="+ Ventas en efectivo" v={fmtCop(cashSales)} />
+            <Row k="− Egresos en efectivo" v={'-' + fmtCop(0)} />
+            <div className="pt-2 border-t border-warm-200 flex items-center justify-between">
+              <span className="text-[13px] font-medium text-warm-800">
+                Efectivo esperado en caja
+              </span>
+              <span className="font-serif text-[20px] tabular-nums text-warm-800">
+                {fmtCop(expected)}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[12.5px] font-medium text-warm-700 block mb-1.5">
+              ¿Cuánto efectivo contaste?
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-warm-400 text-[15px]">
+                $
+              </span>
+              <input
+                value={counted}
+                onChange={(e) => setCounted(e.target.value)}
+                inputMode="numeric"
+                placeholder="0"
+                autoFocus
+                className={cls(
+                  'w-full pl-7 pr-3.5 py-2.5 rounded-lg bg-white border border-warm-200',
+                  'text-[15px] text-warm-800 tabular-nums focus:border-brand-500',
+                  'focus:ring-2 focus:ring-brand-100 outline-none',
                 )}
+              />
+            </div>
+          </div>
+
+          {hasCount && (
+            <div
+              className={cls(
+                'rounded-xl p-4 flex items-center justify-between anim-fade',
+                diff === 0
+                  ? 'bg-brand-50 ring-1 ring-brand-200'
+                  : Math.abs(diff) < 10000
+                  ? 'bg-gold-50 ring-1 ring-gold-200'
+                  : 'bg-terra-100/60 ring-1 ring-terra-300',
+              )}
+            >
+              <div>
+                <div className="text-[11px] tracking-[0.14em] uppercase text-warm-500 font-medium">
+                  Diferencia
+                </div>
+                <div
+                  className={cls(
+                    'font-serif text-[24px] tabular-nums mt-0.5',
+                    diff === 0
+                      ? 'text-brand-700'
+                      : diff > 0
+                      ? 'text-gold-600'
+                      : 'text-terra-500',
+                  )}
+                >
+                  {diff > 0 ? '+' : ''}
+                  {fmtCop(diff)}
+                </div>
+              </div>
+              <div className="text-[12px] text-warm-600 text-right max-w-[140px]">
+                {diff === 0
+                  ? '¡Cuadra perfecto!'
+                  : diff > 0
+                  ? 'Sobra efectivo en caja'
+                  : 'Falta efectivo en caja'}
               </div>
             </div>
           )}
         </div>
+
+        <div className="px-6 py-4 bg-warm-50 border-t border-warm-150 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-lg text-[13px] text-warm-700 hover:bg-warm-150"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(countedNum, diff)}
+            disabled={!hasCount}
+            className={cls(
+              'px-5 py-2.5 rounded-lg text-[13px] font-medium flex items-center gap-2 transition',
+              hasCount
+                ? 'bg-brand-700 hover:bg-brand-800 text-white shadow-soft'
+                : 'bg-warm-200 text-warm-400 cursor-not-allowed',
+            )}
+          >
+            <Lock size={15} strokeWidth={1.8} /> Confirmar cierre
+          </button>
+        </div>
       </div>
-    </Card>
+    </div>
   )
 }
 
-// ============================================================
-// Tabla de pagos del día
-// ============================================================
-function PaymentsTable({ data }: { data: DailyCashSummary }) {
-  if (data.payments.length === 0) {
-    return (
-      <Card className="p-10 text-center">
-        <Banknote size={28} className="mx-auto text-warm-400" />
-        <div className="font-serif text-[20px] text-warm-700 mt-3">Sin pagos este día</div>
-        <div className="text-[13px] text-warm-500 mt-1 max-w-md mx-auto">
-          Cuando registres cobros en la agenda, aparecerán acá para el cierre del día.
-        </div>
-      </Card>
-    )
-  }
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-center justify-between text-[12.5px]">
+      <span className="text-warm-500">{k}</span>
+      <span className="text-warm-700 tabular-nums">{v}</span>
+    </div>
+  )
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// KPI card
+// ───────────────────────────────────────────────────────────────────────
+
+function Kpi({
+  label,
+  value,
+  sub,
+  accent,
+  icon,
+}: {
+  label: string
+  value: string
+  sub: string
+  accent: 'brand' | 'gold' | 'terra'
+  icon: React.ReactNode
+}) {
+  const accents = {
+    brand: 'text-brand-700',
+    gold: 'text-gold-600',
+    terra: 'text-terra-500',
+  } as const
+  const bgs = {
+    brand: 'bg-brand-50',
+    gold: 'bg-gold-50',
+    terra: 'bg-terra-100/60',
+  } as const
 
   return (
-    <Card className="overflow-hidden p-0">
-      <div className="px-5 py-3 border-b border-warm-150">
-        <div className="text-[11px] tracking-[0.14em] uppercase text-warm-500 font-medium">
-          Pagos del día ({data.payments.length})
+    <div className="bg-white rounded-2xl border border-warm-150 p-5 shadow-soft">
+      <div className="flex items-center justify-between">
+        <div className="text-[10.5px] tracking-[0.18em] uppercase text-warm-500 font-medium">
+          {label}
         </div>
+        <span
+          className={cls(
+            'w-7 h-7 rounded-lg flex items-center justify-center',
+            bgs[accent],
+            accents[accent],
+          )}
+        >
+          {icon}
+        </span>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead className="bg-warm-50/60 border-b border-warm-150 text-[10.5px] tracking-[0.14em] uppercase text-warm-500">
-            <tr>
-              <th className="text-left font-medium pl-5 pr-3 py-3">Hora</th>
-              <th className="text-left font-medium px-3 py-3">Cliente</th>
-              <th className="text-left font-medium px-3 py-3">Servicio</th>
-              <th className="text-left font-medium px-3 py-3">Método</th>
-              <th className="text-left font-medium px-3 py-3">Referencia</th>
-              <th className="text-right font-medium pr-5 pl-3 py-3">Monto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.payments.map(p => {
-              const badge = METHOD_BADGE[p.method]
-              const tone = toneOf(p.appointmentId)
-              return (
-                <tr key={p.id} className="border-b border-warm-100 last:border-0 hover:bg-warm-50/40">
-                  <td className="py-3 pl-5 pr-3 text-warm-700 tabular-nums">
-                    {formatTime(p.registeredAt)}
-                  </td>
-                  <td className="py-3 px-3">
-                    <div className="flex items-center gap-2">
-                      <div className={cls(
-                        'w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0',
-                        tone.bg, tone.fg,
-                      )}>
-                        {initialsOf(p.stylistName ?? '—')}
-                      </div>
-                      <span className="text-warm-700">{p.stylistName}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-3 text-warm-800">{p.serviceName}</td>
-                  <td className="py-3 px-3">
-                    <span className={cls('text-[11.5px] px-2 py-0.5 rounded-md', badge.bg, badge.fg)}>
-                      {badge.label}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 font-mono text-[11.5px] text-warm-500">
-                    {p.reference ?? '—'}
-                  </td>
-                  <td className="py-3 pr-5 pl-3 text-right tabular-nums font-medium text-warm-800">
-                    {fmtCop(p.total)}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      <div
+        className={cls(
+          'font-serif text-[34px] leading-none tabular-nums mt-2.5',
+          accents[accent],
+        )}
+      >
+        {value}
       </div>
-    </Card>
+      <div className="text-[11px] text-warm-500 mt-1.5">{sub}</div>
+    </div>
   )
 }
 
-// ============================================================
-// Helpers fecha
-// ============================================================
+// ───────────────────────────────────────────────────────────────────────
+// Look-and-feel por método de pago.
+// Las claves son los strings que devuelve el backend (PaymentMethod.ToString())
+// más alias por compatibilidad. Si el backend agrega un método nuevo cae
+// en METHOD_LOOK.Other.
+// ───────────────────────────────────────────────────────────────────────
+
+interface MethodLook {
+  label: string
+  icon: React.ReactNode
+  /** clases para el chip / icono cuadrado */
+  tone: string
+  /** clase de bg del dot (también se usa como color de la barra) */
+  dot: string
+}
+
+const METHOD_LOOK: Record<string, MethodLook> = {
+  Cash: {
+    label: 'Efectivo',
+    icon: <Banknote size={14} strokeWidth={1.7} />,
+    tone: 'text-brand-700 bg-brand-50',
+    dot: 'bg-brand-500',
+  },
+  Bancolombia: {
+    label: 'Bancolombia',
+    icon: <CreditCard size={14} strokeWidth={1.7} />,
+    tone: 'text-[#7a5e2d] bg-[#f6ecd0]',
+    dot: 'bg-[#d4a72b]',
+  },
+  Nequi: {
+    label: 'Nequi',
+    icon: <Smartphone size={14} strokeWidth={1.7} />,
+    tone: 'text-[#7a2d6b] bg-[#f3dcee]',
+    dot: 'bg-[#c026a8]',
+  },
+  Daviplata: {
+    label: 'Daviplata',
+    icon: <Smartphone size={14} strokeWidth={1.7} />,
+    tone: 'text-[#9a2828] bg-[#f6dede]',
+    dot: 'bg-[#d33333]',
+  },
+  CreditCard: {
+    label: 'Datáfono',
+    icon: <CreditCard size={14} strokeWidth={1.7} />,
+    tone: 'text-[#3d5664] bg-[#dde7ec]',
+    dot: 'bg-[#5d7a8a]',
+  },
+  DebitCard: {
+    label: 'Datáfono',
+    icon: <CreditCard size={14} strokeWidth={1.7} />,
+    tone: 'text-[#3d5664] bg-[#dde7ec]',
+    dot: 'bg-[#5d7a8a]',
+  },
+  Other: {
+    label: 'Otro',
+    icon: <ChevronRight size={14} strokeWidth={1.7} />,
+    tone: 'text-warm-600 bg-warm-100',
+    dot: 'bg-warm-400',
+  },
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Helpers
+// ───────────────────────────────────────────────────────────────────────
+
+/** Base inicial: hoy es constante. Cuando exista config por salón, leer de ahí. */
+const BASE_INICIAL = 100000
+
+function cashSalesFor(data?: DailyCashSummary): number {
+  if (!data) return 0
+  return data.byMethod.find((b) => b.method === 'Cash')?.total ?? 0
+}
+
+function expectedCashFor(data?: DailyCashSummary): number {
+  // expected = base + ventas efectivo − egresos efectivo (hoy 0)
+  return BASE_INICIAL + cashSalesFor(data)
+}
+
+/** "2026-06-03" en zona local — coincide con lo que el backend espera. */
 function formatLocalDate(d: Date): string {
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
-function parseLocalDate(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
+/** "Martes 3 de junio, 2026" — para el subtítulo del header. */
+function formatHumanDate(d: Date): string {
+  return new Intl.DateTimeFormat('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(d)
 }
 
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d)
-  r.setDate(r.getDate() + n)
-  return r
-}
-
-const MESES = ['enero','febrero','marzo','abril','mayo','junio',
-               'julio','agosto','septiembre','octubre','noviembre','diciembre']
-const DIAS = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
-const MESES_SHORT = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-
-function fmtDateLong(d: Date): string {
-  return `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`
-}
-
-function fmtDateShort(d: Date): string {
-  return `${d.getDate()} ${MESES_SHORT[d.getMonth()]}`
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('es-CO', {
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  })
+/** "09:15" desde un ISO. */
+function formatHHmm(iso: string): string {
+  const d = new Date(iso)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
 }

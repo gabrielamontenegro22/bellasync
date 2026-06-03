@@ -98,6 +98,7 @@ public sealed class RegisterPaymentHandler
             .AsNoTracking()
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Service)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Stylist)
+            .Include(p => p.Appointment)!.ThenInclude(a => a!.Customer)
             .FirstAsync(p => p.Id == payment.Id, ct);
 
         return Result<PaymentResponse>.Success(PaymentMapper.ToResponse(created));
