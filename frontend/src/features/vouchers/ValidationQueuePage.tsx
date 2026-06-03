@@ -153,10 +153,11 @@ export function ValidationQueuePage() {
 
         {/* SPLIT PANEL */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
-          {/* PANEL IZQ — LISTA */}
-          <aside className="w-full max-w-[420px] flex-shrink-0 border-r border-warm-150 bg-white flex flex-col min-h-0">
-            {/* Filter pills */}
-            <div className="px-5 pt-3 pb-3 border-b border-warm-150 flex items-center gap-1.5 overflow-x-auto flex-shrink-0">
+          {/* PANEL IZQ — LISTA (bg warm sutil como el mockup) */}
+          <aside className="w-full max-w-[420px] flex-shrink-0 border-r border-warm-150 bg-warm-50/60 flex flex-col min-h-0">
+            {/* Filter pills — flex-wrap para que "Esta semana" caiga abajo
+                en vez de cortarse, y gap-2 para más aire entre chips */}
+            <div className="px-5 lg:px-6 pt-2 pb-3 flex items-center gap-2 flex-wrap flex-shrink-0">
               {(['all', 'urgent', 'tomorrow', 'week'] as const).map(f => (
                 <FilterPill
                   key={f}
@@ -169,7 +170,7 @@ export function ValidationQueuePage() {
             </div>
 
             {/* Cards */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+            <div className="flex-1 overflow-y-auto px-5 lg:px-6 pb-6 space-y-2">
               {isLoading && (
                 <div className="text-center py-10 text-[13px] text-warm-500">
                   Cargando comprobantes…
@@ -230,17 +231,18 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={cls(
-        'px-3 py-1.5 rounded-full text-[12.5px] whitespace-nowrap flex items-center gap-1.5 transition border',
+        // gap-2 más generoso entre dot/label/count para que respire
+        'flex items-center gap-2 px-3 py-1.5 rounded-full text-[12.5px] border transition',
         active
           ? 'bg-warm-800 text-warm-50 border-warm-800'
-          : 'bg-white text-warm-600 border-warm-200 hover:border-warm-300',
+          : 'bg-white text-warm-700 border-warm-200 hover:border-warm-300',
       )}
     >
       {cfg.dot && <span className={cls('w-1.5 h-1.5 rounded-full', cfg.dot)} />}
-      {cfg.label}
+      <span>{cfg.label}</span>
       <span className={cls(
         'tabular-nums text-[11px]',
-        active ? 'text-white/70' : 'text-warm-400',
+        active ? 'text-warm-50/70' : 'text-warm-400',
       )}>
         {count}
       </span>
