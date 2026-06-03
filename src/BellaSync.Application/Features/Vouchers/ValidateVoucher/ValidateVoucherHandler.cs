@@ -5,6 +5,7 @@ using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Vouchers.Dtos;
 using BellaSync.Application.Features.Vouchers.Shared;
 using BellaSync.Domain.Common;
+using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -56,9 +57,30 @@ public sealed class ValidateVoucherHandler
 
                 case VoucherDecision.Reject:
                     voucher.Reject(command.DecidedByUserId, now, command.Notes);
+                    // Rechazar = "este pago es inválido" → cancelamos la cita
+                    // también, libera el cupo. Si la recepcionista solo quería
+                    // pedir info adicional, debería usar RequestClarification.
+                    // La razón de cancelación incluye la nota para trazabilidad.
+                    if (voucher.Appointment is { } rejectedAppt)
+                    {
+                        var reason = string.IsNullOrWhiteSpace(command.Notes)
+                            ? "Pago rechazado en validación."
+                            : $"Pago rechazado: {command.Notes}";
+                        // Solo cancelamos si la cita está en estado cancelable
+                        // (Pending/Confirmed). Si ya está cancelada o terminal,
+                        // Cancel() es idempotente o lanza — el catch externo lo maneja.
+                        if (rejectedAppt.Status == AppointmentStatus.Pending
+                            || rejectedAppt.Status == AppointmentStatus.Confirmed)
+                        {
+                            rejectedAppt.Cancel(now, reason);
+                        }
+                    }
                     break;
 
                 case VoucherDecision.RequestClarification:
+                    // Aclaración = "necesito más info" → la cita sigue Pending,
+                    // el hold sigue corriendo. El cliente puede mandar otro
+                    // voucher. Si no lo hace, ReleaseExpiredHolds cancela.
                     voucher.RequestClarification(command.DecidedByUserId, now, command.Notes);
                     break;
             }
