@@ -1,4 +1,5 @@
 import { api } from './axios'
+import type { AppointmentResponse } from './appointments'
 
 /** Tipos espejo de BellaSync.Application.Features.Customers.Dtos.CustomerResponse. */
 export interface CustomerResponse {
@@ -14,6 +15,18 @@ export interface CustomerResponse {
   isActive: boolean
   createdAt: string
   updatedAt: string | null
+
+  // Stats derivados (proyectados desde Appointments en el backend)
+  /** Cantidad de citas Completed. */
+  visits: number
+  /** Última cita Completed (ISO 8601 UTC) o null. */
+  lastVisitAt: string | null
+  /** Próxima cita Pending/Confirmed futura (ISO 8601 UTC) o null. */
+  nextVisitAt: string | null
+  /** Estilista con más citas Completed o null. */
+  preferredStylistName: string | null
+  /** "VIP" | "Frecuente" | "Nuevo" | "Inactivo". Derivado en el backend. */
+  tag: 'VIP' | 'Frecuente' | 'Nuevo' | 'Inactivo'
 }
 
 export interface PaginatedCustomers {
@@ -81,4 +94,13 @@ export async function updateCustomer(id: string, req: UpdateCustomerRequest): Pr
 /** DELETE /api/Customers/{id} — soft delete (marca isActive=false). */
 export async function deleteCustomer(id: string): Promise<void> {
   await api.delete(`/api/Customers/${id}`)
+}
+
+/**
+ * GET /api/Customers/{id}/appointments — historial completo de citas
+ * (pasadas + futuras) ordenado desc por StartAt.
+ */
+export async function getCustomerAppointments(id: string): Promise<AppointmentResponse[]> {
+  const { data } = await api.get<AppointmentResponse[]>(`/api/Customers/${id}/appointments`)
+  return data
 }

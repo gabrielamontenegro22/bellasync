@@ -1,9 +1,11 @@
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Pagination;
+using BellaSync.Application.Features.Appointments.Dtos;
 using BellaSync.Application.Features.Customers.CreateCustomer;
 using BellaSync.Application.Features.Customers.DeleteCustomer;
 using BellaSync.Application.Features.Customers.Dtos;
 using BellaSync.Application.Features.Customers.GetCustomer;
+using BellaSync.Application.Features.Customers.GetCustomerAppointments;
 using BellaSync.Application.Features.Customers.ListCustomers;
 using BellaSync.Application.Features.Customers.UpdateCustomer;
 using BellaSync.WebApi.Infrastructure;
@@ -46,6 +48,22 @@ public class CustomersController : ControllerBase
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(new GetCustomerQuery(id), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Historial completo de citas del cliente (pasadas + futuras), ordenado
+    /// de más reciente a más antiguo. Usado por el tab "Historial" del CRM.
+    /// </summary>
+    [HttpGet("{id:guid}/appointments")]
+    [ProducesResponseType(typeof(IReadOnlyList<AppointmentResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAppointments(
+        Guid id,
+        [FromServices] IQueryHandler<GetCustomerAppointmentsQuery, IReadOnlyList<AppointmentResponse>> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetCustomerAppointmentsQuery(id), ct);
         return result.ToActionResult();
     }
 

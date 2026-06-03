@@ -4,6 +4,7 @@ using BellaSync.Application.Common.Pagination;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Customers.Dtos;
 using BellaSync.Application.Features.Customers.Shared;
+using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace BellaSync.Application.Features.Customers.ListCustomers;
@@ -15,8 +16,13 @@ public sealed class ListCustomersHandler
     private const int DefaultPageSize = 20;
 
     private readonly IApplicationDbContext _db;
+    private readonly IClock _clock;
 
-    public ListCustomersHandler(IApplicationDbContext db) => _db = db;
+    public ListCustomersHandler(IApplicationDbContext db, IClock clock)
+    {
+        _db = db;
+        _clock = clock;
+    }
 
     public async Task<Result<PaginatedResponse<CustomerResponse>>> HandleAsync(
         ListCustomersQuery query, CancellationToken ct)
@@ -42,12 +48,47 @@ public sealed class ListCustomersHandler
 
         var totalItems = await dbQuery.CountAsync(ct);
 
-        var items = await dbQuery
+        var utcNow = _clock.UtcNow;
+
+        // Proyección con subqueries: cuenta de completadas, última visita,
+        // próxima visita y estilista preferido. EF traduce cada subquery a
+        // un LATERAL/correlated SELECT en PG; con el índice (tenant_id,
+        // customer_id, status, start_at) que tiene la tabla de citas son
+        // baratas incluso con cientos de clientes.
+        var raw = await dbQuery
             .OrderBy(c => c.FullName)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(c => CustomerMapper.ToResponse(c))
+            .Select(c => new
+            {
+                Customer = c,
+                Visits = _db.Appointments
+                    .Count(a => a.CustomerId == c.Id && a.Status == AppointmentStatus.Completed),
+                LastVisitAt = _db.Appointments
+                    .Where(a => a.CustomerId == c.Id && a.Status == AppointmentStatus.Completed)
+                    .OrderByDescending(a => a.StartAt)
+                    .Select(a => (DateTime?)a.StartAt)
+                    .FirstOrDefault(),
+                NextVisitAt = _db.Appointments
+                    .Where(a => a.CustomerId == c.Id
+                        && (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed)
+                        && a.StartAt > utcNow)
+                    .OrderBy(a => a.StartAt)
+                    .Select(a => (DateTime?)a.StartAt)
+                    .FirstOrDefault(),
+                PreferredStylistName = _db.Appointments
+                    .Where(a => a.CustomerId == c.Id && a.Status == AppointmentStatus.Completed)
+                    .GroupBy(a => a.Stylist!.FullName)
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => g.Key)
+                    .FirstOrDefault(),
+            })
             .ToListAsync(ct);
+
+        var items = raw
+            .Select(r => CustomerMapper.ToResponseWithStats(
+                r.Customer, r.Visits, r.LastVisitAt, r.NextVisitAt, r.PreferredStylistName, utcNow))
+            .ToList();
 
         return Result<PaginatedResponse<CustomerResponse>>.Success(
             PaginatedResponse<CustomerResponse>.Create(items, page, pageSize, totalItems));
