@@ -34,7 +34,11 @@ export function CashClosingPage() {
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy')
   const [filterMethod, setFilterMethod] = useState<string>('all')
   const [closeOpen, setCloseOpen] = useState(false)
-  const [closed, setClosed] = useState<{ counted: number; diff: number } | null>(null)
+  const [closed, setClosed] = useState<{
+    counted: number
+    diff: number
+    note: string
+  } | null>(null)
 
   // Por ahora fijamos hoy. Cuando el endpoint acepte navegación,
   // exponemos un date picker (ver TODO en /caja date nav).
@@ -102,11 +106,14 @@ export function CashClosingPage() {
             </p>
           </div>
           {closed ? (
-            <div className="rounded-xl bg-brand-50 ring-1 ring-brand-200 px-4 py-2.5 flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-full bg-brand-700 text-white flex items-center justify-center">
+            <div
+              className="rounded-xl bg-brand-50 ring-1 ring-brand-200 px-4 py-2.5 flex items-center gap-2.5 max-w-[420px]"
+              title={closed.note ? `Nota: ${closed.note}` : undefined}
+            >
+              <span className="w-7 h-7 rounded-full bg-brand-700 text-white flex items-center justify-center flex-shrink-0">
                 <CheckCircle2 size={15} strokeWidth={2.4} />
               </span>
-              <div>
+              <div className="min-w-0">
                 <div className="text-[12.5px] font-medium text-brand-800">Caja cerrada</div>
                 <div className="text-[11px] text-warm-600">
                   Diferencia:{' '}
@@ -114,6 +121,11 @@ export function CashClosingPage() {
                     ? 'cuadró perfecto'
                     : (closed.diff > 0 ? '+' : '') + fmtCop(closed.diff)}
                 </div>
+                {closed.note && (
+                  <div className="text-[11px] text-warm-500 italic truncate mt-0.5">
+                    “{closed.note}”
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -209,8 +221,8 @@ export function CashClosingPage() {
         onClose={() => setCloseOpen(false)}
         expected={expectedCashFor(data)}
         cashSales={cashSalesFor(data)}
-        onConfirm={(counted, diff) => {
-          setClosed({ counted, diff })
+        onConfirm={(counted, diff, note) => {
+          setClosed({ counted, diff, note })
           setCloseOpen(false)
         }}
       />
@@ -551,17 +563,22 @@ function CloseModal({
   onClose: () => void
   expected: number
   cashSales: number
-  onConfirm: (counted: number, diff: number) => void
+  onConfirm: (counted: number, diff: number, note: string) => void
 }) {
   const [counted, setCounted] = useState('')
+  const [note, setNote] = useState('')
   useEffect(() => {
-    if (open) setCounted('')
+    if (open) {
+      setCounted('')
+      setNote('')
+    }
   }, [open])
 
   if (!open) return null
   const countedNum = parseInt(counted.replace(/[^0-9]/g, '')) || 0
   const diff = countedNum - expected
   const hasCount = counted !== ''
+  const hasDiff = hasCount && diff !== 0
 
   return (
     <div
@@ -668,6 +685,34 @@ function CloseModal({
               </div>
             </div>
           )}
+
+          {hasDiff && (
+            <div className="anim-fade">
+              <label className="text-[12.5px] font-medium text-warm-700 block mb-1.5">
+                ¿A qué se debe la diferencia?
+                <span className="text-terra-500 ml-1">*</span>
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                placeholder={
+                  diff > 0
+                    ? 'Ej: una clienta dejó propina en efectivo y no se registró…'
+                    : 'Ej: se prestó plata de caja para un domicilio y no se anotó como egreso…'
+                }
+                className={cls(
+                  'w-full px-3 py-2 rounded-lg bg-white border border-warm-200',
+                  'text-[13px] text-warm-800 placeholder:text-warm-400',
+                  'focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none resize-none',
+                )}
+              />
+              <p className="text-[11px] text-warm-500 mt-1.5">
+                Esta nota queda en el registro del cierre. Útil cuando
+                revises el historial después.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 bg-warm-50 border-t border-warm-150 flex items-center justify-end gap-2">
@@ -680,11 +725,16 @@ function CloseModal({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(countedNum, diff)}
-            disabled={!hasCount}
+            onClick={() => onConfirm(countedNum, diff, note.trim())}
+            disabled={!hasCount || (hasDiff && !note.trim())}
+            title={
+              hasDiff && !note.trim()
+                ? 'Explicá brevemente la diferencia antes de cerrar'
+                : undefined
+            }
             className={cls(
               'px-5 py-2.5 rounded-lg text-[13px] font-medium flex items-center gap-2 transition',
-              hasCount
+              hasCount && (!hasDiff || note.trim())
                 ? 'bg-brand-700 hover:bg-brand-800 text-white shadow-soft'
                 : 'bg-warm-200 text-warm-400 cursor-not-allowed',
             )}
