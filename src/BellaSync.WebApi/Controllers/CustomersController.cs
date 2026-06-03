@@ -8,6 +8,8 @@ using BellaSync.Application.Features.Customers.GetCustomer;
 using BellaSync.Application.Features.Customers.GetCustomerAppointments;
 using BellaSync.Application.Features.Customers.ListCustomers;
 using BellaSync.Application.Features.Customers.UpdateCustomer;
+using BellaSync.Application.Features.Payments.Dtos;
+using BellaSync.Application.Features.Payments.GetCustomerPayments;
 using BellaSync.WebApi.Infrastructure;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
@@ -64,6 +66,22 @@ public class CustomersController : ControllerBase
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(new GetCustomerAppointmentsQuery(id), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Historial completo de pagos del cliente, ordenado de más reciente
+    /// a más antiguo. Usado por el tab "Pagos" del CRM.
+    /// </summary>
+    [HttpGet("{id:guid}/payments")]
+    [ProducesResponseType(typeof(IReadOnlyList<PaymentResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPayments(
+        Guid id,
+        [FromServices] IQueryHandler<GetCustomerPaymentsQuery, IReadOnlyList<PaymentResponse>> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetCustomerPaymentsQuery(id), ct);
         return result.ToActionResult();
     }
 
