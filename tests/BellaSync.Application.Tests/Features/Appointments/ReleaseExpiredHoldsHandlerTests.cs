@@ -38,8 +38,11 @@ public class ReleaseExpiredHoldsHandlerTests
             channel: AppointmentChannel.PublicPortal,
             notes: null,
             utcNow: ctx.Base.Clock.UtcNow,
-            holdDuration: TimeSpan.FromHours(ctx.AppointmentSettings.HoldDurationHours),
-            holdMinBeforeAppointment: TimeSpan.FromMinutes(ctx.AppointmentSettings.HoldMinBeforeAppointmentMinutes));
+            // En tests no necesitamos pasar por el service async — usamos
+            // los mismos valores default que el mock setea (3 / 30) para
+            // construir un hold consistente con lo que produciría el handler.
+            holdDuration: TimeSpan.FromHours(3),
+            holdMinBeforeAppointment: TimeSpan.FromMinutes(30));
 
         ctx.Base.Db.Appointments.Add(appt);
         ctx.Base.Db.SaveChanges();

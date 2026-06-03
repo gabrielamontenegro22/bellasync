@@ -1,5 +1,8 @@
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Features.Admin.SeedDemo;
+using BellaSync.Application.Features.Tenants.Dtos;
+using BellaSync.Application.Features.Tenants.GetPaymentPolicy;
+using BellaSync.Application.Features.Tenants.UpdatePaymentPolicy;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -42,6 +45,41 @@ public class AdminController : ControllerBase
         }
 
         var result = await handler.HandleAsync(new SeedDemoDataCommand(targetDate), ct);
+        return result.ToActionResult();
+    }
+
+    // ============================================================
+    // Política de pagos del salón
+    // ============================================================
+
+    /// <summary>
+    /// GET /api/Admin/payment-policy
+    /// Lee los tiempos de hold y anticipación del salón actual.
+    /// </summary>
+    [HttpGet("payment-policy")]
+    [ProducesResponseType(typeof(TenantPaymentPolicyResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPaymentPolicy(
+        [FromServices] IQueryHandler<GetPaymentPolicyQuery, TenantPaymentPolicyResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetPaymentPolicyQuery(), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// PUT /api/Admin/payment-policy
+    /// Actualiza los tiempos. El dominio valida que los rangos sean razonables
+    /// (hold entre 1-48h, etc.) y devuelve 400 si no.
+    /// </summary>
+    [HttpPut("payment-policy")]
+    [ProducesResponseType(typeof(TenantPaymentPolicyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdatePaymentPolicy(
+        [FromBody] UpdatePaymentPolicyCommand command,
+        [FromServices] ICommandHandler<UpdatePaymentPolicyCommand, TenantPaymentPolicyResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(command, ct);
         return result.ToActionResult();
     }
 }

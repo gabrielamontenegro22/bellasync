@@ -31,6 +31,11 @@ try
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
 
+    // Background job: libera holds vencidos cada 5 min. Sin esto las
+    // citas Pending que el cliente nunca pagó quedan ocupando el cupo
+    // del estilista para siempre. Ver ExpiredHoldsReleaseService.
+    builder.Services.AddHostedService<BellaSync.WebApi.HostedServices.ExpiredHoldsReleaseService>();
+
     // Política de citas (hold, anticipación mínima, etc.)
     builder.Services.Configure<BellaSync.Application.Auth.AppointmentSettings>(
         builder.Configuration.GetSection(BellaSync.Application.Auth.AppointmentSettings.SectionName));
