@@ -12,6 +12,7 @@ import { ValidationQueuePage } from '@/features/vouchers/ValidationQueuePage'
 import { BookingPage } from '@/features/booking/BookingPage'
 import { CustomersPage } from '@/features/customers/CustomersPage'
 import { PaymentPolicyPage } from '@/features/settings/PaymentPolicyPage'
+import { CashClosingPage } from '@/features/cash/CashClosingPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { useAuth } from '@/features/auth/useAuth'
@@ -59,6 +60,16 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <AppShell><CustomersPage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Cierre de caja del día — lo que la admin abre cada noche */}
+      <Route
+        path="/caja"
+        element={
+          <ProtectedRoute>
+            <AppShell><CashClosingPage /></AppShell>
           </ProtectedRoute>
         }
       />

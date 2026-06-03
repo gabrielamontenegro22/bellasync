@@ -6,6 +6,7 @@ import {
   Scissors,
   Box,
   Wallet,
+  Banknote,
   BarChart3,
   Settings,
   LogOut,
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/configuracion/estilistas',label: 'Estilistas',          icon: Scissors                 },
   { to: '/inventario',              label: 'Inventario',          icon: Box,       disabled: true  },
   { to: '/configuracion/validacion',label: 'Validación de pagos', icon: Wallet                   },
+  { to: '/caja',                    label: 'Cierre de caja',      icon: Banknote                 },
   { to: '/reportes',                label: 'Reportes',            icon: BarChart3, disabled: true  },
   { to: '/configuracion',           label: 'Configuración',       icon: Settings                 },
 ]
