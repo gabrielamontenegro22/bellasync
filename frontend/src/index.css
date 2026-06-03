@@ -46,15 +46,40 @@
 
 /* ---------- utilities custom ---------- */
 @layer utilities {
-  /* Scrollbar discreto y cálido */
-  .nice-scroll::-webkit-scrollbar       { width: 8px; height: 8px; }
-  .nice-scroll::-webkit-scrollbar-thumb { background: theme('colors.warm.200'); border-radius: 8px; }
-  .nice-scroll::-webkit-scrollbar-thumb:hover { background: theme('colors.warm.300'); }
-  .nice-scroll::-webkit-scrollbar-track { background: transparent; }
-
   /* Tabular nums — útil para horarios y precios alineados */
   .tnums { font-variant-numeric: tabular-nums; }
 }
+
+/* ---------- scrollbar discreto y cálido — aplica a todo scrollable ----------
+   Patrón del mockup: thumb redondeado con borde del color de fondo para que
+   parezca "flotando". Aplicamos globalmente (no como utility opt-in) porque
+   las scrollbars default de Chrome se ven feas en cualquier panel del UI.
+   Firefox usa `scrollbar-*` que son menos personalizables — al menos
+   pintamos el thumb del color correcto. */
+*::-webkit-scrollbar       { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: theme('colors.warm.300');
+  border-radius: 999px;
+  border: 2px solid theme('colors.warm.50');
+}
+*::-webkit-scrollbar-thumb:hover { background: theme('colors.warm.400'); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.warm.300') transparent;
+}
+
+/* Alias para componentes que esperan la clase explícita */
+.nice-scroll::-webkit-scrollbar       { width: 10px; height: 10px; }
+.nice-scroll::-webkit-scrollbar-thumb {
+  background: theme('colors.warm.300');
+  border-radius: 999px;
+  border: 2px solid theme('colors.warm.50');
+}
+.nice-scroll::-webkit-scrollbar-thumb:hover { background: theme('colors.warm.400'); }
+.nice-scroll::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------- animaciones nombradas (compat con clases del mockup) ---------- */
 .anim-fade  { animation: fadeIn  .25s ease both; }
