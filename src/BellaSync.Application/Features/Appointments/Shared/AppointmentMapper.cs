@@ -50,28 +50,35 @@ internal static class AppointmentMapper
 
     /// <summary>
     /// Variante async que calcula ValidatedDepositAmount sumando los
-    /// PaymentVouchers Confirmed de la cita. Útil para handlers que
+    /// PaymentVouchers Validated de la cita. Útil para handlers que
     /// devuelven una sola cita (Get, Create, Confirm, Cancel, etc.).
     ///
     /// Para listas grandes (GetAgenda) preferir el método batch que
-    /// hace UNA sola query con GROUP BY en vez de N queries.
+    /// hace UNA sola query en vez de N queries.
     /// </summary>
     public static async Task<AppointmentResponse> ToResponseAsync(
         Appointment a,
         IApplicationDbContext db,
         CancellationToken ct)
     {
-        var validatedAmount = await db.PaymentVouchers
+        // No usamos SumAsync directo sobre ReportedAmount.Amount porque
+        // Money está mapeado con HasConversion y EF/Npgsql no lo traduce
+        // dentro de agregaciones SQL. Traemos las rows planas y sumamos
+        // en C# — son pocos vouchers por cita.
+        var vouchers = await db.PaymentVouchers
             .Where(v => v.AppointmentId == a.Id && v.Status == PaymentVoucherStatus.Validated)
-            .SumAsync(v => (decimal?)v.ReportedAmount.Amount, ct) ?? 0m;
+            .ToListAsync(ct);
 
+        var validatedAmount = vouchers.Sum(v => v.ReportedAmount.Amount);
         return ToResponse(a, validatedAmount);
     }
 
     /// <summary>
-    /// Batch para listas de citas: hace UNA query GROUP BY que devuelve
-    /// el total de anticipos validados por appointmentId, evitando N+1.
-    /// Devuelve un dictionary listo para el callsite.
+    /// Batch para listas de citas: 1 sola query trae todos los vouchers
+    /// validados de las citas pasadas, y agrupamos en memoria. El
+    /// GroupBy en SQL no se traduce por el HasConversion de Money, pero
+    /// los vouchers de un día son ~30 filas a lo sumo — agregar en C#
+    /// es trivial.
     /// </summary>
     public static async Task<Dictionary<Guid, decimal>> GetValidatedDepositAmountsAsync(
         IReadOnlyCollection<Guid> appointmentIds,
@@ -80,13 +87,13 @@ internal static class AppointmentMapper
     {
         if (appointmentIds.Count == 0) return new Dictionary<Guid, decimal>();
 
-        var rows = await db.PaymentVouchers
+        var vouchers = await db.PaymentVouchers
             .Where(v => appointmentIds.Contains(v.AppointmentId)
                      && v.Status == PaymentVoucherStatus.Validated)
-            .GroupBy(v => v.AppointmentId)
-            .Select(g => new { AppointmentId = g.Key, Total = g.Sum(v => v.ReportedAmount.Amount) })
             .ToListAsync(ct);
 
-        return rows.ToDictionary(r => r.AppointmentId, r => r.Total);
+        return vouchers
+            .GroupBy(v => v.AppointmentId)
+            .ToDictionary(g => g.Key, g => g.Sum(v => v.ReportedAmount.Amount));
     }
 }
