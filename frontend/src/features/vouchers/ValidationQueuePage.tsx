@@ -517,7 +517,7 @@ function Detail({
             kbd="A"
             icon={HelpCircle}
             label="Pedir aclaración"
-            hint="Envía un mensaje pidiendo nuevo comprobante o monto."
+            hint="La cita sigue reservada. Pide al cliente otro comprobante."
           />
           <ActionBtn
             tone="terra"
@@ -526,7 +526,7 @@ function Detail({
             kbd="R"
             icon={XCircle}
             label="Rechazar"
-            hint="Marca el comprobante como inválido. La cita queda sin pago."
+            hint="Anula el voucher y CANCELA la cita. Libera el cupo."
           />
         </div>
       </div>
@@ -641,8 +641,8 @@ function RowKV({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
 function DecisionBanner({ decision }: { decision: VoucherDecision }) {
   const map = {
     Confirm: { c: 'bg-brand-50 border-brand-200 text-brand-800', I: CheckCircle, t: 'Pago confirmado', d: 'La cita quedó marcada como pagada. La cliente recibirá la confirmación.' },
-    RequestClarification: { c: 'bg-gold-50 border-gold-200 text-gold-700', I: HelpCircle, t: 'Aclaración solicitada', d: 'Se le pedirá a la cliente nuevo comprobante o información.' },
-    Reject: { c: 'bg-terra-100 border-terra-300 text-terra-500', I: XCircle, t: 'Comprobante rechazado', d: 'La cita queda pendiente sin pago. Avisa a la cliente antes de cancelar.' },
+    RequestClarification: { c: 'bg-gold-50 border-gold-200 text-gold-700', I: HelpCircle, t: 'Aclaración solicitada', d: 'La cita sigue reservada. Cliente puede enviar otro comprobante.' },
+    Reject: { c: 'bg-terra-100 border-terra-300 text-terra-500', I: XCircle, t: 'Comprobante rechazado · cita cancelada', d: 'El cupo se liberó. Avisa a la cliente que tendrá que volver a agendar.' },
   } as const
   const m = map[decision]
   return (
