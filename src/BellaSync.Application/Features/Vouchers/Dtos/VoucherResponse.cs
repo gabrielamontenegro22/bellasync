@@ -14,6 +14,12 @@ public class VoucherResponse
 
     public DateTime AppointmentStartAt { get; set; }
     public decimal AppointmentDepositAmount { get; set; }   // lo que la cita exige
+    /// <summary>
+    /// Precio total del servicio de la cita (PriceSnapshot). Lo expone
+    /// para que la UI muestre "X% anticipo de $Y total" en la card de
+    /// Pago esperado.
+    /// </summary>
+    public decimal AppointmentTotalServicePrice { get; set; }
     public decimal ReportedAmount { get; set; }              // lo que el cliente envió
 
     public string? Bank { get; set; }

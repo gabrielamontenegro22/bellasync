@@ -34,6 +34,7 @@ internal static class VoucherMapper
             StylistName = appt?.Stylist?.FullName ?? string.Empty,
             AppointmentStartAt = appt?.StartAt ?? DateTime.MinValue,
             AppointmentDepositAmount = appt?.DepositAmount.Amount ?? 0m,
+            AppointmentTotalServicePrice = appt?.PriceSnapshot.Amount ?? 0m,
             ReportedAmount = v.ReportedAmount.Amount,
             Bank = v.Bank,
             ReferenceNumber = v.ReferenceNumber,

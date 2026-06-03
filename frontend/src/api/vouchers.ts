@@ -13,6 +13,8 @@ export interface VoucherResponse {
   stylistName: string
   appointmentStartAt: string
   appointmentDepositAmount: number
+  /** Precio total del servicio (priceSnapshot). Para mostrar "X% de $Y". */
+  appointmentTotalServicePrice: number
   reportedAmount: number
   bank: string | null
   referenceNumber: string | null
