@@ -25,10 +25,13 @@ interface RegisterPaymentModalProps {
  */
 export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentModalProps) {
   const [method, setMethod] = useState<PaymentMethod>('Cash')
-  // Monto pre-rellenado con priceSnapshot — caso típico (cliente paga
-  // exactamente el precio). Si hay anticipo previo o descuento, la
-  // recepcionista lo edita manualmente.
-  const [amount, setAmount] = useState(appointment.priceSnapshot)
+  // Saldo restante = total servicio - lo que ya entró por anticipo.
+  // Si no hubo anticipo, validatedDepositAmount es 0 y queda el total.
+  // Si la cliente sobre-pagó el anticipo (raro), queda negativo y el
+  // form mostraría 0 (no tiene sentido cobrar negativo).
+  const remaining = Math.max(0, appointment.priceSnapshot - appointment.validatedDepositAmount)
+  const hasDeposit = appointment.validatedDepositAmount > 0
+  const [amount, setAmount] = useState(remaining)
   const [tip, setTip] = useState(0)
   const [reference, setReference] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -122,15 +125,36 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
           </button>
         </div>
 
-        {/* Resumen de la cita — para confirmar que registramos para la cita correcta */}
+        {/* Resumen de la cita — confirma identidad de la cita +
+            breakdown del saldo cuando hay anticipo previo. */}
         <div className="rounded-lg bg-warm-50 border border-warm-150 p-3 text-sm">
           <div className="font-medium text-warm-800">{appointment.customerName}</div>
           <div className="text-warm-600 mt-0.5">
             {appointment.serviceName} · {appointment.stylistName}
           </div>
-          <div className="text-warm-500 mt-0.5 text-xs tabular-nums">
-            Precio del servicio: ${appointment.priceSnapshot.toLocaleString('es-CO')}
-          </div>
+          {hasDeposit ? (
+            // Cuando hay anticipo, mostramos el breakdown para que la
+            // recepcionista entienda por qué el monto pre-rellenado
+            // es menor que el precio del servicio.
+            <div className="mt-2 pt-2 border-t border-warm-200 space-y-0.5 text-xs tabular-nums">
+              <div className="flex justify-between text-warm-600">
+                <span>Total servicio</span>
+                <span>${appointment.priceSnapshot.toLocaleString('es-CO')}</span>
+              </div>
+              <div className="flex justify-between text-brand-700">
+                <span>− Anticipo validado</span>
+                <span>${appointment.validatedDepositAmount.toLocaleString('es-CO')}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-warm-800 pt-0.5 border-t border-warm-200/60">
+                <span>Falta cobrar</span>
+                <span>${remaining.toLocaleString('es-CO')}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-warm-500 mt-0.5 text-xs tabular-nums">
+              Precio del servicio: ${appointment.priceSnapshot.toLocaleString('es-CO')}
+            </div>
+          )}
         </div>
 
         {/* Método de pago — pills coloreadas */}

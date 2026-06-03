@@ -26,6 +26,17 @@ public class AppointmentResponse
     public decimal DepositPercentage { get; set; }
     public decimal DepositAmount { get; set; }
 
+    /// <summary>
+    /// Suma de los vouchers Confirmed (anticipos online validados por la
+    /// recepción) para esta cita. Es el monto REAL que entró al banco
+    /// por anticipo — puede coincidir con DepositAmount o no.
+    ///
+    /// Usado por:
+    ///   - El modal "Registrar pago" para pre-rellenar (PriceSnapshot - este).
+    ///   - El panel detalle para mostrar "Total / Anticipo / Falta cobrar".
+    /// </summary>
+    public decimal ValidatedDepositAmount { get; set; }
+
     /// <summary>"Pending" / "Confirmed" / "InProgress" / "Completed" / "Cancelled" / "NoShow"</summary>
     public string Status { get; set; } = string.Empty;
 

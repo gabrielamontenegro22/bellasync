@@ -56,6 +56,7 @@ public sealed class ConfirmAppointmentHandler
             "Cita {AppointmentId} confirmada en tenant {TenantId}",
             appointment.Id, appointment.TenantId);
 
-        return Result<AppointmentResponse>.Success(AppointmentMapper.ToResponse(appointment));
+        return Result<AppointmentResponse>.Success(
+            await AppointmentMapper.ToResponseAsync(appointment, _db, ct));
     }
 }

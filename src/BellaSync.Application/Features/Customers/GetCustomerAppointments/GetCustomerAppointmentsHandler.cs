@@ -40,8 +40,12 @@ public sealed class GetCustomerAppointmentsHandler
             .OrderByDescending(a => a.StartAt)
             .ToListAsync(ct);
 
+        var validatedAmounts = await AppointmentMapper.GetValidatedDepositAmountsAsync(
+            appointments.Select(a => a.Id).ToList(), _db, ct);
+
         IReadOnlyList<AppointmentResponse> items = appointments
-            .Select(AppointmentMapper.ToResponse)
+            .Select(a => AppointmentMapper.ToResponse(
+                a, validatedAmounts.TryGetValue(a.Id, out var v) ? v : 0m))
             .ToList();
 
         return Result<IReadOnlyList<AppointmentResponse>>.Success(items);
