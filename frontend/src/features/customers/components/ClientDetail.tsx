@@ -8,6 +8,8 @@ import type { CustomerResponse } from '@/api/customers'
 import type { AppointmentResponse } from '@/api/appointments'
 import { cls } from '@/lib/cls'
 import { useCustomer, useCustomerAppointments } from '../hooks'
+import { useCustomerPayments } from '@/features/payments/hooks'
+import { METHOD_BADGE } from '@/features/payments/components/RegisterPaymentModal'
 import {
   TAG_BADGE, ageFromBday, fmtBday, fmtCop, fmtDateTime,
   fmtMonth, initialsOf, relativeFrom, toneOf, whatsappLink,
@@ -180,7 +182,7 @@ export function ClientDetail({ fallback, onEdit, onNewAppointment }: ClientDetai
           <HistorialTab appointments={appointments} loading={loadingAppts} />
         )}
         {tab === 'ficha' && <FichaTab client={client} />}
-        {tab === 'pagos' && <PagosTab />}
+        {tab === 'pagos' && <PagosTab customerId={client.id} />}
       </div>
     </main>
   )
@@ -510,17 +512,84 @@ function FichaTab({ client }: { client: CustomerResponse }) {
 }
 
 // ---------- TAB: PAGOS ----------
-function PagosTab() {
+function PagosTab({ customerId }: { customerId: string }) {
+  const { data: payments = [], isLoading } = useCustomerPayments(customerId)
+
+  const totalLifetime = payments.reduce((acc, p) => acc + p.total, 0)
+  const totalTip = payments.reduce((acc, p) => acc + p.tip, 0)
+
   return (
-    <div className="animate-fade">
-      <div className="rounded-2xl border-2 border-dashed border-warm-200 bg-warm-50/40 p-10 text-center">
-        <Wallet size={28} className="mx-auto text-warm-400" />
-        <div className="font-serif text-[22px] text-warm-700 mt-3">Módulo de pagos en construcción</div>
-        <div className="text-[13px] text-warm-500 mt-1 max-w-md mx-auto">
-          Cuando esté listo verás aquí cada pago con método (Bancolombia,
-          Nequi, Daviplata, efectivo), referencia y monto.
-        </div>
+    <div className="animate-fade space-y-5">
+      {/* Stats arriba — réplica del mockup */}
+      <div className="grid sm:grid-cols-3 gap-3">
+        <Stat label="Total pagado lifetime" value={fmtCop(totalLifetime)} />
+        <Stat label="Pagos registrados"     value={payments.length.toString()} />
+        <Stat label="Propinas acumuladas"   value={fmtCop(totalTip)} sub="incluido en total" />
       </div>
+
+      {isLoading ? (
+        <div className="rounded-2xl border border-warm-150 bg-white p-10 text-center text-[13px] text-warm-500">
+          Cargando pagos…
+        </div>
+      ) : payments.length === 0 ? (
+        <div className="rounded-2xl border-2 border-dashed border-warm-200 bg-warm-50/40 p-10 text-center">
+          <Wallet size={28} className="mx-auto text-warm-400" />
+          <div className="font-serif text-[22px] text-warm-700 mt-3">Sin pagos registrados</div>
+          <div className="text-[13px] text-warm-500 mt-1 max-w-md mx-auto">
+            Cuando la cliente termine un servicio y registres el cobro
+            desde el agenda, los pagos aparecerán acá.
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-white border border-warm-150 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-warm-50/60 border-b border-warm-150 text-[10.5px] tracking-[0.14em] uppercase text-warm-500">
+                  <th className="text-left font-medium pl-6 pr-3 py-3">Fecha</th>
+                  <th className="text-left font-medium px-3 py-3">Servicio</th>
+                  <th className="text-left font-medium px-3 py-3">Método</th>
+                  <th className="text-left font-medium px-3 py-3">Referencia</th>
+                  <th className="text-right font-medium pr-6 pl-3 py-3">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map(p => {
+                  const badge = METHOD_BADGE[p.method]
+                  return (
+                    <tr key={p.id} className="border-b border-warm-100 last:border-0 hover:bg-warm-50/40">
+                      <td className="py-3.5 pl-6 pr-3 text-warm-700 tabular-nums">
+                        {fmtMonth(p.appointmentStartAt)}
+                      </td>
+                      <td className="py-3.5 px-3 text-warm-800">{p.serviceName}</td>
+                      <td className="py-3.5 px-3">
+                        <span className={cls(
+                          'text-[11.5px] px-2 py-0.5 rounded-md',
+                          badge.bg, badge.fg,
+                        )}>
+                          {badge.label}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono text-[11.5px] text-warm-500">
+                        {p.reference ?? '—'}
+                      </td>
+                      <td className="py-3.5 pr-6 pl-3 text-right tabular-nums font-medium text-warm-800">
+                        {fmtCop(p.total)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-6 py-3.5 border-t border-warm-150 flex items-center justify-between text-[12px] text-warm-500 bg-warm-50/40">
+            <span>{payments.length} pagos</span>
+            <span className="tabular-nums">
+              Total: <strong className="text-warm-800">{fmtCop(totalLifetime)}</strong>
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

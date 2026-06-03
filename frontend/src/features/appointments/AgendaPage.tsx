@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Calendar, CheckCircle, Clock, AlertCircle,
   ChevronLeft, ChevronRight, MessageCircle, Bell, X, ArrowRight, Plus,
-  AlertTriangle, Droplet, Heart, Sparkles,
+  AlertTriangle, Droplet, Heart, Sparkles, Wallet,
 } from 'lucide-react'
 import { type AppointmentResponse } from '@/api/appointments'
 import { seedDemoData } from '@/api/admin'
@@ -26,6 +26,7 @@ import {
 import { NewAppointmentModal } from './components/NewAppointmentModal'
 import { AgendaTimeline } from './components/AgendaTimeline'
 import { RescheduleModal } from './components/RescheduleModal'
+import { RegisterPaymentModal } from '@/features/payments/components/RegisterPaymentModal'
 
 /**
  * Agenda del día — replica el layout de `mockups/Agendamiento_de_citas/app.jsx`.
@@ -352,6 +353,7 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
   const complete = useCompleteAppointment()
   const noShow = useMarkNoShow()
   const [showReschedule, setShowReschedule] = useState(false)
+  const [showPayment, setShowPayment] = useState(false)
 
   // Historial reciente del cliente — últimas 3 citas completadas (excluyendo
   // la actual). Sirve para que la estilista vea de un vistazo qué le ha hecho
@@ -637,6 +639,20 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
           </button>
         )}
 
+        {/* Cobrar — disponible para citas InProgress o Completed.
+            Cuando la cita ya pasó, registrar el pago es lo más importante
+            que puede hacer la recepcionista; por eso va full-width arriba
+            de WhatsApp. */}
+        {(appointment.status === 'InProgress' || appointment.status === 'Completed') && (
+          <button
+            type="button"
+            onClick={() => setShowPayment(true)}
+            className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-gold-500 hover:bg-gold-600 text-white text-[12.5px] font-medium"
+          >
+            <Wallet size={14} /> Registrar pago
+          </button>
+        )}
+
         {/* WhatsApp — siempre disponible, ocupa toda la fila */}
         <a
           href={whatsappLink(appointment.customerPhone)}
@@ -652,6 +668,12 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
         <RescheduleModal
           appointment={appointment}
           onClose={() => setShowReschedule(false)}
+        />
+      )}
+      {showPayment && (
+        <RegisterPaymentModal
+          appointment={appointment}
+          onClose={() => setShowPayment(false)}
         />
       )}
     </div>

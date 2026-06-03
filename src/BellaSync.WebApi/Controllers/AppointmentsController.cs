@@ -9,6 +9,10 @@ using BellaSync.Application.Features.Appointments.GetAppointment;
 using BellaSync.Application.Features.Appointments.MarkInProgress;
 using BellaSync.Application.Features.Appointments.MarkNoShow;
 using BellaSync.Application.Features.Appointments.RescheduleAppointment;
+using BellaSync.Application.Features.Payments.Dtos;
+using BellaSync.Application.Features.Payments.RegisterPayment;
+using BellaSync.Domain.Entities;
+using System.Security.Claims;
 using BellaSync.WebApi.Infrastructure;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
@@ -173,6 +177,45 @@ public class AppointmentsController : ControllerBase
     public sealed record RescheduleAppointmentRequest(
         DateTime NewStartAtUtc,
         bool BypassAdvanceWindow = false);
+
+    /// <summary>
+    /// Registra un pago recibido por esta cita (efectivo, transferencia,
+    /// tarjeta). NO procesa el pago — solo lo deja anotado.
+    /// La cita debe estar InProgress o Completed.
+    /// </summary>
+    [HttpPost("{id:guid}/payments")]
+    [ProducesResponseType(typeof(PaymentResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RegisterPayment(
+        Guid id,
+        [FromBody] RegisterPaymentRequest request,
+        [FromServices] ICommandHandler<RegisterPaymentCommand, PaymentResponse> handler,
+        CancellationToken ct)
+    {
+        // El UserId del JWT viene en el claim "sub" (estándar OIDC) o en
+        // NameIdentifier dependiendo de cómo configuremos. Tomamos cualquiera.
+        Guid? userId = null;
+        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (Guid.TryParse(sub, out var parsed)) userId = parsed;
+
+        var command = new RegisterPaymentCommand(
+            AppointmentId: id,
+            Method: request.Method,
+            Amount: request.Amount,
+            Tip: request.Tip,
+            Reference: request.Reference,
+            RegisteredByUserId: userId);
+
+        var result = await handler.HandleAsync(command, ct);
+        return result.ToActionResult();
+    }
+
+    public sealed record RegisterPaymentRequest(
+        PaymentMethod Method,
+        decimal Amount,
+        decimal Tip,
+        string? Reference);
 
     private static Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary BuildModelState(
         FluentValidation.Results.ValidationResult result)
