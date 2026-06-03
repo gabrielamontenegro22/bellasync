@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createCustomer,
   deleteCustomer,
+  getCustomer,
+  getCustomerAppointments,
   listCustomers,
   updateCustomer,
   type CreateCustomerRequest,
@@ -21,6 +23,31 @@ export function useCustomers(params: {
     queryFn: () => listCustomers(params),
     // Mantiene la página anterior visible mientras carga la nueva
     placeholderData: prev => prev,
+  })
+}
+
+/**
+ * Cliente individual con stats frescos. El panel detalle del CRM lo
+ * usa para asegurarse de que tras editar, los datos en pantalla son
+ * los del backend y no la copia capturada al hacer click en la lista.
+ */
+export function useCustomer(customerId: string | null) {
+  return useQuery({
+    queryKey: [KEY, customerId, 'detail'],
+    queryFn: () => getCustomer(customerId!),
+    enabled: !!customerId,
+  })
+}
+
+/**
+ * Historial completo de citas de un cliente. Habilitado solo si hay
+ * customerId (cuando el panel detalle se monta).
+ */
+export function useCustomerAppointments(customerId: string | null) {
+  return useQuery({
+    queryKey: [KEY, customerId, 'appointments'],
+    queryFn: () => getCustomerAppointments(customerId!),
+    enabled: !!customerId,
   })
 }
 
