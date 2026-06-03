@@ -12,6 +12,8 @@ import { extractApiError } from '@/lib/extractApiError'
 import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
 import { useCustomerAppointments } from '@/features/customers/hooks'
+import { useCustomerPayments } from '@/features/payments/hooks'
+import { METHOD_BADGE } from '@/features/payments/components/RegisterPaymentModal'
 import {
   fmtCop, fmtMonth, initialsOf, toneOf, whatsappLink,
 } from '@/features/customers/lib/customerLook'
@@ -363,6 +365,13 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
     .filter(a => a.status === 'Completed' && a.id !== appointment.id)
     .slice(0, 3)
 
+  // Pagos asociados a ESTA cita. useCustomerPayments trae todos los del
+  // cliente; los filtramos por appointmentId. Es un poco wasteful pero
+  // evita un endpoint extra y comparte caché con el tab Pagos del CRM.
+  const { data: customerPayments = [] } = useCustomerPayments(appointment.customerId)
+  const appointmentPayments = customerPayments.filter(p => p.appointmentId === appointment.id)
+  const totalPaid = appointmentPayments.reduce((acc, p) => acc + p.total, 0)
+
   const tone = toneOf(appointment.customerId)
   const isAwaitingPayment = appointment.depositStatus === 'AwaitingPayment' && appointment.status === 'Pending'
   const status = STATUS_LOOK[appointment.status]
@@ -484,6 +493,54 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
               </span>
             </div>
           </div>
+        </Section>
+
+        {/* Pagos recibidos para esta cita. Si no hay, se muestra hint sutil
+            para invitar a registrar el primero. Confirma visualmente que el
+            pago se guardó (evita el bug del doble-registro por inseguridad). */}
+        <Section title={`Pagos recibidos${appointmentPayments.length > 0 ? ` (${appointmentPayments.length})` : ''}`}>
+          {appointmentPayments.length === 0 ? (
+            <div className="text-[12.5px] text-warm-500 italic">
+              Sin pagos registrados todavía.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {appointmentPayments.map(p => {
+                const badge = METHOD_BADGE[p.method]
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between py-1.5 border-b border-warm-100 last:border-0"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={cls(
+                        'text-[10.5px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider',
+                        badge.bg, badge.fg,
+                      )}>
+                        {badge.label}
+                      </span>
+                      {p.reference && (
+                        <span className="font-mono text-[11px] text-warm-500 truncate">
+                          {p.reference}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[13px] text-warm-800 tabular-nums font-medium shrink-0">
+                      {fmtCop(p.total)}
+                    </span>
+                  </div>
+                )
+              })}
+              <div className="flex items-center justify-between pt-2 mt-1 border-t border-warm-200">
+                <span className="text-[11.5px] uppercase tracking-wide text-warm-500 font-medium">
+                  Total recibido
+                </span>
+                <span className="font-serif text-[16px] text-warm-800 tabular-nums">
+                  {fmtCop(totalPaid)}
+                </span>
+              </div>
+            </div>
+          )}
         </Section>
 
         {/* Ficha técnica resumida — alergias inferidas de las notas + última fórmula */}

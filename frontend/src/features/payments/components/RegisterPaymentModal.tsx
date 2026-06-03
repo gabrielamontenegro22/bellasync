@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Banknote, CreditCard, Smartphone } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Banknote, CheckCircle, CreditCard, Smartphone } from 'lucide-react'
 import { Button, Card, Input } from '@/components/ui'
 import type { AppointmentResponse } from '@/api/appointments'
 import type { PaymentMethod } from '@/api/payments'
@@ -32,6 +32,14 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
   const [tip, setTip] = useState(0)
   const [reference, setReference] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // Pantalla de "éxito" que reemplaza al form cuando el pago se guardó.
+  // Guarda el monto total para el mensaje "$X registrado".
+  const [success, setSuccess] = useState<number | null>(null)
+
+  // Ref-based lock: previene doble-disparo aunque el usuario haga
+  // doble-click ultrarrápido (antes de que React re-renderice el
+  // botón disabled).
+  const submittingRef = useRef(false)
 
   const register = useRegisterPayment()
 
@@ -40,9 +48,14 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
   const needsReference = method !== 'Cash'
 
   async function submit() {
+    // Hard-lock: si ya estamos disparando una mutation, segundos clicks
+    // se ignoran. El disabled del botón también lo previene, pero esto
+    // es una segunda red de seguridad por si React no alcanza a pintar.
+    if (submittingRef.current) return
+    submittingRef.current = true
     setSubmitError(null)
     try {
-      await register.mutateAsync({
+      const result = await register.mutateAsync({
         appointmentId: appointment.id,
         req: {
           method,
@@ -51,13 +64,45 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
           reference: reference.trim() || null,
         },
       })
-      onClose()
+      // Mostrar pantalla de éxito en vez de cerrar de inmediato — el
+      // usuario debe ver "✓ Pago registrado" antes de que desaparezca
+      // la ventana, sino vuelve a apretar pensando que no se guardó.
+      setSuccess(result.total)
     } catch (e) {
       setSubmitError(extractApiError(e, 'No se pudo registrar el pago.'))
+      submittingRef.current = false  // permitir reintentar si falló
     }
   }
 
-  const canSubmit = amount > 0
+  const canSubmit = amount > 0 && !submittingRef.current
+
+  // Pantalla de éxito tras un registro exitoso. El usuario ve "✓ Pago
+  // registrado por $X" y cierra él manualmente (o automáticamente tras
+  // unos segundos si queremos). Esto soluciona el problema de "no sé si
+  // se guardó → vuelvo a apretar → pago doble".
+  if (success !== null) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+        onClick={onClose}
+      >
+        <Card className="w-full max-w-md space-y-4 p-6 text-center" onClick={e => e.stopPropagation()}>
+          <div className="w-14 h-14 mx-auto rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-700">
+            <CheckCircle size={28} />
+          </div>
+          <div>
+            <h2 className="font-serif text-2xl text-warm-800">Pago registrado</h2>
+            <div className="text-[14px] text-warm-600 mt-1">
+              Quedó anotado <strong className="text-warm-800 tabular-nums">
+                ${success.toLocaleString('es-CO')}
+              </strong> para <strong className="text-warm-800">{appointment.customerName}</strong>.
+            </div>
+          </div>
+          <Button onClick={onClose} fullWidth>Listo</Button>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div
