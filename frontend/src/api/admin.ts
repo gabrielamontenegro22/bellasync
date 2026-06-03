@@ -28,3 +28,22 @@ export async function seedDemoData(date?: string): Promise<SeedDemoResponse> {
   )
   return data
 }
+
+/** Espejo de TenantPaymentPolicyResponse del backend. */
+export interface PaymentPolicy {
+  holdDurationHours: number
+  holdMinBeforeAppointmentMinutes: number
+  minAdvanceMinutes: number
+}
+
+/** GET /api/Admin/payment-policy */
+export async function getPaymentPolicy(): Promise<PaymentPolicy> {
+  const { data } = await api.get<PaymentPolicy>('/api/Admin/payment-policy')
+  return data
+}
+
+/** PUT /api/Admin/payment-policy */
+export async function updatePaymentPolicy(req: PaymentPolicy): Promise<PaymentPolicy> {
+  const { data } = await api.put<PaymentPolicy>('/api/Admin/payment-policy', req)
+  return data
+}

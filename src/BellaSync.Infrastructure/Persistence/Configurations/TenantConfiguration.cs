@@ -25,6 +25,13 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.IsActive)
             .IsRequired();
 
+        // Política de pagos del salón (configurable por salón).
+        // Defaults explícitos para que salones legacy queden con los
+        // valores históricos al correr la migración.
+        builder.Property(t => t.HoldDurationHours).IsRequired().HasDefaultValue(3);
+        builder.Property(t => t.HoldMinBeforeAppointmentMinutes).IsRequired().HasDefaultValue(30);
+        builder.Property(t => t.MinAdvanceMinutes).IsRequired().HasDefaultValue(30);
+
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.UpdatedAt);
 

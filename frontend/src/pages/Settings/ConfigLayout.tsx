@@ -27,7 +27,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
   { to: '/configuracion/servicios',   label: 'Servicios',                  icon: Sparkles,       hint: 'Catálogo y precios' },
   { to: '/configuracion/estilistas',  label: 'Estilistas',                 icon: Scissors,       hint: 'Equipo y asignaciones' },
   { to: '/configuracion/horario',     label: 'Horario del salón',          icon: CalendarClock,  hint: 'Días y franjas',              disabled: true },
-  { to: '/configuracion/pagos',       label: 'Política de pagos',          icon: Wallet,         hint: 'Anticipos y métodos',         disabled: true },
+  { to: '/configuracion/pagos',       label: 'Política de pagos',          icon: Wallet,         hint: 'Tiempo de cupo reservado' },
   { to: '/configuracion/whatsapp',    label: 'Notificaciones WhatsApp',    icon: MessageCircle,  hint: 'Plantillas y envíos',         disabled: true },
   { to: '/configuracion/suscripcion', label: 'Suscripción y facturación',  icon: CreditCard,     hint: 'Plan BellaSync',              disabled: true },
 ]

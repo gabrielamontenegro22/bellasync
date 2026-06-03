@@ -1,4 +1,3 @@
-using BellaSync.Application.Auth;
 using BellaSync.Application.Common.Errors;
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Interfaces;
@@ -8,7 +7,6 @@ using BellaSync.Application.Features.Appointments.Shared;
 using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace BellaSync.Application.Features.Appointments.CreatePublicAppointment;
 
@@ -26,20 +24,17 @@ public sealed class CreatePublicAppointmentHandler
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
     private readonly AppointmentValidator _validator;
-    private readonly AppointmentSettings _settings;
     private readonly ILogger<CreatePublicAppointmentHandler> _logger;
 
     public CreatePublicAppointmentHandler(
         IApplicationDbContext db,
         IClock clock,
         AppointmentValidator validator,
-        IOptions<AppointmentSettings> settings,
         ILogger<CreatePublicAppointmentHandler> logger)
     {
         _db = db;
         _clock = clock;
         _validator = validator;
-        _settings = settings.Value;
         _logger = logger;
     }
 
@@ -80,9 +75,10 @@ public sealed class CreatePublicAppointmentHandler
         //    pero AppointmentValidator queries usan filtros del DbContext.
         //    Como no hay tenant en el JWT, el filtro filtra Guid.Empty.
         //    SOLUCIÓN: el público realmente debe verificar slots EN ESTE tenant.
+        var minAdvance = tenant.MinAdvanceMinutes;
         //    Usamos un wrapper local que ejecuta con el tenantId del slug.
         var refsResult = await ResolveAndValidateForPublicAsync(
-            tenant.Id, command.StylistId, command.ServiceId, command.StartAtUtc, ct);
+            tenant.Id, command.StylistId, command.ServiceId, command.StartAtUtc, minAdvance, ct);
 
         if (refsResult.IsFailure) return refsResult.Error!;
 
@@ -102,8 +98,12 @@ public sealed class CreatePublicAppointmentHandler
             channel: AppointmentChannel.PublicPortal,
             notes: null,
             utcNow: _clock.UtcNow,
-            holdDuration: TimeSpan.FromHours(_settings.HoldDurationHours),
-            holdMinBeforeAppointment: TimeSpan.FromMinutes(_settings.HoldMinBeforeAppointmentMinutes));
+            // Política de pagos del propio tenant — leemos directo del row
+            // de tenant ya cargado en este handler. NO usamos ITenantAppointmentSettings
+            // porque ese service depende de ICurrentTenantService, y los endpoints
+            // del portal público son anónimos (no hay JWT, no hay TenantId en claims).
+            holdDuration: TimeSpan.FromHours(tenant.HoldDurationHours),
+            holdMinBeforeAppointment: TimeSpan.FromMinutes(tenant.HoldMinBeforeAppointmentMinutes));
 
         _db.Appointments.Add(appointment);
         await _db.SaveChangesAsync(ct);
@@ -131,14 +131,14 @@ public sealed class CreatePublicAppointmentHandler
     /// porque el endpoint es anónimo y el filtro global rechaza todo).
     /// </summary>
     private async Task<Result<AppointmentValidator.ResolvedRefs>> ResolveAndValidateForPublicAsync(
-        Guid tenantId, Guid stylistId, Guid serviceId, DateTime startAtUtc, CancellationToken ct)
+        Guid tenantId, Guid stylistId, Guid serviceId, DateTime startAtUtc, int minAdvanceMinutes, CancellationToken ct)
     {
         var utcNow = _clock.UtcNow;
 
-        if (startAtUtc < utcNow.AddMinutes(_settings.MinAdvanceMinutes))
+        if (startAtUtc < utcNow.AddMinutes(minAdvanceMinutes))
             return ApplicationError.Validation(
                 "appointment.too_soon",
-                $"La cita debe agendarse con al menos {_settings.MinAdvanceMinutes} minutos de anticipación.");
+                $"La cita debe agendarse con al menos {minAdvanceMinutes} minutos de anticipación.");
 
         var service = await _db.Services
             .IgnoreQueryFilters()

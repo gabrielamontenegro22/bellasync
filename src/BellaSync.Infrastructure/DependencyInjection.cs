@@ -45,6 +45,8 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IEmailService, LoggingEmailService>();
         services.AddScoped<IRefreshTokenGenerator, RefreshTokenGenerator>();
+        // Configuración de pagos por salón — scoped para cachear durante el request.
+        services.AddScoped<ITenantAppointmentSettings, TenantAppointmentSettingsService>();
 
         // Clock: stateless, una sola instancia para toda la app.
         // En tests se reemplaza por FakeClock controlado.

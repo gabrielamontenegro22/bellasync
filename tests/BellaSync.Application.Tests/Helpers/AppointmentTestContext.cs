@@ -1,8 +1,7 @@
-using BellaSync.Application.Auth;
+using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Features.Appointments.Shared;
 using BellaSync.Domain.Entities;
 using BellaSync.Domain.ValueObjects;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace BellaSync.Application.Tests.Helpers;
@@ -15,21 +14,28 @@ public sealed class AppointmentTestContext : IDisposable
 {
     public HandlerTestContext Base { get; }
     public AppointmentValidator Validator { get; }
-    public IOptions<AppointmentSettings> AppointmentOptions { get; }
-    public AppointmentSettings AppointmentSettings { get; }
+
+    /// <summary>
+    /// Settings de pagos por tenant — mock que devuelve los valores
+    /// históricos default (3 / 30 / 30). Si un test necesita cambiar
+    /// los valores, puede sobreescribir el mock con .Returns(...).
+    /// Antes era IOptions&lt;AppointmentSettings&gt;, migrado a service
+    /// tras hacer la política configurable por salón.
+    /// </summary>
+    public ITenantAppointmentSettings AppointmentSettings { get; }
 
     public AppointmentTestContext()
     {
         Base = new HandlerTestContext();
         Validator = new AppointmentValidator(Base.Db);
 
-        AppointmentSettings = new AppointmentSettings
-        {
-            HoldDurationHours = 3,
-            HoldMinBeforeAppointmentMinutes = 30,
-            MinAdvanceMinutes = 30,
-        };
-        AppointmentOptions = Options.Create(AppointmentSettings);
+        AppointmentSettings = Substitute.For<ITenantAppointmentSettings>();
+        AppointmentSettings.GetHoldDurationHoursAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(3));
+        AppointmentSettings.GetHoldMinBeforeAppointmentMinutesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(30));
+        AppointmentSettings.GetMinAdvanceMinutesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(30));
 
         // CurrentTenant devuelve un tenant fijo en estos tests.
         Base.CurrentTenant.HasTenant.Returns(true);

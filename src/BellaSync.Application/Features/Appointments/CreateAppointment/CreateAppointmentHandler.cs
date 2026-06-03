@@ -1,4 +1,3 @@
-using BellaSync.Application.Auth;
 using BellaSync.Application.Common.Errors;
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Interfaces;
@@ -6,10 +5,8 @@ using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Appointments.Dtos;
 using BellaSync.Application.Features.Appointments.Shared;
 using BellaSync.Domain.Entities;
-using BellaSync.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace BellaSync.Application.Features.Appointments.CreateAppointment;
 
@@ -19,7 +16,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
     private readonly ICurrentTenantService _currentTenant;
     private readonly IClock _clock;
     private readonly AppointmentValidator _validator;
-    private readonly AppointmentSettings _settings;
+    private readonly ITenantAppointmentSettings _settings;
     private readonly ILogger<CreateAppointmentHandler> _logger;
 
     public CreateAppointmentHandler(
@@ -27,14 +24,14 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
         ICurrentTenantService currentTenant,
         IClock clock,
         AppointmentValidator validator,
-        IOptions<AppointmentSettings> settings,
+        ITenantAppointmentSettings settings,
         ILogger<CreateAppointmentHandler> logger)
     {
         _db = db;
         _currentTenant = currentTenant;
         _clock = clock;
         _validator = validator;
-        _settings = settings.Value;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -54,7 +51,9 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
         // para que el validator no rechace por "muy próximo". El factory del
         // dominio sigue rechazando startAt en el pasado, así que el peor caso
         // es agendar a "ahora mismo + 1 segundo".
-        var minAdvance = command.BypassAdvanceWindow ? 0 : _settings.MinAdvanceMinutes;
+        var minAdvance = command.BypassAdvanceWindow ? 0 : await _settings.GetMinAdvanceMinutesAsync(ct);
+        var holdHours = await _settings.GetHoldDurationHoursAsync(ct);
+        var holdMinBefore = await _settings.GetHoldMinBeforeAppointmentMinutesAsync(ct);
 
         var refsResult = await _validator.ResolveAndValidateAsync(
             stylistId: command.StylistId,
@@ -83,8 +82,8 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
             channel: AppointmentChannel.Reception,
             notes: command.Notes,
             utcNow: _clock.UtcNow,
-            holdDuration: TimeSpan.FromHours(_settings.HoldDurationHours),
-            holdMinBeforeAppointment: TimeSpan.FromMinutes(_settings.HoldMinBeforeAppointmentMinutes));
+            holdDuration: TimeSpan.FromHours(holdHours),
+            holdMinBeforeAppointment: TimeSpan.FromMinutes(holdMinBefore));
 
         _db.Appointments.Add(appointment);
         await _db.SaveChangesAsync(ct);

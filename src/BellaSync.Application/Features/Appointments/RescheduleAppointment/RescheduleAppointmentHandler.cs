@@ -1,14 +1,11 @@
-using BellaSync.Application.Auth;
 using BellaSync.Application.Common.Errors;
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Appointments.Dtos;
 using BellaSync.Application.Features.Appointments.Shared;
-using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace BellaSync.Application.Features.Appointments.RescheduleAppointment;
 
@@ -18,20 +15,20 @@ public sealed class RescheduleAppointmentHandler
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
     private readonly AppointmentValidator _validator;
-    private readonly AppointmentSettings _settings;
+    private readonly ITenantAppointmentSettings _settings;
     private readonly ILogger<RescheduleAppointmentHandler> _logger;
 
     public RescheduleAppointmentHandler(
         IApplicationDbContext db,
         IClock clock,
         AppointmentValidator validator,
-        IOptions<AppointmentSettings> settings,
+        ITenantAppointmentSettings settings,
         ILogger<RescheduleAppointmentHandler> logger)
     {
         _db = db;
         _clock = clock;
         _validator = validator;
-        _settings = settings.Value;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -45,7 +42,9 @@ public sealed class RescheduleAppointmentHandler
 
         // Si el bypass está activo y el caller es admin, pasamos minAdvance=0.
         // El controller silencia bypass si el rol no es SalonAdmin antes de llegar acá.
-        var minAdvance = command.BypassAdvanceWindow ? 0 : _settings.MinAdvanceMinutes;
+        var minAdvance = command.BypassAdvanceWindow ? 0 : await _settings.GetMinAdvanceMinutesAsync(ct);
+        var holdHours = await _settings.GetHoldDurationHoursAsync(ct);
+        var holdMinBefore = await _settings.GetHoldMinBeforeAppointmentMinutesAsync(ct);
 
         // Validamos overlap excluyendo la propia cita (sino se choca consigo misma).
         // Reusamos el validator del Create — pero acá no resolvemos cliente nuevo;
@@ -68,8 +67,8 @@ public sealed class RescheduleAppointmentHandler
             appointment.Reschedule(
                 newStartAtUtc: command.NewStartAtUtc,
                 utcNow: _clock.UtcNow,
-                holdDuration: TimeSpan.FromHours(_settings.HoldDurationHours),
-                holdMinBeforeAppointment: TimeSpan.FromMinutes(_settings.HoldMinBeforeAppointmentMinutes));
+                holdDuration: TimeSpan.FromHours(holdHours),
+                holdMinBeforeAppointment: TimeSpan.FromMinutes(holdMinBefore));
         }
         catch (BellaSync.Domain.Common.DomainException ex)
         {

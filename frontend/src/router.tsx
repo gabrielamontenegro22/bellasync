@@ -11,6 +11,7 @@ import { AgendaPage } from '@/features/appointments/AgendaPage'
 import { ValidationQueuePage } from '@/features/vouchers/ValidationQueuePage'
 import { BookingPage } from '@/features/booking/BookingPage'
 import { CustomersPage } from '@/features/customers/CustomersPage'
+import { PaymentPolicyPage } from '@/features/settings/PaymentPolicyPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { useAuth } from '@/features/auth/useAuth'
@@ -72,7 +73,8 @@ export function AppRouter() {
         <Route path="servicios"  element={<ServicesPage />} />
         <Route path="estilistas" element={<StylistsPage />} />
         <Route path="validacion" element={<ValidationQueuePage />} />
-        {/* Aquí se agregarán: general, horario, pagos, whatsapp, suscripcion */}
+        <Route path="pagos"      element={<PaymentPolicyPage />} />
+        {/* Aquí se agregarán: general, horario, whatsapp, suscripcion */}
       </Route>
 
       {/* Defaults */}
