@@ -14,12 +14,18 @@ import { useCreateAppointment } from '../hooks'
  * useCreateAppointment que invalida la agenda al persistir.
  */
 export function NewAppointmentModal({
-  defaultDate, onClose,
-}: { defaultDate: string; onClose: () => void }) {
+  defaultDate, defaultCustomer = null, onClose,
+}: {
+  defaultDate: string
+  /** Pre-selecciona un cliente (cuando se abre desde el detalle del cliente
+   *  en el CRM o desde el panel de detalle de una cita). */
+  defaultCustomer?: CustomerResponse | null
+  onClose: () => void
+}) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'SalonAdmin'
 
-  const [customer, setCustomer] = useState<CustomerResponse | null>(null)
+  const [customer, setCustomer] = useState<CustomerResponse | null>(defaultCustomer)
   const [serviceId, setServiceId] = useState('')
   const [stylistId, setStylistId] = useState('')
   const [startAtLocal, setStartAtLocal] = useState(`${defaultDate}T10:00`)
