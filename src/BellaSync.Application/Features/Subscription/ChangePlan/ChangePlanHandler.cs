@@ -175,6 +175,34 @@ public sealed class ChangePlanHandler
 
         await _db.SaveChangesAsync(ct);
 
+        // C1+C8 del audit: si el dispatcher emitió una factura ENTRE
+        // nuestra query y nuestro SaveChanges (race window de milisegundos
+        // pero real), esa factura quedó con plan VIEJO sin que la hubiéramos
+        // pisado. Re-leemos las Pending del próximo período y las
+        // reconciliamos en un segundo SaveChanges.
+        var raceOrphans = await _db.SubscriptionInvoices
+            .Where(i => i.TenantId == _currentTenant.TenantId
+                     && i.Status == SubscriptionInvoiceStatus.Pending
+                     && i.PlanCode != newPlan.Code
+                     && i.PeriodStart >= sub.CurrentPeriodEnd)
+            .ToListAsync(ct);
+
+        if (raceOrphans.Count > 0)
+        {
+            foreach (var orphan in raceOrphans)
+            {
+                try
+                {
+                    orphan.UpdatePlanInfo(newPlan.Code, Money.Create(newPlan.MonthlyPrice), now);
+                }
+                catch (DomainException) { /* ya validamos por status arriba */ }
+            }
+            await _db.SaveChangesAsync(ct);
+            _logger.LogWarning(
+                "Race window: reconciliadas {Count} facturas Pending que el dispatcher emitió con plan viejo",
+                raceOrphans.Count);
+        }
+
         _logger.LogInformation(
             "Tenant {TenantId} cambió plan a {PlanCode}",
             _currentTenant.TenantId, newPlan.Code);

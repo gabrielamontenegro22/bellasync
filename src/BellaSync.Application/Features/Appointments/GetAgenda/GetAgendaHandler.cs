@@ -1,3 +1,4 @@
+using BellaSync.Application.Common;
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
@@ -10,8 +11,6 @@ namespace BellaSync.Application.Features.Appointments.GetAgenda;
 
 public sealed class GetAgendaHandler : IQueryHandler<GetAgendaQuery, AgendaResponse>
 {
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
-
     private readonly IApplicationDbContext _db;
 
     public GetAgendaHandler(IApplicationDbContext db) => _db = db;
@@ -19,20 +18,10 @@ public sealed class GetAgendaHandler : IQueryHandler<GetAgendaQuery, AgendaRespo
     public async Task<Result<AgendaResponse>> HandleAsync(
         GetAgendaQuery query, CancellationToken ct)
     {
-        // Rango [00:00, 24:00) en HORA COLOMBIA convertido a UTC.
-        //
-        // Bug histórico (C7 del audit): si usábamos `DateTimeKind.Utc` para
-        // el inicio del día, una cita a las 19:00 hora Colombia (= 00:00 UTC
-        // del día siguiente) quedaba justo en el borde y se "saltaba" al
-        // día siguiente en la agenda. Toda cita vespertina (19:00-23:59 CO)
-        // aparecía en el día equivocado.
-        //
-        // Solución: pedir explícitamente el día en hora Colombia y convertir
-        // sus bordes a UTC vía DateTimeOffset. Mismo patrón que CashClosing
-        // y Reports.
-        var dayStart = new DateTimeOffset(
-            query.Date.ToDateTime(TimeOnly.MinValue), ColombiaOffset).UtcDateTime;
-        var dayEnd = dayStart.AddDays(1);
+        // Rango [00:00, 24:00) en hora COLOMBIA convertido a UTC.
+        // Bug histórico C7: usar DateTimeKind.Utc desplazaba citas 19:00-23:59
+        // al día siguiente. Ahora compartimos el helper con CashClosing/Reports.
+        var (dayStart, dayEnd) = ColombiaTime.DayRangeUtc(query.Date);
 
         var dbQuery = _db.Appointments
             .AsNoTracking()

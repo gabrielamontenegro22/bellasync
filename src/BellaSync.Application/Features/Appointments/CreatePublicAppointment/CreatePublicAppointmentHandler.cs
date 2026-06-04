@@ -57,7 +57,9 @@ public sealed class CreatePublicAppointmentHandler
 
         // 2. Resolver/crear Customer por phone (también con IgnoreQueryFilters
         //    porque el filtro global multi-tenant no aplica acá).
-        var normalizedPhone = command.ClientPhone.Trim();
+        // Normalizamos el phone para dedup. Antes "318 555 1234" y
+        // "+57 318 555 1234" creaban dos clientes distintos (bug B2 audit).
+        var normalizedPhone = Customer.NormalizePhone(command.ClientPhone);
         var customer = await _db.Customers
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.TenantId == tenant.Id && c.Phone == normalizedPhone, ct);

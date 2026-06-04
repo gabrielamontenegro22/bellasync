@@ -52,6 +52,11 @@ export function SuscripcionPage() {
     queryKey: ['subscription'],
     queryFn: getSubscription,
     retry: 1,
+    // M8 del audit: si hay pago en validación, polleamos cada 30s para
+    // que María vea ni bien BellaSync valida (sin tener que refrescar
+    // manualmente). Si no, no polleamos — datos casi-estáticos.
+    refetchInterval: (q) =>
+      q.state.data?.pendingValidationInvoice ? 30_000 : false,
   })
 
   const [planModalOpen, setPlanModalOpen] = useState(false)

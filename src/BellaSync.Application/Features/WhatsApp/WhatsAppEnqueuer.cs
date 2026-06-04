@@ -82,6 +82,13 @@ public sealed class WhatsAppEnqueuer
         if (customer is null || string.IsNullOrWhiteSpace(customer.Phone))
             return null;
 
+        // Habeas data (Ley 1581/2012 Colombia): para mensajes de marketing
+        // requerimos opt-in explícito del cliente. Transaccionales (recordatorios,
+        // confirmaciones, cancelaciones) no aplican porque son sobre una cita
+        // que el cliente acordó. Birthday es promo → marketing.
+        if (catalogEntry.IsMarketing && !customer.AcceptsMarketing)
+            return null;
+
         var service = await _db.Services
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(s => s.Id == appointment.ServiceId, ct);

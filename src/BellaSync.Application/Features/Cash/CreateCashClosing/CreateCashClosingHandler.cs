@@ -1,3 +1,4 @@
+using BellaSync.Application.Common;
 using BellaSync.Application.Common.Errors;
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Interfaces;
@@ -14,8 +15,6 @@ namespace BellaSync.Application.Features.Cash.CreateCashClosing;
 public sealed class CreateCashClosingHandler
     : ICommandHandler<CreateCashClosingCommand, CashClosingResponse>
 {
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
-
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
     private readonly IClock _clock;
@@ -36,7 +35,7 @@ public sealed class CreateCashClosingHandler
     public async Task<Result<CashClosingResponse>> HandleAsync(
         CreateCashClosingCommand command, CancellationToken ct)
     {
-        var todayCO = DateOnly.FromDateTime(_clock.UtcNow.Add(ColombiaOffset));
+        var todayCO = ColombiaTime.TodayFor(_clock.UtcNow);
 
         DateOnly closedDate = todayCO;
         if (!string.IsNullOrWhiteSpace(command.ClosedDate))
@@ -58,8 +57,7 @@ public sealed class CreateCashClosingHandler
 
         // 2. Snapshotear ventas y egresos en efectivo del día.
         //    Rango: [00:00, 24:00) en hora Colombia → UTC.
-        var dayStartUtc = new DateTimeOffset(closedDate.ToDateTime(TimeOnly.MinValue), ColombiaOffset).UtcDateTime;
-        var dayEndUtc = dayStartUtc.AddDays(1);
+        var (dayStartUtc, dayEndUtc) = ColombiaTime.DayRangeUtc(closedDate);
 
         var payments = await _db.Payments
             .AsNoTracking()

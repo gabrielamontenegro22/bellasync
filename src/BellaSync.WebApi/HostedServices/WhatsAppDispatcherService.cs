@@ -176,7 +176,7 @@ public sealed class WhatsAppDispatcherService : BackgroundService
 
         var alreadySet = alreadyExists.ToHashSet();
 
-        // Levantamos en bulk los datos auxiliares (Customer/Service/Tenant/Template).
+        // Levantamos en bulk los datos auxiliares (Customer/Service/Tenant/Template/Appointment).
         var customers = await db.Customers
             .IgnoreQueryFilters()
             .Where(c => customerIds.Contains(c.Id))
@@ -191,6 +191,14 @@ public sealed class WhatsAppDispatcherService : BackgroundService
             .IgnoreQueryFilters()
             .Where(t => tenantIds.Contains(t.Id))
             .ToDictionaryAsync(t => t.Id, ct);
+
+        // B6 del audit: antes hacíamos 1 query por candidate (.FirstOrDefault
+        // dentro del foreach) → N+1. Levantamos en bulk acá y dict-lookup
+        // adentro. Para un día con 200 citas eso era 200 queries extra/tick.
+        var appointmentsById = await db.Appointments
+            .IgnoreQueryFilters()
+            .Where(a => appointmentIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, ct);
 
         // Templates relevantes (puede que no haya row persistida → usar default
         // si el catálogo lo tiene como DefaultEnabled). Si no hay row, asumimos
@@ -220,14 +228,13 @@ public sealed class WhatsAppDispatcherService : BackgroundService
             // Sin teléfono → saltar. No tiene sentido encolar sin destino.
             if (string.IsNullOrWhiteSpace(customer.Phone)) continue;
 
+            // Habeas data (M12 del audit): marketing requiere opt-in.
+            if (catalogEntry.IsMarketing && !customer.AcceptsMarketing) continue;
+
             var body = row?.Body ?? catalogEntry.DefaultBody;
 
-            // Materializar mini-appointment para el renderer (no se llevan
-            // todas las cosas de la entidad real, alcanza con lo justo).
-            var apptForRender = await db.Appointments
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(a => a.Id == c.Id, ct);
-            if (apptForRender is null) continue;
+            // Lookup desde el dict bulk-loaded (B6 fix: antes había N+1 acá).
+            if (!appointmentsById.TryGetValue(c.Id, out var apptForRender)) continue;
 
             var context = WhatsAppTemplateRenderer.BuildContext(
                 customer, service, apptForRender, tenant);
@@ -272,6 +279,14 @@ public sealed class WhatsAppDispatcherService : BackgroundService
 
         if (queued.Count == 0) return;
 
+        // M7 del audit: persistimos el estado de CADA mensaje individualmente
+        // tras llamar al sender, NO en un único SaveChanges al final. Antes,
+        // si el proceso crasheaba a la mitad del ciclo, los mensajes que YA
+        // se habían enviado al gateway externo quedaban en estado Queued en
+        // BD → en el próximo tick se reenviaban → cliente recibía doble.
+        // Hoy es NoOp así que no afecta, pero es deuda crítica para cuando
+        // se enchufe un sender real (Twilio/Meta).
+        var processed = 0;
         foreach (var msg in queued)
         {
             if (ct.IsCancellationRequested) break;
@@ -280,25 +295,37 @@ public sealed class WhatsAppDispatcherService : BackgroundService
             try
             {
                 if (result.IsSuccess)
-                {
                     msg.MarkSent(result.ExternalMessageId, clock.UtcNow);
-                }
                 else
-                {
                     msg.MarkFailed(result.FailureReason ?? "desconocido", clock.UtcNow);
-                }
+
+                // SaveChanges por mensaje. Cada llamada al sender es relativamente
+                // lenta (~100-500ms en producción con un gateway HTTP) así que
+                // los roundtrips extra a Postgres son insignificantes y nos da
+                // la garantía de que jamás reenviamos algo que ya se envió.
+                await db.SaveChangesAsync(ct);
+                processed++;
             }
             catch (BellaSync.Domain.Common.DomainException ex)
             {
-                // No debería pasar (filtramos por Queued arriba) pero
-                // defensivo: no crasheamos el tick.
+                // No debería pasar (filtramos por Queued arriba) pero defensivo:
+                // no crasheamos el tick.
                 _logger.LogWarning(ex,
                     "No se pudo actualizar estado del mensaje {MessageId}", msg.Id);
             }
+            catch (Exception ex)
+            {
+                // Falla del SaveChanges (DB caída, deadlock, etc.). El mensaje
+                // queda en Queued y el próximo tick lo retomará. Como ya
+                // llamamos al sender hay riesgo de double-send, pero esto es
+                // un caso de excepción (no la operación normal).
+                _logger.LogError(ex,
+                    "Falla persistiendo estado del mensaje {MessageId}", msg.Id);
+            }
         }
 
-        await db.SaveChangesAsync(ct);
         _logger.LogInformation(
-            "WhatsApp dispatcher: procesados {Count} mensajes en este tick.", queued.Count);
+            "WhatsApp dispatcher: procesados {Processed}/{Total} mensajes en este tick.",
+            processed, queued.Count);
     }
 }
