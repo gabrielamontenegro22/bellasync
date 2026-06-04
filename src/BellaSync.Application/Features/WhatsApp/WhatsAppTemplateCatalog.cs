@@ -72,6 +72,13 @@ public static class WhatsAppTemplateCatalog
             "Al cancelar una cita ya confirmada",
             "Hola {nombre}, te confirmamos que tu cita de {servicio} del {fecha} a las {hora} fue cancelada. Si querés reagendar, respondé este mensaje. ¡Te esperamos pronto en {salon}!",
             DefaultEnabled: true),
+
+        new CatalogEntry(
+            WhatsAppTemplateKind.AppointmentRescheduled,
+            "Cita reagendada",
+            "Al reagendar a una nueva fecha/hora",
+            "Hola {nombre}, tu cita de {servicio} en {salon} se reagendó para el {fecha} a las {hora}. Te esperamos. 💛",
+            DefaultEnabled: true),
     };
 
     public static CatalogEntry Get(WhatsAppTemplateKind kind)

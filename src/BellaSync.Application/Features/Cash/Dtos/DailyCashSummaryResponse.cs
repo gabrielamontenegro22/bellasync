@@ -13,7 +13,12 @@ public class DailyCashSummaryResponse
     /// <summary>Fecha YYYY-MM-DD (zona Colombia) que se consultó.</summary>
     public string Date { get; set; } = string.Empty;
 
-    /// <summary>Total recibido (Amount + Tip de todos los payments del día).</summary>
+    /// <summary>
+    /// Total recibido en el día: Amount + Tip de los Payments + monto
+    /// de los Vouchers Validados ese día (anticipos validados cuentan
+    /// como plata recibida, vienen del banco igual que los demás
+    /// pagos por transferencia).
+    /// </summary>
     public decimal TotalAmount { get; set; }
 
     /// <summary>Solo propinas — info para auditoría.</summary>
@@ -21,6 +26,16 @@ public class DailyCashSummaryResponse
 
     /// <summary>Cantidad de pagos registrados ese día.</summary>
     public int PaymentCount { get; set; }
+
+    /// <summary>
+    /// Total de anticipos validados ese día (sub-total dentro de
+    /// TotalAmount). Útil para mostrarlo como métrica separada en la UI:
+    /// "Cobrado: $X · Anticipos validados: $Y".
+    /// </summary>
+    public decimal ValidatedDepositsTotal { get; set; }
+
+    /// <summary>Cantidad de vouchers validados ese día.</summary>
+    public int ValidatedDepositsCount { get; set; }
 
     /// <summary>
     /// Breakdown por método de pago. Sirve para cruzar contra los

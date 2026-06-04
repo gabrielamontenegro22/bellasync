@@ -4,6 +4,7 @@ using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Vouchers.Dtos;
 using BellaSync.Application.Features.Vouchers.Shared;
+using BellaSync.Application.Features.WhatsApp;
 using BellaSync.Domain.Common;
 using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -16,13 +17,18 @@ public sealed class ValidateVoucherHandler
 {
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
+    private readonly WhatsAppEnqueuer _whatsApp;
     private readonly ILogger<ValidateVoucherHandler> _logger;
 
     public ValidateVoucherHandler(
-        IApplicationDbContext db, IClock clock, ILogger<ValidateVoucherHandler> logger)
+        IApplicationDbContext db,
+        IClock clock,
+        WhatsAppEnqueuer whatsApp,
+        ILogger<ValidateVoucherHandler> logger)
     {
         _db = db;
         _clock = clock;
+        _whatsApp = whatsApp;
         _logger = logger;
     }
 
@@ -72,7 +78,29 @@ public sealed class ValidateVoucherHandler
                         if (rejectedAppt.Status == AppointmentStatus.Pending
                             || rejectedAppt.Status == AppointmentStatus.Confirmed)
                         {
+                            var wasConfirmed = rejectedAppt.Status == AppointmentStatus.Confirmed;
                             rejectedAppt.Cancel(now, reason);
+
+                            // Bypassear el flujo de CancelAppointmentHandler nos
+                            // dejaba sin la propagación a WhatsApp. Replicamos
+                            // los dos hooks acá:
+                            //   1) Cancelar Reminder24h/Ready2h Queued para no
+                            //      mandarle a la cliente "te esperamos" después
+                            //      de rechazarle el comprobante.
+                            //   2) Notificar la cancelación (solo si estaba
+                            //      Confirmed — Pending nunca terminó el flujo
+                            //      de agendamiento).
+                            await _whatsApp.CancelQueuedForAppointmentAsync(
+                                rejectedAppt.TenantId, rejectedAppt.Id, ct);
+
+                            if (wasConfirmed)
+                            {
+                                await _whatsApp.EnqueueForAppointmentAsync(
+                                    tenantId: rejectedAppt.TenantId,
+                                    appointment: rejectedAppt,
+                                    kind: WhatsAppTemplateKind.AppointmentCancelled,
+                                    ct: ct);
+                            }
                         }
                     }
                     break;

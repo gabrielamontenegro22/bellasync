@@ -47,36 +47,124 @@ public sealed class GetDailyCashSummaryHandler
             .OrderBy(p => p.RegisteredAt)
             .ToListAsync(ct);
 
+        // Vouchers validados HOY (por DecidedAt). Son anticipos que la
+        // admin aprobó en este día — para la caja del día son revenue
+        // que entró por transferencia con su banco. Se mergean al
+        // breakdown por método para que la admin vea el TOTAL de plata
+        // que entró hoy, no solo los pagos finales.
+        var validatedVouchers = await _db.PaymentVouchers
+            .AsNoTracking()
+            .Where(v => v.Status == PaymentVoucherStatus.Validated
+                     && v.DecidedAt != null
+                     && v.DecidedAt >= dayStartUtc
+                     && v.DecidedAt < dayEndUtc)
+            .Select(v => new { v.ReportedAmount, v.Bank })
+            .ToListAsync(ct);
+
+        var depositsTotal = validatedVouchers.Sum(v => v.ReportedAmount.Amount);
+        var depositsCount = validatedVouchers.Count;
+
         // Agregados en C# — los Money están con HasConversion y EF no
         // los traduce bien dentro de agrupaciones SQL (mismo problema
         // que tuvimos con vouchers). En memoria es trivial.
-        var totalAmount = payments.Sum(p => p.Amount.Amount + p.Tip.Amount);
+        // Total incluye TODO lo que entró: pagos finales + anticipos validados.
+        var paymentsTotal = payments.Sum(p => p.Amount.Amount + p.Tip.Amount);
+        var totalAmount = paymentsTotal + depositsTotal;
         var totalTips = payments.Sum(p => p.Tip.Amount);
 
-        var byMethod = payments
+        // Agrupar payments por método para el breakdown base.
+        var paymentMethodGroups = payments
             .GroupBy(p => p.Method)
-            .Select(g => new MethodBreakdownItem
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Mergear vouchers en el grupo Transfer (anticipos por
+        // transferencia son el caso casi universal en CO).
+        var transferList = paymentMethodGroups.GetValueOrDefault(
+            BellaSync.Domain.Entities.PaymentMethod.Transfer,
+            new List<BellaSync.Domain.Entities.Payment>());
+
+        var byMethod = new List<MethodBreakdownItem>();
+
+        foreach (var (method, payList) in paymentMethodGroups)
+        {
+            var methodTotal = payList.Sum(p => p.Amount.Amount + p.Tip.Amount);
+            var methodCount = payList.Count;
+
+            // Si es Transfer, sumamos también los vouchers a este método.
+            var voucherProviderRows = new List<ProviderBreakdownItem>();
+            if (method == BellaSync.Domain.Entities.PaymentMethod.Transfer
+                && validatedVouchers.Count > 0)
             {
-                Method = g.Key.ToString(),
-                Count = g.Count(),
-                Total = g.Sum(p => p.Amount.Amount + p.Tip.Amount),
-                // Sub-desglose por banco/billetera/marca. Para Cash queda
-                // vacío porque agrupar por Provider=null no aporta.
-                ByProvider = g.Key == BellaSync.Domain.Entities.PaymentMethod.Cash
-                    ? new List<ProviderBreakdownItem>()
-                    : g.GroupBy(p => p.Provider)
-                        .Select(pg => new ProviderBreakdownItem
-                        {
-                            Provider = pg.Key,
-                            Count = pg.Count(),
-                            Total = pg.Sum(p => p.Amount.Amount + p.Tip.Amount),
-                        })
-                        .OrderByDescending(p => p.Total)
-                        .ToList(),
-            })
-            // Orden: por monto descendente — los métodos con más plata arriba.
-            .OrderByDescending(b => b.Total)
-            .ToList();
+                methodTotal += depositsTotal;
+                methodCount += depositsCount;
+                voucherProviderRows = validatedVouchers
+                    .GroupBy(v => string.IsNullOrWhiteSpace(v.Bank) ? null : v.Bank)
+                    .Select(vg => new ProviderBreakdownItem
+                    {
+                        Provider = vg.Key,
+                        Count = vg.Count(),
+                        Total = vg.Sum(v => v.ReportedAmount.Amount),
+                    })
+                    .ToList();
+            }
+
+            var paymentProviderRows = method == BellaSync.Domain.Entities.PaymentMethod.Cash
+                ? new List<ProviderBreakdownItem>()
+                : payList.GroupBy(p => p.Provider)
+                    .Select(pg => new ProviderBreakdownItem
+                    {
+                        Provider = pg.Key,
+                        Count = pg.Count(),
+                        Total = pg.Sum(p => p.Amount.Amount + p.Tip.Amount),
+                    })
+                    .ToList();
+
+            // Combinar provider rows de payments + vouchers, sumando por provider.
+            var combinedProviders = paymentProviderRows
+                .Concat(voucherProviderRows)
+                .GroupBy(r => r.Provider)
+                .Select(rg => new ProviderBreakdownItem
+                {
+                    Provider = rg.Key,
+                    Count = rg.Sum(r => r.Count),
+                    Total = rg.Sum(r => r.Total),
+                })
+                .OrderByDescending(r => r.Total)
+                .ToList();
+
+            byMethod.Add(new MethodBreakdownItem
+            {
+                Method = method.ToString(),
+                Count = methodCount,
+                Total = methodTotal,
+                ByProvider = combinedProviders,
+            });
+        }
+
+        // Si HAY vouchers pero NO había payments por Transfer todavía,
+        // hay que crear la entrada de Transfer ex-nihilo.
+        if (validatedVouchers.Count > 0
+            && !paymentMethodGroups.ContainsKey(BellaSync.Domain.Entities.PaymentMethod.Transfer))
+        {
+            byMethod.Add(new MethodBreakdownItem
+            {
+                Method = BellaSync.Domain.Entities.PaymentMethod.Transfer.ToString(),
+                Count = depositsCount,
+                Total = depositsTotal,
+                ByProvider = validatedVouchers
+                    .GroupBy(v => string.IsNullOrWhiteSpace(v.Bank) ? null : v.Bank)
+                    .Select(vg => new ProviderBreakdownItem
+                    {
+                        Provider = vg.Key,
+                        Count = vg.Count(),
+                        Total = vg.Sum(v => v.ReportedAmount.Amount),
+                    })
+                    .OrderByDescending(r => r.Total)
+                    .ToList(),
+            });
+        }
+
+        byMethod = byMethod.OrderByDescending(b => b.Total).ToList();
 
         // Egresos del día — mismo rango UTC.
         var expenses = await _db.Expenses
@@ -97,6 +185,8 @@ public sealed class GetDailyCashSummaryHandler
             TotalAmount = totalAmount,
             TotalTips = totalTips,
             PaymentCount = payments.Count,
+            ValidatedDepositsTotal = depositsTotal,
+            ValidatedDepositsCount = depositsCount,
             ByMethod = byMethod,
             Payments = payments.Select(PaymentMapper.ToResponse).ToList(),
             TotalExpenses = totalExpenses,
