@@ -15,6 +15,7 @@ import { serviceSchema, defaultServiceForm, type ServiceFormData } from '../sche
 import { CATEGORIES, CATEGORY_BY_ID, fmtCOP } from '../types'
 import { serviceExtrasStorage } from '../storage'
 import { extractApiError } from '@/lib/extractApiError'
+import { useCommissionsSetting } from '@/features/commissions/useCommissionsSetting'
 
 interface ServiceModalProps {
   /** Si es null/undefined → modo "Nuevo". Si es ServiceResponse → modo "Editar" */
@@ -46,6 +47,12 @@ export function ServiceModal({
   const isNew = !initial
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
+
+  // Si el salón no usa comisiones, escondemos el campo % del form.
+  // El valor se sigue persistiendo (no rompe nada), pero la admin no
+  // tiene que pensar en algo que no usa.
+  const { data: commissionsSetting } = useCommissionsSetting()
+  const showCommission = commissionsSetting?.enabled ?? false
 
   const {
     register,
@@ -230,18 +237,22 @@ export function ServiceModal({
             </Field>
           </div>
 
-          {/* Comisión + color */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Comisión al estilista (%)" error={errors.commissionPercentage?.message}>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={5}
-                {...register('commissionPercentage', { valueAsNumber: true })}
-                className={inputClass(!!errors.commissionPercentage)}
-              />
-            </Field>
+          {/* Comisión + color. El campo de % solo se muestra si el salón
+              tiene activo el módulo de Comisiones (Configuración →
+              Comisiones). Sino, el color ocupa toda la fila. */}
+          <div className={cls('grid gap-4', showCommission ? 'grid-cols-2' : 'grid-cols-1')}>
+            {showCommission && (
+              <Field label="Comisión al estilista (%)" error={errors.commissionPercentage?.message}>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={5}
+                  {...register('commissionPercentage', { valueAsNumber: true })}
+                  className={inputClass(!!errors.commissionPercentage)}
+                />
+              </Field>
+            )}
 
             <Field label="Color (hex)" hint="Ej. #0f766e — opcional" error={errors.color?.message}>
               <Controller
