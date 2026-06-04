@@ -43,7 +43,10 @@ export function CustomersPage() {
           onNewAppointment={() => setApptForCustomer(selected)}
         />
       ) : (
-        <main className="hidden lg:flex flex-1 min-w-0 flex-col items-center justify-center bg-warm-50 p-10 text-center">
+        // Empty state: visible desde md (768px+) para que iPad y desktop
+        // vean qué va a aparecer al elegir un cliente. En mobile (<md) el
+        // detalle vive en página aparte (futuro Sprint B).
+        <main className="hidden md:flex flex-1 min-w-0 flex-col items-center justify-center bg-warm-50 p-10 text-center">
           <div className="w-14 h-14 rounded-full bg-white border border-warm-200 flex items-center justify-center text-warm-400">
             <Users size={24} />
           </div>
