@@ -10,30 +10,36 @@ namespace BellaSync.Application.Features.Reports.GetReportsSummary;
 
 /// <summary>
 /// Calcula el snapshot de reports para un período. Devuelve TODO lo que
-/// el dashboard /reportes (mockup v2) necesita en una sola call:
+/// el dashboard /reportes (mockup v2) necesita en una sola call.
 ///
-///   - 5 KPIs con delta vs período anterior (ingresos / citas / ticket /
-///     no-show / clientas nuevas)
-///   - Tendencia diaria de ingresos (un punto por día — para area chart)
-///   - Dona de métodos de pago (Cash/Transfer/Card/Other)
-///   - Top 5 servicios + Top 5 estilistas (con ocupación + no-shows)
-///   - Embudo Solicitadas → Confirmadas → Atendidas → No-show
-///   - Split nuevos vs recurrentes
-///   - Insight dinámico en español ("Subiste 13% en ingresos…")
+/// Reglas de negocio importantes:
+///
+///   - ANTICIPOS NO REEMBOLSABLES: cuando un cliente cancela una cita
+///     después de pagar el anticipo, el salón se queda con esa plata.
+///     Por eso TODO voucher en estado Validated cuenta como ingreso del
+///     período, sin importar el status de la cita asociada (Cancelled,
+///     NoShow, Completed, etc.).
+///
+///   - "Citas atendidas" = Completed + InProgress (citas que realmente
+///     ocurrieron o están ocurriendo). Cancelled, NoShow, Pending y
+///     Confirmed pendientes NO cuentan en este KPI.
+///
+///   - Ticket promedio se calcula sobre las atendidas únicamente
+///     (revenue_atendidas / count_atendidas), para que represente
+///     "cuánto típicamente cobramos por servicio realizado".
+///
+///   - Ingresos = Payment + Tip (de citas Completed/InProgress) +
+///     vouchers Validated (de TODO el rango). Los forfeitures cuentan
+///     como Ingresos pero NO como ticket promedio.
 ///
 /// Estrategia técnica:
-///   - Materializamos los pagos del período a memoria una sola vez —
-///     EF Core no traduce p.Amount.Amount + p.Tip.Amount a SQL porque
-///     el value converter Money↔decimal no compone dentro de SUM/GROUP BY.
-///   - Las agregaciones (top services, stylists, daily revenue, payment
-///     methods) se hacen en memoria sobre ese set.
-///   - Cuento del embudo SÍ se hace en SQL — son COUNT(*) WHERE status,
-///     no involucran Money VOs.
-///   - Ocupación del estilista usa horario del salón si está configurado,
-///     sino fallback de 11h × días abiertos.
+///   - Materializamos pagos y vouchers a memoria una vez — EF no traduce
+///     la suma de Money VOs a SQL.
+///   - Las agregaciones (top, daily, methods, occupancy) se hacen en
+///     memoria sobre un set unificado de "RevenueItem" que combina
+///     pagos y vouchers en una misma estructura.
 ///
-/// Fechas: rango [From 00:00 CO, To+1día 00:00 CO). SpecifyKind(Utc)
-/// para que Npgsql acepte como timestamp with time zone.
+/// Fechas: rango [From 00:00 CO, To+1día 00:00 CO). SpecifyKind(Utc).
 /// </summary>
 public sealed class GetReportsSummaryHandler
     : IQueryHandler<GetReportsSummaryQuery, ReportsSummaryResponse>
@@ -69,70 +75,40 @@ public sealed class GetReportsSummaryHandler
         var (startUtc, endUtc) = ToUtcRange(query.From, query.To);
         var (prevStartUtc, prevEndUtc) = (startUtc - (endUtc - startUtc), startUtc);
 
-        // ===== Citas válidas (atendidas o programadas) del período actual =====
-        var validApptsQ = _db.Appointments
-            .Where(a => a.TenantId == tenantId
-                     && a.StartAt >= startUtc
-                     && a.StartAt < endUtc
-                     && a.Status != AppointmentStatus.Cancelled
-                     && a.Status != AppointmentStatus.NoShow);
+        // ===== Período actual: revenue items unificados =====
+        var current = await BuildRevenueItemsAsync(tenantId, startUtc, endUtc, ct);
 
-        var appointmentsCount = await validApptsQ.CountAsync(ct);
+        // ===== Período anterior: solo totales (sin desglose) =====
+        var previous = await BuildRevenueItemsAsync(tenantId, prevStartUtc, prevEndUtc, ct);
 
-        // Metadata por cita (para joins en memoria + ocupación + nuevos)
-        var apptMeta = await validApptsQ
-            .Select(a => new
-            {
-                a.Id, a.CustomerId, a.ServiceId, a.StylistId,
-                a.StartAt, a.EndAt,
-            })
-            .ToListAsync(ct);
+        // ===== Citas atendidas (Completed + InProgress del período) =====
+        var attendedCount = current.AllAppointments
+            .Count(a => a.Status == AppointmentStatus.Completed
+                     || a.Status == AppointmentStatus.InProgress);
+        var prevAttendedCount = previous.AllAppointments
+            .Count(a => a.Status == AppointmentStatus.Completed
+                     || a.Status == AppointmentStatus.InProgress);
 
-        var apptMetaById = apptMeta.ToDictionary(a => a.Id);
-
-        // ===== Revenue actual y previo =====
-        var apptIds = apptMeta.Select(a => a.Id).ToList();
-
-        var paymentsCurrent = await _db.Payments
-            .Where(p => p.TenantId == tenantId && apptIds.Contains(p.AppointmentId))
-            .Select(p => new { p.AppointmentId, p.Method, p.Provider, p.Amount, p.Tip })
-            .ToListAsync(ct);
-
-        var totalRevenue = paymentsCurrent.Sum(p => p.Amount.Amount + p.Tip.Amount);
-
-        // Período anterior — solo citas válidas + sus revenues, no necesitamos meta.
-        var prevApptIds = await _db.Appointments
-            .Where(a => a.TenantId == tenantId
-                     && a.StartAt >= prevStartUtc
-                     && a.StartAt < prevEndUtc
-                     && a.Status != AppointmentStatus.Cancelled
-                     && a.Status != AppointmentStatus.NoShow)
-            .Select(a => a.Id)
-            .ToListAsync(ct);
-
-        var prevPayments = await _db.Payments
-            .Where(p => p.TenantId == tenantId && prevApptIds.Contains(p.AppointmentId))
-            .Select(p => new { p.Amount, p.Tip })
-            .ToListAsync(ct);
-
-        var prevRevenue = prevPayments.Sum(p => p.Amount.Amount + p.Tip.Amount);
-
+        // ===== Ingresos totales (incluyen forfeitures) =====
+        var totalRevenue = current.Items.Sum(x => x.Amount);
+        var prevRevenue = previous.Items.Sum(x => x.Amount);
         var revenueChangePct = ChangePct(totalRevenue, prevRevenue);
-        var appointmentsChangePct = ChangePct(appointmentsCount, prevApptIds.Count);
+        var appointmentsChangePct = ChangePct(attendedCount, prevAttendedCount);
 
-        // ===== Ticket promedio =====
-        var avgTicket = appointmentsCount > 0 ? totalRevenue / appointmentsCount : 0m;
-        var prevAvgTicket = prevApptIds.Count > 0 ? prevRevenue / prevApptIds.Count : 0m;
+        // ===== Ticket promedio (solo de atendidas, sin forfeitures) =====
+        var attendedRevenue = current.Items
+            .Where(x => x.IsAttended)
+            .Sum(x => x.Amount);
+        var prevAttendedRevenue = previous.Items
+            .Where(x => x.IsAttended)
+            .Sum(x => x.Amount);
+        var avgTicket = attendedCount > 0 ? attendedRevenue / attendedCount : 0m;
+        var prevAvgTicket = prevAttendedCount > 0 ? prevAttendedRevenue / prevAttendedCount : 0m;
         var avgTicketChangePct = ChangePct(avgTicket, prevAvgTicket);
 
-        // ===== Tasa de no-show (período actual y previo) =====
-        // Denominador: citas que llegaron a Confirmed o más (Confirmed +
-        // InProgress + Completed + NoShow). Una cita Pending que se cancela
-        // o expira no cuenta como "no-show".
-        var (noShowRate, noShowCountCurrent) = await ComputeNoShowAsync(
-            tenantId, startUtc, endUtc, ct);
-        var (prevNoShowRate, _) = await ComputeNoShowAsync(
-            tenantId, prevStartUtc, prevEndUtc, ct);
+        // ===== Tasa de no-show =====
+        var (noShowRate, _) = ComputeNoShowRate(current.AllAppointments);
+        var (prevNoShowRate, _) = ComputeNoShowRate(previous.AllAppointments);
         var noShowChangePts = noShowRate - prevNoShowRate;
 
         // ===== Clientes nuevos =====
@@ -150,31 +126,14 @@ public sealed class GetReportsSummaryHandler
 
         var newCustomersChangePct = ChangePct(newCustomersCount, prevNewCustomersCount);
 
-        // ===== Enriquecer pagos con meta (serviceId, stylistId, startAt) =====
-        var enriched = paymentsCurrent
-            .Where(p => apptMetaById.ContainsKey(p.AppointmentId))
-            .Select(p =>
-            {
-                var meta = apptMetaById[p.AppointmentId];
-                return new EnrichedPayment(
-                    p.AppointmentId,
-                    meta.ServiceId,
-                    meta.StylistId,
-                    meta.StartAt,
-                    p.Method,
-                    p.Provider,
-                    p.Amount.Amount + p.Tip.Amount);
-            })
-            .ToList();
-
-        // ===== Top servicios =====
-        var topServicesAgg = enriched
+        // ===== Top servicios (incluye forfeitures) =====
+        var topServicesAgg = current.Items
             .GroupBy(x => x.ServiceId)
             .Select(g => new
             {
                 ServiceId = g.Key,
-                Revenue = g.Sum(x => x.Total),
-                Cnt = g.Count(),
+                Revenue = g.Sum(x => x.Amount),
+                Cnt = g.Select(x => x.AppointmentId).Distinct().Count(),
             })
             .OrderByDescending(x => x.Revenue)
             .Take(5)
@@ -197,34 +156,31 @@ public sealed class GetReportsSummaryHandler
             .ToList();
 
         // ===== Top estilistas con ocupación + no-shows =====
-        // Total minutos abiertos del salón en el período (para denominador
-        // de ocupación). Si no hay horario configurado, fallback razonable.
         var openMinutesPerStylist = await ComputeOpenMinutesAsync(
             tenantId, query.From, query.To, ct);
 
-        // No-shows por estilista (sin filtro de status válido — son NoShows).
-        var noShowsByStylist = await _db.Appointments
-            .Where(a => a.TenantId == tenantId
-                     && a.StartAt >= startUtc
-                     && a.StartAt < endUtc
-                     && a.Status == AppointmentStatus.NoShow)
+        var noShowsByStylist = current.AllAppointments
+            .Where(a => a.Status == AppointmentStatus.NoShow)
             .GroupBy(a => a.StylistId)
-            .Select(g => new { StylistId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.StylistId, x => x.Count, ct);
+            .ToDictionary(g => g.Key, g => g.Count());
 
-        var stylistAgg = enriched
+        // Para ocupación: cuenta minutos comprometidos (Completed +
+        // InProgress + NoShow — el estilista estuvo bloqueado en ese
+        // slot). Cancelled libera el slot, no cuenta.
+        var minutesByStylist = current.AllAppointments
+            .Where(a => a.Status == AppointmentStatus.Completed
+                     || a.Status == AppointmentStatus.InProgress
+                     || a.Status == AppointmentStatus.NoShow)
+            .GroupBy(a => a.StylistId)
+            .ToDictionary(g => g.Key, g => g.Sum(a => (a.EndAt - a.StartAt).TotalMinutes));
+
+        var stylistAgg = current.Items
             .GroupBy(x => x.StylistId)
             .Select(g => new
             {
                 StylistId = g.Key,
-                Revenue = g.Sum(x => x.Total),
-                Cnt = g.Count(),
-                // Sumamos minutos de servicio (no del pago — del appointment).
-                MinutesBooked = g.Sum(x =>
-                {
-                    var meta = apptMetaById[x.AppointmentId];
-                    return (meta.EndAt - meta.StartAt).TotalMinutes;
-                }),
+                Revenue = g.Sum(x => x.Amount),
+                Cnt = g.Select(x => x.AppointmentId).Distinct().Count(),
             })
             .OrderByDescending(x => x.Revenue)
             .Take(5)
@@ -245,18 +201,16 @@ public sealed class GetReportsSummaryHandler
                 AppointmentsCount = s.Cnt,
                 Revenue = s.Revenue,
                 OccupancyPct = openMinutesPerStylist > 0
-                    ? Math.Min(100.0, s.MinutesBooked / openMinutesPerStylist * 100.0)
+                    ? Math.Min(100.0, minutesByStylist.GetValueOrDefault(s.StylistId, 0) / openMinutesPerStylist * 100.0)
                     : 0,
                 NoShowCount = noShowsByStylist.GetValueOrDefault(s.StylistId, 0),
             })
             .ToList();
 
         // ===== Tendencia diaria de ingresos =====
-        // Construye un punto por cada día del rango (aunque sea cero). El
-        // frontend espera la serie completa para el eje X del area chart.
-        var revenueByDay = enriched
+        var revenueByDay = current.Items
             .GroupBy(x => DateOnly.FromDateTime((x.StartAt + ColombiaOffset).Date))
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.Total));
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
 
         var dailyRevenue = new List<DailyRevenuePoint>();
         for (var d = query.From; d <= query.To; d = d.AddDays(1))
@@ -268,18 +222,14 @@ public sealed class GetReportsSummaryHandler
             });
         }
 
-        // ===== Métodos de pago (para la dona) =====
-        // Agrupamos por (Method, Provider) — el mockup muestra Bancolombia,
-        // Nequi, Daviplata como líneas separadas porque son providers de
-        // Transfer. Si Provider es null (Cash, Other sin provider), se
-        // usa el label genérico del método.
-        var methodAgg = enriched
+        // ===== Métodos de pago (Method + Provider) =====
+        var methodAgg = current.Items
             .GroupBy(x => new { x.Method, x.Provider })
             .Select(g => new
             {
                 g.Key.Method,
                 g.Key.Provider,
-                Revenue = g.Sum(x => x.Total),
+                Revenue = g.Sum(x => x.Amount),
             })
             .OrderByDescending(x => x.Revenue)
             .ToList();
@@ -300,52 +250,41 @@ public sealed class GetReportsSummaryHandler
             .ToList();
 
         // ===== Embudo Solicitadas → Atendidas =====
-        // Solicitadas: todas las citas creadas en el período (regardless of status).
-        // Confirmadas: pasaron a Confirmed/InProgress/Completed/NoShow.
-        // Atendidas: Completed.
-        // NoShow: el cliente no apareció.
-        var statusBuckets = await _db.Appointments
-            .Where(a => a.TenantId == tenantId
-                     && a.StartAt >= startUtc
-                     && a.StartAt < endUtc)
+        var byStatus = current.AllAppointments
             .GroupBy(a => a.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count() })
-            .ToListAsync(ct);
-
-        var byStatus = statusBuckets.ToDictionary(x => x.Status, x => x.Count);
-        var requested = statusBuckets.Sum(x => x.Count);
-        var confirmedPlus =
-            byStatus.GetValueOrDefault(AppointmentStatus.Confirmed) +
-            byStatus.GetValueOrDefault(AppointmentStatus.InProgress) +
-            byStatus.GetValueOrDefault(AppointmentStatus.Completed) +
-            byStatus.GetValueOrDefault(AppointmentStatus.NoShow);
-        var attended = byStatus.GetValueOrDefault(AppointmentStatus.Completed);
-        var noShowFunnel = byStatus.GetValueOrDefault(AppointmentStatus.NoShow);
+            .ToDictionary(g => g.Key, g => g.Count());
 
         var funnel = new FunnelStats
         {
-            Requested = requested,
-            Confirmed = confirmedPlus,
-            Attended = attended,
-            NoShow = noShowFunnel,
+            Requested = current.AllAppointments.Count,
+            Confirmed =
+                byStatus.GetValueOrDefault(AppointmentStatus.Confirmed) +
+                byStatus.GetValueOrDefault(AppointmentStatus.InProgress) +
+                byStatus.GetValueOrDefault(AppointmentStatus.Completed) +
+                byStatus.GetValueOrDefault(AppointmentStatus.NoShow),
+            Attended = byStatus.GetValueOrDefault(AppointmentStatus.Completed),
+            NoShow = byStatus.GetValueOrDefault(AppointmentStatus.NoShow),
         };
 
-        // ===== Nuevos vs recurrentes en el período =====
-        var customerIdsInPeriod = apptMeta.Select(a => a.CustomerId).Distinct().ToList();
+        // ===== Nuevos vs recurrentes en el período (sobre atendidas) =====
+        var attendedAppts = current.AllAppointments
+            .Where(a => a.Status == AppointmentStatus.Completed
+                     || a.Status == AppointmentStatus.InProgress)
+            .ToList();
+        var customerIdsInPeriod = attendedAppts.Select(a => a.CustomerId).Distinct().ToList();
 
         var customersWithPriorVisit = await _db.Appointments
             .Where(a => a.TenantId == tenantId
                      && customerIdsInPeriod.Contains(a.CustomerId)
                      && a.StartAt < startUtc
-                     && a.Status != AppointmentStatus.Cancelled
-                     && a.Status != AppointmentStatus.NoShow)
+                     && a.Status == AppointmentStatus.Completed)
             .Select(a => a.CustomerId)
             .Distinct()
             .ToListAsync(ct);
 
         var returningSet = customersWithPriorVisit.ToHashSet();
-        var newCustomerAppts = apptMeta.Count(a => !returningSet.Contains(a.CustomerId));
-        var returningAppts = apptMeta.Count - newCustomerAppts;
+        var newCustomerAppts = attendedAppts.Count(a => !returningSet.Contains(a.CustomerId));
+        var returningAppts = attendedAppts.Count - newCustomerAppts;
 
         // ===== Insight + eyebrow =====
         var (insightEyebrow, insightText) = BuildInsight(
@@ -358,7 +297,7 @@ public sealed class GetReportsSummaryHandler
             From = query.From,
             To = query.To,
             TotalRevenue = totalRevenue,
-            AppointmentsCount = appointmentsCount,
+            AppointmentsCount = attendedCount,
             AverageTicket = avgTicket,
             NoShowRate = noShowRate,
             NewCustomersCount = newCustomersCount,
@@ -381,6 +320,91 @@ public sealed class GetReportsSummaryHandler
 
     // ===== Helpers =====
 
+    /// <summary>
+    /// Trae TODAS las citas del período (cualquier status) más todos los
+    /// Payments y Vouchers Validated asociados, y los unifica en una lista
+    /// de RevenueItems donde cada item representa "plata recibida" con su
+    /// método/provider/source.
+    ///
+    /// Vouchers Validated cuentan SIEMPRE (anticipos no reembolsables):
+    /// si una cita con anticipo se cancela, el salón se queda con el
+    /// dinero. Payments cuentan solo para citas Completed/InProgress (el
+    /// caso normal donde se cobra al terminar el servicio).
+    /// </summary>
+    private async Task<RevenueAggregation> BuildRevenueItemsAsync(
+        Guid tenantId, DateTime startUtc, DateTime endUtc, CancellationToken ct)
+    {
+        var allAppts = await _db.Appointments
+            .Where(a => a.TenantId == tenantId
+                     && a.StartAt >= startUtc
+                     && a.StartAt < endUtc)
+            .Select(a => new ApptInfo(
+                a.Id, a.CustomerId, a.ServiceId, a.StylistId,
+                a.StartAt, a.EndAt, a.Status))
+            .ToListAsync(ct);
+
+        var apptById = allAppts.ToDictionary(a => a.Id);
+        var apptIds = allAppts.Select(a => a.Id).ToList();
+
+        // Payments: solo de citas Completed/InProgress. Las Cancelled/NoShow
+        // no deberían tener un Payment normal (el flujo de Cobrar requiere
+        // que la cita esté en curso o terminada).
+        var attendedIds = allAppts
+            .Where(a => a.Status == AppointmentStatus.Completed
+                     || a.Status == AppointmentStatus.InProgress)
+            .Select(a => a.Id)
+            .ToList();
+
+        var payments = await _db.Payments
+            .Where(p => p.TenantId == tenantId && attendedIds.Contains(p.AppointmentId))
+            .Select(p => new { p.AppointmentId, p.Method, p.Provider, p.Amount, p.Tip })
+            .ToListAsync(ct);
+
+        // Vouchers Validated: de TODAS las citas del período. Anticipos
+        // no reembolsables → cuentan independiente del status final.
+        var vouchers = await _db.PaymentVouchers
+            .Where(v => v.TenantId == tenantId
+                     && apptIds.Contains(v.AppointmentId)
+                     && v.Status == PaymentVoucherStatus.Validated)
+            .Select(v => new { v.AppointmentId, v.ReportedAmount, v.Bank })
+            .ToListAsync(ct);
+
+        var items = new List<RevenueItem>(payments.Count + vouchers.Count);
+
+        foreach (var p in payments)
+        {
+            if (!apptById.TryGetValue(p.AppointmentId, out var info)) continue;
+            items.Add(new RevenueItem(
+                AppointmentId: p.AppointmentId,
+                ServiceId: info.ServiceId,
+                StylistId: info.StylistId,
+                StartAt: info.StartAt,
+                Status: info.Status,
+                Method: p.Method,
+                Provider: p.Provider,
+                Amount: p.Amount.Amount + p.Tip.Amount,
+                Source: RevenueSource.Payment));
+        }
+
+        foreach (var v in vouchers)
+        {
+            if (!apptById.TryGetValue(v.AppointmentId, out var info)) continue;
+            items.Add(new RevenueItem(
+                AppointmentId: v.AppointmentId,
+                ServiceId: info.ServiceId,
+                StylistId: info.StylistId,
+                StartAt: info.StartAt,
+                Status: info.Status,
+                // Anticipos por transferencia es el caso normal.
+                Method: PaymentMethod.Transfer,
+                Provider: string.IsNullOrWhiteSpace(v.Bank) ? null : v.Bank,
+                Amount: v.ReportedAmount.Amount,
+                Source: RevenueSource.Deposit));
+        }
+
+        return new RevenueAggregation(allAppts, items);
+    }
+
     /// <summary>Convierte un rango [From, To] (inclusive) a UTC kinded.</summary>
     private static (DateTime startUtc, DateTime endUtc) ToUtcRange(DateOnly from, DateOnly to)
     {
@@ -400,37 +424,26 @@ public sealed class GetReportsSummaryHandler
     private static double? ChangePct(int current, int previous)
         => ChangePct((decimal)current, (decimal)previous);
 
-    private async Task<(double rate, int count)> ComputeNoShowAsync(
-        Guid tenantId, DateTime startUtc, DateTime endUtc, CancellationToken ct)
+    /// <summary>
+    /// Tasa de no-show: NoShow / (Confirmed + InProgress + Completed + NoShow).
+    /// Citas Pending o Cancelled no entran al cálculo (nunca se confirmaron).
+    /// </summary>
+    private static (double rate, int count) ComputeNoShowRate(IReadOnlyList<ApptInfo> appts)
     {
-        // Denominador: confirmadas + en progreso + completadas + no-show.
-        // Citas Pending o Cancelled no entran al cálculo (nunca se confirmaron).
-        var grouped = await _db.Appointments
-            .Where(a => a.TenantId == tenantId
-                     && a.StartAt >= startUtc
-                     && a.StartAt < endUtc
-                     && (a.Status == AppointmentStatus.Confirmed
-                         || a.Status == AppointmentStatus.InProgress
-                         || a.Status == AppointmentStatus.Completed
-                         || a.Status == AppointmentStatus.NoShow))
-            .GroupBy(a => a.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count() })
-            .ToListAsync(ct);
-
-        var denom = grouped.Sum(x => x.Count);
-        var noShows = grouped.FirstOrDefault(x => x.Status == AppointmentStatus.NoShow)?.Count ?? 0;
+        var denom = appts.Count(a =>
+            a.Status == AppointmentStatus.Confirmed
+            || a.Status == AppointmentStatus.InProgress
+            || a.Status == AppointmentStatus.Completed
+            || a.Status == AppointmentStatus.NoShow);
+        var noShows = appts.Count(a => a.Status == AppointmentStatus.NoShow);
         var rate = denom > 0 ? (double)noShows / denom * 100.0 : 0.0;
         return (rate, noShows);
     }
 
     /// <summary>
-    /// Devuelve los minutos totales abiertos del salón en el rango. Es el
-    /// denominador POR ESTILISTA para ocupación — asumimos que cada
-    /// estilista está disponible todo el horario salvo que el modelo
-    /// tenga uno propio (no lo tiene aún).
-    ///
-    /// Si el tenant configuró SalonWeeklyHours, usamos esos rangos por día
-    /// (lunes-domingo). Sino, fallback a 11h/día (8am–7pm) × días.
+    /// Minutos abiertos del salón en el rango. Usa SalonWeeklyHours si está
+    /// configurado, sino fallback de 11h × días no-domingo. No considera
+    /// vacaciones por estilista (no tenemos esa entidad aún).
     /// </summary>
     private async Task<double> ComputeOpenMinutesAsync(
         Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct)
@@ -445,13 +458,11 @@ public sealed class GetReportsSummaryHandler
             hoursPerWeekday[h.DayOfWeek] = h.ToHour - h.FromHour;
         }
 
-        // Si no hay nada configurado, fallback razonable.
         if (hoursPerWeekday.Count == 0)
         {
             var defaultDays = 0;
             for (var d = from; d <= to; d = d.AddDays(1))
             {
-                // Asume cerrado domingo.
                 if (d.DayOfWeek != DayOfWeek.Sunday) defaultDays++;
             }
             return defaultDays * 11 * 60;
@@ -460,7 +471,6 @@ public sealed class GetReportsSummaryHandler
         double total = 0;
         for (var d = from; d <= to; d = d.AddDays(1))
         {
-            // .NET DayOfWeek: Sunday=0..Saturday=6 → nuestra convención Monday=0..Sunday=6
             var dotnet = (int)d.DayOfWeek;
             var dayOfWeek = (dotnet + 6) % 7;
             if (hoursPerWeekday.TryGetValue(dayOfWeek, out var hours))
@@ -480,24 +490,17 @@ public sealed class GetReportsSummaryHandler
         _ => m.ToString(),
     };
 
-    /// <summary>
-    /// Genera un texto en español para la card oscura "Lectura del…".
-    /// Combina los hallazgos más significativos del período. Vuelve null si
-    /// no hay nada interesante que decir (período sin actividad).
-    /// </summary>
     private static (string eyebrow, string? text) BuildInsight(
         DateOnly from, DateOnly to,
         double? revenueChangePct, double noShowRate, double noShowChangePts,
         IReadOnlyList<TopServiceRow> topServices,
         IReadOnlyList<TopStylistRow> topStylists)
     {
-        // Eyebrow según el largo del rango.
         var days = to.DayNumber - from.DayNumber + 1;
         var eyebrow = days switch
         {
             <= 1 => "Lectura del día",
             <= 7 => "Lectura de la semana",
-            <= 31 => "Lectura del período",
             _ => "Lectura del período",
         };
 
@@ -522,7 +525,6 @@ public sealed class GetReportsSummaryHandler
             parts.Add($"el servicio que más vendió fue {topServices[0].ServiceName}");
         }
 
-        // Si hay un estilista con > 85% de ocupación, sugerir abrir cupos.
         var saturated = topStylists.FirstOrDefault(s => s.OccupancyPct >= 85);
         if (saturated is not null)
         {
@@ -531,7 +533,6 @@ public sealed class GetReportsSummaryHandler
 
         if (parts.Count == 0) return (eyebrow, null);
 
-        // Capitaliza la primera palabra y arma la oración.
         var first = parts[0];
         first = char.ToUpperInvariant(first[0]) + first[1..];
         var rest = string.Join("; ", parts.Skip(1));
@@ -542,12 +543,37 @@ public sealed class GetReportsSummaryHandler
         return (eyebrow, text);
     }
 
-    private readonly record struct EnrichedPayment(
+    // ===== Tipos internos =====
+
+    private enum RevenueSource { Payment, Deposit }
+
+    private readonly record struct ApptInfo(
+        Guid Id,
+        Guid CustomerId,
+        Guid ServiceId,
+        Guid StylistId,
+        DateTime StartAt,
+        DateTime EndAt,
+        AppointmentStatus Status);
+
+    private readonly record struct RevenueItem(
         Guid AppointmentId,
         Guid ServiceId,
         Guid StylistId,
         DateTime StartAt,
+        AppointmentStatus Status,
         PaymentMethod Method,
         string? Provider,
-        decimal Total);
+        decimal Amount,
+        RevenueSource Source)
+    {
+        /// <summary>True si la cita asociada se atendió (Completed/InProgress).</summary>
+        public bool IsAttended =>
+            Status == AppointmentStatus.Completed
+            || Status == AppointmentStatus.InProgress;
+    }
+
+    private sealed record RevenueAggregation(
+        IReadOnlyList<ApptInfo> AllAppointments,
+        IReadOnlyList<RevenueItem> Items);
 }
