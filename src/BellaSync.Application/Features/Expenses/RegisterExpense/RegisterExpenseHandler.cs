@@ -6,6 +6,7 @@ using BellaSync.Application.Features.Expenses.Dtos;
 using BellaSync.Application.Features.Expenses.Shared;
 using BellaSync.Domain.Entities;
 using BellaSync.Domain.ValueObjects;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace BellaSync.Application.Features.Expenses.RegisterExpense;
@@ -83,6 +84,13 @@ public sealed class RegisterExpenseHandler
             "Egreso {ExpenseId} registrado: {Concept} {Amount} ({Method})",
             expense.Id, expense.Concept, expense.Amount.Amount, expense.Method);
 
-        return Result<ExpenseResponse>.Success(ExpenseMapper.ToResponse(expense));
+        // Re-leer con Include para que el mapper devuelva el nombre del
+        // user que registró (aparece en la sección Egresos de /caja).
+        var created = await _db.Expenses
+            .AsNoTracking()
+            .Include(e => e.RegisteredByUser)
+            .FirstAsync(e => e.Id == expense.Id, ct);
+
+        return Result<ExpenseResponse>.Success(ExpenseMapper.ToResponse(created));
     }
 }

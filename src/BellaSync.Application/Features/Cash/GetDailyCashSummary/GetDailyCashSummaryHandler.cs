@@ -43,6 +43,7 @@ public sealed class GetDailyCashSummaryHandler
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Service)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Stylist)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Customer)
+            .Include(p => p.RegisteredByUser)
             .Where(p => p.RegisteredAt >= dayStartUtc && p.RegisteredAt < dayEndUtc)
             .OrderBy(p => p.RegisteredAt)
             .ToListAsync(ct);
@@ -169,6 +170,7 @@ public sealed class GetDailyCashSummaryHandler
         // Egresos del día — mismo rango UTC.
         var expenses = await _db.Expenses
             .AsNoTracking()
+            .Include(e => e.RegisteredByUser)
             .Where(e => e.RegisteredAt >= dayStartUtc && e.RegisteredAt < dayEndUtc)
             .OrderBy(e => e.RegisteredAt)
             .ToListAsync(ct);

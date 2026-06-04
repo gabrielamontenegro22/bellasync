@@ -73,6 +73,8 @@ public class PaymentVoucher : BaseEntity, ITenantEntity
 
     public DateTime? DecidedAt { get; private set; }
     public Guid? DecidedBy { get; private set; }   // UserId del que validó
+    /// <summary>Nav property al user que validó/rechazó (para mostrar nombre en cola).</summary>
+    public User? DecidedByUser { get; private set; }
     public string? DecisionNotes { get; private set; }
 
     // ===== MÉTODOS VERBALES =====

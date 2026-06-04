@@ -20,6 +20,7 @@ public sealed class GetAppointmentHandler : IQueryHandler<GetAppointmentQuery, A
         var appointment = await _db.Appointments
             .AsNoTracking()
             .Include(a => a.Customer).Include(a => a.Stylist).Include(a => a.Service)
+            .Include(a => a.CancelledByUser)
             .FirstOrDefaultAsync(a => a.Id == query.Id, ct);
 
         if (appointment is null)

@@ -34,6 +34,7 @@ public sealed class GetCustomerPaymentsHandler
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Service)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Stylist)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Customer)
+            .Include(p => p.RegisteredByUser)
             .Where(p => p.Appointment!.CustomerId == query.CustomerId)
             .OrderByDescending(p => p.RegisteredAt)
             .ToListAsync(ct);

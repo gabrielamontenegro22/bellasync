@@ -94,7 +94,10 @@ public sealed class ValidateVoucherHandler
                             || rejectedAppt.Status == AppointmentStatus.Confirmed)
                         {
                             var wasConfirmed = rejectedAppt.Status == AppointmentStatus.Confirmed;
-                            rejectedAppt.Cancel(now, reason);
+                            // El user que rechaza el voucher es el responsable
+                            // de la cancelación derivada — pasamos su id para que
+                            // la auditoría refleje quién canceló (no "Sistema").
+                            rejectedAppt.Cancel(now, reason, command.DecidedByUserId);
 
                             // Bypassear el flujo de CancelAppointmentHandler nos
                             // dejaba sin la propagación a WhatsApp. Replicamos
@@ -139,6 +142,17 @@ public sealed class ValidateVoucherHandler
             "Voucher {VoucherId} decidido como {Decision} por {UserId}",
             voucher.Id, command.Decision, command.DecidedByUserId);
 
-        return Result<VoucherResponse>.Success(VoucherMapper.ToResponse(voucher, now));
+        // Re-leer con Include de DecidedByUser para que el mapper devuelva
+        // el nombre del user que decidió (la nav property no se auto-popula
+        // solo por setear el FK DecidedBy en memoria).
+        var fresh = await _db.PaymentVouchers
+            .AsNoTracking()
+            .Include(v => v.Appointment).ThenInclude(a => a!.Customer)
+            .Include(v => v.Appointment).ThenInclude(a => a!.Service)
+            .Include(v => v.Appointment).ThenInclude(a => a!.Stylist)
+            .Include(v => v.DecidedByUser)
+            .FirstAsync(v => v.Id == voucher.Id, ct);
+
+        return Result<VoucherResponse>.Success(VoucherMapper.ToResponse(fresh, now));
     }
 }

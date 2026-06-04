@@ -45,6 +45,7 @@ internal static class VoucherMapper
             Status = v.Status.ToString(),
             Urgency = urgency,
             DecidedAt = v.DecidedAt,
+            DecidedByUserName = v.DecidedByUser?.FullName,
             DecisionNotes = v.DecisionNotes,
         };
     }

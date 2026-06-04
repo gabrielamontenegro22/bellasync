@@ -26,6 +26,8 @@ export interface PaymentResponse {
   total: number  // amount + tip (conveniencia del DTO)
   reference: string | null
   registeredByUserId: string | null
+  /** Nombre del user que cobró ("María González"). Null si fue automático. */
+  registeredByUserName: string | null
   registeredAt: string  // ISO
   // snapshot mínimo del contexto de la cita
   customerName: string

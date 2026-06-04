@@ -126,12 +126,14 @@ public sealed class RegisterPaymentHandler
             "Pago {PaymentId} registrado para cita {AppointmentId} en tenant {TenantId} ({Method} ${Amount})",
             payment.Id, payment.AppointmentId, payment.TenantId, payment.Method, payment.Amount.Amount);
 
-        // 5. Re-leer con includes para que el mapper tenga service+stylist.
+        // 5. Re-leer con includes para que el mapper tenga service+stylist
+        //    + nombre del user que cobró (auditoría en /caja).
         var created = await _db.Payments
             .AsNoTracking()
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Service)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Stylist)
             .Include(p => p.Appointment)!.ThenInclude(a => a!.Customer)
+            .Include(p => p.RegisteredByUser)
             .FirstAsync(p => p.Id == payment.Id, ct);
 
         return Result<PaymentResponse>.Success(PaymentMapper.ToResponse(created));

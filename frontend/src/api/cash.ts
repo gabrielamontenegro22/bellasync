@@ -59,6 +59,8 @@ export interface CashClosing {
   totalAmount: number
   closedAt: string  // ISO
   closedByUserId: string | null
+  /** Nombre del user que firmó el cierre (historial). */
+  closedByUserName: string | null
 }
 
 export interface CreateCashClosingRequest {

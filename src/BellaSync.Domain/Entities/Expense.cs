@@ -101,6 +101,9 @@ public class Expense : BaseEntity, ITenantEntity
     /// </summary>
     public Guid? RegisteredByUserId { get; private set; }
 
+    /// <summary>Nav property al user que registró (para mostrar nombre en UI).</summary>
+    public User? RegisteredByUser { get; private set; }
+
     /// <summary>Cuándo se registró (UTC).</summary>
     public DateTime RegisteredAt { get; private set; }
 

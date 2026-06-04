@@ -19,5 +19,6 @@ internal static class CashClosingMapper
         TotalAmount = cc.TotalAmount.Amount,
         ClosedAt = cc.ClosedAt,
         ClosedByUserId = cc.ClosedByUserId,
+        ClosedByUserName = cc.ClosedByUser?.FullName,
     };
 }

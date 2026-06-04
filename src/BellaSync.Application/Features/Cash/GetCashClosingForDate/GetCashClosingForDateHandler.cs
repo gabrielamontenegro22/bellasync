@@ -22,6 +22,7 @@ public sealed class GetCashClosingForDateHandler
     {
         var cc = await _db.CashClosings
             .AsNoTracking()
+            .Include(c => c.ClosedByUser)
             .FirstOrDefaultAsync(c => c.ClosedDate == query.Date, ct);
 
         return Result<CashClosingResponse?>.Success(

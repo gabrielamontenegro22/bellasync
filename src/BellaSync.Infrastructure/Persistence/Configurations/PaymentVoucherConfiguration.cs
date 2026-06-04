@@ -54,5 +54,12 @@ public class PaymentVoucherConfiguration : IEntityTypeConfiguration<PaymentVouch
             .WithMany()
             .HasForeignKey(v => v.AppointmentId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Nav property DecidedByUser para mostrar "Validado por X" en la
+        // cola y en el panel de detalle del voucher.
+        builder.HasOne(v => v.DecidedByUser)
+            .WithMany()
+            .HasForeignKey(v => v.DecidedBy)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

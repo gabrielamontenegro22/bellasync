@@ -40,6 +40,7 @@ public sealed class ListPendingVouchersHandler
             .Include(v => v.Appointment).ThenInclude(a => a!.Customer)
             .Include(v => v.Appointment).ThenInclude(a => a!.Service)
             .Include(v => v.Appointment).ThenInclude(a => a!.Stylist)
+            .Include(v => v.DecidedByUser)
             .Where(v => v.Status == PaymentVoucherStatus.Pending
                      || (v.DecidedAt != null && v.DecidedAt >= cutoff))
             // Orden:

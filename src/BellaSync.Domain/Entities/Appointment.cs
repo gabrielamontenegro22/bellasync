@@ -155,6 +155,13 @@ public class Appointment : BaseEntity, ITenantEntity
 
     public DateTime? CancelledAt { get; private set; }
     public string? CancellationReason { get; private set; }
+    /// <summary>
+    /// User que canceló la cita. Null para cancelaciones automáticas
+    /// (ej: rechazo de voucher cancela la cita en background) o para
+    /// cancelaciones viejas anteriores a este campo.
+    /// </summary>
+    public Guid? CancelledByUserId { get; private set; }
+    public User? CancelledByUser { get; private set; }
 
     public DateTime? StartedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
@@ -231,8 +238,12 @@ public class Appointment : BaseEntity, ITenantEntity
     /// Cancela la cita. Legal desde Pending o Confirmed (no desde estados terminales
     /// ni desde InProgress — para evitar cancelar lo que ya está ocurriendo).
     /// Idempotente: si ya está cancelada, no pisa CancelledAt ni la razón.
+    ///
+    /// `cancelledByUserId` es opcional: en cancelaciones automáticas
+    /// (background, rechazo de voucher) viene null y queda como "Sistema"
+    /// en la UI. En cancelaciones desde la app, viene el UserId loggeado.
     /// </summary>
-    public void Cancel(DateTime utcNow, string? reason = null)
+    public void Cancel(DateTime utcNow, string? reason = null, Guid? cancelledByUserId = null)
     {
         if (Status == AppointmentStatus.Cancelled) return;
         if (Status != AppointmentStatus.Pending && Status != AppointmentStatus.Confirmed)
@@ -242,6 +253,7 @@ public class Appointment : BaseEntity, ITenantEntity
         Status = AppointmentStatus.Cancelled;
         CancelledAt = utcNow;
         CancellationReason = NormalizeNotes(reason);
+        CancelledByUserId = cancelledByUserId;
         HoldExpiresAt = null;
     }
 

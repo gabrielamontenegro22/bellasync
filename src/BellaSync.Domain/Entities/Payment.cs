@@ -126,6 +126,13 @@ public class Payment : BaseEntity, ITenantEntity
     /// </summary>
     public Guid? RegisteredByUserId { get; private set; }
 
+    /// <summary>
+    /// Nav property al user que registró. Carga vía Include cuando
+    /// querés mostrar el nombre en UI (caja/historial). Null si el
+    /// FK es null o si el user fue archivado pero el row sigue.
+    /// </summary>
+    public User? RegisteredByUser { get; private set; }
+
     /// <summary>Cuándo se registró (UTC).</summary>
     public DateTime RegisteredAt { get; private set; }
 

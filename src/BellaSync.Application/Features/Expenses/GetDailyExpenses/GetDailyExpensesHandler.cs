@@ -34,6 +34,7 @@ public sealed class GetDailyExpensesHandler
 
         var expenses = await _db.Expenses
             .AsNoTracking()
+            .Include(e => e.RegisteredByUser)
             .Where(e => e.RegisteredAt >= dayStartUtc && e.RegisteredAt < dayEndUtc)
             .OrderBy(e => e.RegisteredAt)
             .ToListAsync(ct);

@@ -30,6 +30,7 @@ public sealed class ListCashClosingsHandler
 
         var rows = await _db.CashClosings
             .AsNoTracking()
+            .Include(cc => cc.ClosedByUser)
             .Where(cc => cc.ClosedDate >= from && cc.ClosedDate <= to)
             .OrderByDescending(cc => cc.ClosedDate)
             .Take(100)
