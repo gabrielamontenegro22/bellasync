@@ -46,6 +46,13 @@ public static class DependencyInjection
         // siguen scoped, lo dejamos coherente.
         services.AddScoped<BellaSync.Application.Common.Services.WhatsAppTemplateRenderer>();
 
+        // Helper que centraliza la lógica de encolar / cancelar mensajes
+        // WhatsApp para una cita. Lo usan CreateAppointment (ConfirmCreated
+        // inmediato), Cancel/Reschedule (cancelar Queued previos), y el
+        // dispatcher (también lo podría usar, hoy hace su propia lógica
+        // para los time-based porque escanea cross-tenant).
+        services.AddScoped<BellaSync.Application.Features.WhatsApp.WhatsAppEnqueuer>();
+
         return services;
     }
 

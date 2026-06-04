@@ -4,6 +4,7 @@ using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Appointments.Dtos;
 using BellaSync.Application.Features.Appointments.Shared;
+using BellaSync.Application.Features.WhatsApp;
 using BellaSync.Domain.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -15,13 +16,18 @@ public sealed class CancelAppointmentHandler
 {
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
+    private readonly WhatsAppEnqueuer _whatsApp;
     private readonly ILogger<CancelAppointmentHandler> _logger;
 
     public CancelAppointmentHandler(
-        IApplicationDbContext db, IClock clock, ILogger<CancelAppointmentHandler> logger)
+        IApplicationDbContext db,
+        IClock clock,
+        WhatsAppEnqueuer whatsApp,
+        ILogger<CancelAppointmentHandler> logger)
     {
         _db = db;
         _clock = clock;
+        _whatsApp = whatsApp;
         _logger = logger;
     }
 
@@ -43,6 +49,13 @@ public sealed class CancelAppointmentHandler
         {
             return ApplicationError.Validation("appointment.invalid_transition", ex.Message);
         }
+
+        // Cancelar WhatsApp Queued de esta cita: si la cancelación ocurre
+        // pocas horas antes, el Reminder24h/Ready2h que el dispatcher ya
+        // encoló no debería salir (sería absurdo mandar "te esperamos" a
+        // una cliente que canceló). Idempotente: si no hay Queued, no-op.
+        await _whatsApp.CancelQueuedForAppointmentAsync(
+            appointment.TenantId, appointment.Id, ct);
 
         await _db.SaveChangesAsync(ct);
 
