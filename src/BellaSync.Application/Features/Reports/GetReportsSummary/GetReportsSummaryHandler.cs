@@ -59,8 +59,15 @@ public sealed class GetReportsSummaryHandler
         var tenantId = _currentTenant.TenantId;
 
         // Rango UTC inclusive-exclusive: [From 00:00 CO, To+1día 00:00 CO).
-        var startUtc = query.From.ToDateTime(TimeOnly.MinValue) - ColombiaOffset;
-        var endUtc = query.To.AddDays(1).ToDateTime(TimeOnly.MinValue) - ColombiaOffset;
+        // SpecifyKind(Utc) es OBLIGATORIO para que Npgsql acepte estos
+        // valores como timestamp with time zone — sin el Kind explícito
+        // tira "Cannot write DateTime with Kind=Unspecified".
+        var startUtc = DateTime.SpecifyKind(
+            query.From.ToDateTime(TimeOnly.MinValue) - ColombiaOffset,
+            DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(
+            query.To.AddDays(1).ToDateTime(TimeOnly.MinValue) - ColombiaOffset,
+            DateTimeKind.Utc);
 
         // ===== Citas válidas del período (las que cuentan para todo) =====
         var validAppointments = _db.Appointments
