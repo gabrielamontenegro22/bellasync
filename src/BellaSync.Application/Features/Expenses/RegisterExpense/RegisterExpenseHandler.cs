@@ -67,6 +67,7 @@ public sealed class RegisterExpenseHandler
                 concept: command.Concept,
                 amount: amount,
                 method: command.Method,
+                provider: command.Provider,
                 registeredByUserId: command.RegisteredByUserId,
                 utcNow: _clock.UtcNow);
         }

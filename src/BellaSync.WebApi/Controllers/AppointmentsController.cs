@@ -202,6 +202,7 @@ public class AppointmentsController : ControllerBase
         var command = new RegisterPaymentCommand(
             AppointmentId: id,
             Method: request.Method,
+            Provider: request.Provider,
             Amount: request.Amount,
             Tip: request.Tip,
             Reference: request.Reference,
@@ -215,7 +216,8 @@ public class AppointmentsController : ControllerBase
         PaymentMethod Method,
         decimal Amount,
         decimal Tip,
-        string? Reference);
+        string? Reference,
+        string? Provider = null);
 
     private static Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary BuildModelState(
         FluentValidation.Results.ValidationResult result)

@@ -28,6 +28,8 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .IsRequired()
             .HasConversion<int>();
 
+        builder.Property(e => e.Provider).HasMaxLength(50);
+
         builder.Property(e => e.Amount)
             .IsRequired()
             .HasColumnType("numeric(12,2)")

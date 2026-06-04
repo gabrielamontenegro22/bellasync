@@ -14,8 +14,11 @@ public class ExpenseResponse
     /// <summary>Monto del egreso (positivo).</summary>
     public decimal Amount { get; set; }
 
-    /// <summary>"Cash" / "Bancolombia" / "Nequi" / etc.</summary>
+    /// <summary>"Cash" / "Transfer" / "Card" / "Other"</summary>
     public string Method { get; set; } = string.Empty;
+
+    /// <summary>Banco (si Transfer) o marca (si Card). Null para Cash.</summary>
+    public string? Provider { get; set; }
 
     public Guid? RegisteredByUserId { get; set; }
     public DateTime RegisteredAt { get; set; }

@@ -60,6 +60,19 @@ public sealed class GetDailyCashSummaryHandler
                 Method = g.Key.ToString(),
                 Count = g.Count(),
                 Total = g.Sum(p => p.Amount.Amount + p.Tip.Amount),
+                // Sub-desglose por banco/billetera/marca. Para Cash queda
+                // vacío porque agrupar por Provider=null no aporta.
+                ByProvider = g.Key == BellaSync.Domain.Entities.PaymentMethod.Cash
+                    ? new List<ProviderBreakdownItem>()
+                    : g.GroupBy(p => p.Provider)
+                        .Select(pg => new ProviderBreakdownItem
+                        {
+                            Provider = pg.Key,
+                            Count = pg.Count(),
+                            Total = pg.Sum(p => p.Amount.Amount + p.Tip.Amount),
+                        })
+                        .OrderByDescending(p => p.Total)
+                        .ToList(),
             })
             // Orden: por monto descendente — los métodos con más plata arriba.
             .OrderByDescending(b => b.Total)

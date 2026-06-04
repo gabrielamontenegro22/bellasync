@@ -7,19 +7,20 @@ import { api } from './axios'
  * (pago en sitio al terminar) son entidades distintas. Acá solo el segundo.
  */
 
-export type PaymentMethod =
-  | 'Cash'
-  | 'Bancolombia'
-  | 'Nequi'
-  | 'Daviplata'
-  | 'CreditCard'
-  | 'DebitCard'
-  | 'Other'
+/**
+ * 3 categorías top + escape "Other". El detalle del banco/billetera/marca
+ * vive aparte en `provider` (string libre dentro de una lista predefinida
+ * por el frontend; el backend solo valida que si method=Transfer entonces
+ * provider debe venir).
+ */
+export type PaymentMethod = 'Cash' | 'Transfer' | 'Card' | 'Other'
 
 export interface PaymentResponse {
   id: string
   appointmentId: string
   method: PaymentMethod
+  /** Banco ("Bancolombia"), billetera ("Nequi") o marca ("Visa"). null para Cash. */
+  provider: string | null
   amount: number
   tip: number
   total: number  // amount + tip (conveniencia del DTO)
@@ -35,6 +36,8 @@ export interface PaymentResponse {
 
 export interface RegisterPaymentRequest {
   method: PaymentMethod
+  /** Obligatorio si method=Transfer; opcional para Card; null para Cash. */
+  provider?: string | null
   amount: number
   tip: number
   reference?: string | null

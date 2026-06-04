@@ -9,7 +9,7 @@ import type { AppointmentResponse } from '@/api/appointments'
 import { cls } from '@/lib/cls'
 import { useCustomer, useCustomerAppointments } from '../hooks'
 import { useCustomerPayments } from '@/features/payments/hooks'
-import { METHOD_BADGE } from '@/features/payments/components/RegisterPaymentModal'
+import { getPaymentBadge } from '@/features/payments/paymentBadge'
 import {
   TAG_BADGE, ageFromBday, fmtBday, fmtCop, fmtDateTime,
   fmtMonth, initialsOf, relativeFrom, toneOf, whatsappLink,
@@ -555,7 +555,7 @@ function PagosTab({ customerId }: { customerId: string }) {
               </thead>
               <tbody>
                 {payments.map(p => {
-                  const badge = METHOD_BADGE[p.method]
+                  const badge = getPaymentBadge(p.method, p.provider)
                   return (
                     <tr key={p.id} className="border-b border-warm-100 last:border-0 hover:bg-warm-50/40">
                       <td className="py-3.5 pl-6 pr-3 text-warm-700 tabular-nums">
@@ -565,7 +565,7 @@ function PagosTab({ customerId }: { customerId: string }) {
                       <td className="py-3.5 px-3">
                         <span className={cls(
                           'text-[11.5px] px-2 py-0.5 rounded-md',
-                          badge.bg, badge.fg,
+                          badge.className,
                         )}>
                           {badge.label}
                         </span>

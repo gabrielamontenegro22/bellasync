@@ -27,6 +27,10 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .IsRequired()
             .HasConversion<int>();
 
+        // Provider: nombre del banco/billetera/marca. Nullable; obligatorio
+        // a nivel dominio solo cuando Method=Transfer.
+        builder.Property(p => p.Provider).HasMaxLength(50);
+
         // Money se persiste como numeric(12,2). Mismo patrón que Service y voucher.
         builder.Property(p => p.Amount)
             .IsRequired()

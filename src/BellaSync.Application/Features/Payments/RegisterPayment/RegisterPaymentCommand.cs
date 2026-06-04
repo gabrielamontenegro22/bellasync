@@ -14,6 +14,11 @@ namespace BellaSync.Application.Features.Payments.RegisterPayment;
 public sealed record RegisterPaymentCommand(
     Guid AppointmentId,
     PaymentMethod Method,
+    /// <summary>
+    /// Banco/billetera (Transfer) o marca (Card). Obligatorio para
+    /// Transfer; opcional para Card; debe ser null para Cash.
+    /// </summary>
+    string? Provider,
     decimal Amount,
     decimal Tip,
     string? Reference,

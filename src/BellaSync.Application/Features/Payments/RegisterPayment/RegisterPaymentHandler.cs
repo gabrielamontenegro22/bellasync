@@ -75,6 +75,7 @@ public sealed class RegisterPaymentHandler
                 tenantId: _currentTenant.TenantId,
                 appointmentId: appointment.Id,
                 method: command.Method,
+                provider: command.Provider,
                 amount: amount,
                 tip: tip,
                 reference: command.Reference,

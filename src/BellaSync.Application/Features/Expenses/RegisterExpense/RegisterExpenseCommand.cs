@@ -15,6 +15,11 @@ public sealed record RegisterExpenseCommand(
     decimal Amount,
     PaymentMethod Method,
     /// <summary>
+    /// Banco/billetera (Transfer) o marca (Card). Obligatorio para
+    /// Transfer; opcional para Card; null para Cash.
+    /// </summary>
+    string? Provider,
+    /// <summary>
     /// Quién registra el egreso. El controller lo extrae del JWT.
     /// null permitido para tests / scripts internos.
     /// </summary>

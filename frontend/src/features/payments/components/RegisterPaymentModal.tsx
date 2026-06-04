@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
-import { Banknote, CheckCircle, CreditCard, Smartphone } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
 import { Button, Card, Input } from '@/components/ui'
 import type { AppointmentResponse } from '@/api/appointments'
 import type { PaymentMethod } from '@/api/payments'
-import { cls } from '@/lib/cls'
 import { extractApiError } from '@/lib/extractApiError'
 import { useRegisterPayment } from '../hooks'
+import { PaymentMethodPicker } from './PaymentMethodPicker'
 
 interface RegisterPaymentModalProps {
   appointment: AppointmentResponse
@@ -25,6 +25,7 @@ interface RegisterPaymentModalProps {
  */
 export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentModalProps) {
   const [method, setMethod] = useState<PaymentMethod>('Cash')
+  const [provider, setProvider] = useState<string | null>(null)
   // Saldo restante = total servicio - lo que ya entró por anticipo.
   // Si no hubo anticipo, validatedDepositAmount es 0 y queda el total.
   // Si la cliente sobre-pagó el anticipo (raro), queda negativo y el
@@ -62,6 +63,7 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
         appointmentId: appointment.id,
         req: {
           method,
+          provider,
           amount: Number(amount),
           tip: Number(tip),
           reference: reference.trim() || null,
@@ -77,7 +79,12 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
     }
   }
 
-  const canSubmit = amount > 0 && !submittingRef.current
+  // Si es Transfer, no podemos enviar sin banco — el backend devolvería 400.
+  const providerRequired = method === 'Transfer'
+  const canSubmit =
+    amount > 0 &&
+    !submittingRef.current &&
+    (!providerRequired || !!provider)
 
   // Pantalla de éxito tras un registro exitoso. El usuario ve "✓ Pago
   // registrado por $X" y cierra él manualmente (o automáticamente tras
@@ -157,32 +164,19 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
           )}
         </div>
 
-        {/* Método de pago — pills coloreadas */}
+        {/* Método de pago — 3 chips + picker dinámico de banco/marca */}
         <div>
           <label className="mb-2 block text-xs uppercase tracking-wide text-warm-500">
             Método de pago
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            {METHOD_OPTIONS.map(opt => {
-              const selected = method === opt.value
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setMethod(opt.value)}
-                  className={cls(
-                    'flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg border text-[12px] font-medium transition',
-                    selected
-                      ? `${opt.activeBg} ${opt.activeFg} ${opt.activeBorder} ring-2 ring-offset-1 ${opt.activeRing}`
-                      : 'bg-white border-warm-200 text-warm-600 hover:border-warm-300',
-                  )}
-                >
-                  <opt.icon size={16} />
-                  {opt.label}
-                </button>
-              )
-            })}
-          </div>
+          <PaymentMethodPicker
+            method={method}
+            provider={provider}
+            onChange={(m, p) => {
+              setMethod(m)
+              setProvider(p)
+            }}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -221,8 +215,9 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
             onChange={e => setReference(e.target.value)}
             placeholder={
               method === 'Cash' ? '—' :
-              method === 'CreditCard' || method === 'DebitCard' ? 'Número de voucher del datáfono' :
-              'Número de aprobación de la transferencia'
+              method === 'Card' ? 'Número de voucher del datáfono' :
+              method === 'Transfer' ? 'Número de aprobación de la transferencia' :
+              'Descripción (cheque, divisa, etc.)'
             }
             disabled={method === 'Cash'}
           />
@@ -258,36 +253,6 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
   )
 }
 
-// ===== Catálogo visual de métodos =====
-// Mantener acá (no en customerLook) porque son específicos del módulo Pagos.
-// Cada método tiene su par bg/fg para que la pill seleccionada sea distintiva.
-
-interface MethodOption {
-  value: PaymentMethod
-  label: string
-  icon: React.ComponentType<{ size?: number; className?: string }>
-  activeBg: string
-  activeFg: string
-  activeBorder: string
-  activeRing: string
-}
-
-const METHOD_OPTIONS: MethodOption[] = [
-  { value: 'Cash',        label: 'Efectivo',    icon: Banknote,   activeBg: 'bg-brand-50',  activeFg: 'text-brand-800', activeBorder: 'border-brand-200',  activeRing: 'ring-brand-200' },
-  { value: 'Bancolombia', label: 'Bancolombia', icon: Smartphone, activeBg: 'bg-[#fef3c4]', activeFg: 'text-[#7d5b14]', activeBorder: 'border-[#e6d5a3]', activeRing: 'ring-[#e6d5a3]' },
-  { value: 'Nequi',       label: 'Nequi',       icon: Smartphone, activeBg: 'bg-[#fce4f1]', activeFg: 'text-[#a02670]', activeBorder: 'border-[#f4cce0]', activeRing: 'ring-[#f4cce0]' },
-  { value: 'Daviplata',   label: 'Daviplata',   icon: Smartphone, activeBg: 'bg-[#fee2e2]', activeFg: 'text-[#9a2828]', activeBorder: 'border-[#fbb6b6]', activeRing: 'ring-[#fbb6b6]' },
-  { value: 'CreditCard',  label: 'T. crédito',  icon: CreditCard, activeBg: 'bg-warm-100',  activeFg: 'text-warm-800',  activeBorder: 'border-warm-300',  activeRing: 'ring-warm-250' },
-  { value: 'DebitCard',   label: 'T. débito',   icon: CreditCard, activeBg: 'bg-warm-100',  activeFg: 'text-warm-800',  activeBorder: 'border-warm-300',  activeRing: 'ring-warm-250' },
-]
-
-/** Mapeo público para que otros componentes (tabla de pagos del CRM) pinten consistente */
-export const METHOD_BADGE: Record<PaymentMethod, { label: string; bg: string; fg: string }> = {
-  Cash:        { label: 'Efectivo',     bg: 'bg-brand-50',   fg: 'text-brand-800' },
-  Bancolombia: { label: 'Bancolombia',  bg: 'bg-[#fef3c4]',  fg: 'text-[#7d5b14]' },
-  Nequi:       { label: 'Nequi',        bg: 'bg-[#fce4f1]',  fg: 'text-[#a02670]' },
-  Daviplata:   { label: 'Daviplata',    bg: 'bg-[#fee2e2]',  fg: 'text-[#9a2828]' },
-  CreditCard:  { label: 'T. crédito',   bg: 'bg-warm-100',   fg: 'text-warm-700'  },
-  DebitCard:   { label: 'T. débito',    bg: 'bg-warm-100',   fg: 'text-warm-700'  },
-  Other:       { label: 'Otro',         bg: 'bg-warm-100',   fg: 'text-warm-600'  },
-}
+// Look del badge en tablas/cards: getPaymentBadge(method, provider).
+// Re-exportado para compatibilidad con código existente.
+export { getPaymentBadge } from '../paymentBadge'

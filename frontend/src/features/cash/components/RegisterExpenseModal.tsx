@@ -5,6 +5,7 @@ import { cls } from '@/lib/cls'
 import { extractApiError } from '@/lib/extractApiError'
 import { registerExpense, type ExpenseResponse } from '@/api/expenses'
 import type { PaymentMethod } from '@/api/payments'
+import { PaymentMethodPicker } from '@/features/payments/components/PaymentMethodPicker'
 
 interface Props {
   open: boolean
@@ -33,6 +34,7 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   const [concept, setConcept] = useState('')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('Cash')
+  const [provider, setProvider] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const submittingRef = useRef(false)
 
@@ -42,6 +44,7 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
       setConcept('')
       setAmount('')
       setMethod('Cash')
+      setProvider(null)
       setError(null)
       submittingRef.current = false
     }
@@ -67,7 +70,8 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   const amountNum = parseInt(amount.replace(/[^0-9]/g, '')) || 0
   const conceptOk = concept.trim().length > 0
   const amountOk = amountNum > 0
-  const canSubmit = conceptOk && amountOk && !mut.isPending
+  const providerOk = method !== 'Transfer' || !!provider
+  const canSubmit = conceptOk && amountOk && providerOk && !mut.isPending
 
   const handleSubmit = () => {
     if (!canSubmit || submittingRef.current) return
@@ -77,6 +81,7 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
       concept: concept.trim(),
       amount: amountNum,
       method,
+      provider,
     })
   }
 
@@ -159,26 +164,15 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
             <label className="text-[12.5px] font-medium text-warm-700 block mb-1.5">
               ¿Cómo se pagó?
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              {METHODS.map((m) => {
-                const active = method === m.value
-                return (
-                  <button
-                    key={m.value}
-                    type="button"
-                    onClick={() => setMethod(m.value)}
-                    className={cls(
-                      'px-3 py-2 rounded-lg text-[12.5px] font-medium border transition',
-                      active
-                        ? 'bg-warm-800 text-white border-warm-800'
-                        : 'bg-white text-warm-600 border-warm-200 hover:border-warm-300',
-                    )}
-                  >
-                    {m.label}
-                  </button>
-                )
-              })}
-            </div>
+            <PaymentMethodPicker
+              method={method}
+              provider={provider}
+              onChange={(m, p) => {
+                setMethod(m)
+                setProvider(p)
+              }}
+              hideOther
+            />
             {method === 'Cash' ? (
               <p className="text-[11px] text-warm-500 mt-1.5 flex items-center gap-1">
                 <Banknote size={11} strokeWidth={1.8} />
@@ -227,9 +221,3 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   )
 }
 
-const METHODS: Array<{ value: PaymentMethod; label: string }> = [
-  { value: 'Cash', label: 'Efectivo' },
-  { value: 'Bancolombia', label: 'Bancolombia' },
-  { value: 'Nequi', label: 'Nequi' },
-  { value: 'Daviplata', label: 'Daviplata' },
-]

@@ -13,7 +13,7 @@ import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
 import { useCustomerAppointments } from '@/features/customers/hooks'
 import { useCustomerPayments } from '@/features/payments/hooks'
-import { METHOD_BADGE } from '@/features/payments/components/RegisterPaymentModal'
+import { getPaymentBadge } from '@/features/payments/paymentBadge'
 import {
   fmtCop, fmtMonth, initialsOf, toneOf, whatsappLink,
 } from '@/features/customers/lib/customerLook'
@@ -549,7 +549,7 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
           ) : (
             <div className="space-y-1.5">
               {appointmentPayments.map(p => {
-                const badge = METHOD_BADGE[p.method]
+                const badge = getPaymentBadge(p.method, p.provider)
                 return (
                   <div
                     key={p.id}
@@ -558,7 +558,7 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={cls(
                         'text-[10.5px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider',
-                        badge.bg, badge.fg,
+                        badge.className,
                       )}>
                         {badge.label}
                       </span>
