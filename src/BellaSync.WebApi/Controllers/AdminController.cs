@@ -3,8 +3,10 @@ using BellaSync.Application.Features.Admin.SeedDemo;
 using BellaSync.Application.Features.Tenants.Dtos;
 using BellaSync.Application.Features.Tenants.GetCommissionsSetting;
 using BellaSync.Application.Features.Tenants.GetPaymentPolicy;
+using BellaSync.Application.Features.Tenants.GetTenantInfo;
 using BellaSync.Application.Features.Tenants.UpdateCommissionsSetting;
 using BellaSync.Application.Features.Tenants.UpdatePaymentPolicy;
+using BellaSync.Application.Features.Tenants.UpdateTenantInfo;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -112,6 +114,41 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> UpdateCommissionsSetting(
         [FromBody] UpdateCommissionsSettingCommand command,
         [FromServices] ICommandHandler<UpdateCommissionsSettingCommand, CommissionsSettingResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(command, ct);
+        return result.ToActionResult();
+    }
+
+    // ============================================================
+    // Información general del salón
+    // ============================================================
+
+    /// <summary>
+    /// GET /api/Admin/tenant-info
+    /// Lee la info pública/contacto del salón (nombre, dirección, etc.).
+    /// </summary>
+    [HttpGet("tenant-info")]
+    [ProducesResponseType(typeof(TenantInfoResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTenantInfo(
+        [FromServices] IQueryHandler<GetTenantInfoQuery, TenantInfoResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetTenantInfoQuery(), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// PUT /api/Admin/tenant-info
+    /// Actualiza la info. Slug NO se cambia por acá. Validaciones de
+    /// dominio: email con @, URL http(s), maxlen por campo.
+    /// </summary>
+    [HttpPut("tenant-info")]
+    [ProducesResponseType(typeof(TenantInfoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateTenantInfo(
+        [FromBody] UpdateTenantInfoCommand command,
+        [FromServices] ICommandHandler<UpdateTenantInfoCommand, TenantInfoResponse> handler,
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(command, ct);

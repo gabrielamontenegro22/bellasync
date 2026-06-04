@@ -26,7 +26,7 @@ interface ConfigSection {
 // se usa día a día. Acá quedan cosas que se configuran una vez y rara
 // vez se tocan.
 const CONFIG_SECTIONS: ConfigSection[] = [
-  { to: '/configuracion/general',     label: 'Información general',       icon: Building2,      hint: 'Nombre, dirección, logo',     disabled: true },
+  { to: '/configuracion/general',     label: 'Información general',       icon: Building2,      hint: 'Nombre, dirección, logo' },
   { to: '/configuracion/horario',     label: 'Horario del salón',          icon: CalendarClock,  hint: 'Días y franjas',              disabled: true },
   { to: '/configuracion/pagos',       label: 'Política de pagos',          icon: Wallet,         hint: 'Cupo reservado y anticipación' },
   { to: '/configuracion/comisiones',  label: 'Comisiones',                 icon: Percent,        hint: 'Activar o desactivar el módulo' },

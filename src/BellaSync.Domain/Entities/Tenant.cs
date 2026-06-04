@@ -93,6 +93,29 @@ public class Tenant : BaseEntity
     /// </summary>
     public bool CommissionsEnabled { get; private set; }
 
+    // ===== INFORMACIÓN GENERAL DEL SALÓN =====
+    // Todos opcionales. Se usan en: portal público de booking (logo,
+    // dirección), confirmaciones por WhatsApp (nombre, teléfono),
+    // factura (todos), etc.
+
+    /// <summary>Dirección física del salón. Ej: "Cra 25 #18-32, Neiva".</summary>
+    public string? Address { get; private set; }
+
+    /// <summary>Teléfono del salón (no del WhatsApp, el del local).</summary>
+    public string? Phone { get; private set; }
+
+    /// <summary>Email de contacto público del salón.</summary>
+    public string? ContactEmail { get; private set; }
+
+    /// <summary>URL pública del logo del salón (CDN, Imgur, lo que sea).</summary>
+    public string? LogoUrl { get; private set; }
+
+    /// <summary>Handle de Instagram sin @ (ej: "bella.spa.neiva").</summary>
+    public string? InstagramHandle { get; private set; }
+
+    /// <summary>Descripción corta del salón. Aparece en el portal público de booking.</summary>
+    public string? Description { get; private set; }
+
     // Relación inversa: usuarios que pertenecen a este salón
     public ICollection<User> Users { get; private set; } = new List<User>();
 
@@ -146,5 +169,52 @@ public class Tenant : BaseEntity
     public void SetCommissionsEnabled(bool enabled)
     {
         CommissionsEnabled = enabled;
+    }
+
+    /// <summary>
+    /// Actualiza la info pública/contacto del salón. Todos los campos
+    /// son opcionales — pasar null en cualquiera lo borra. Validaciones:
+    ///   - Address max 200, Phone max 30, ContactEmail max 150 y debe
+    ///     parecer un email, LogoUrl max 500 y debe empezar con http,
+    ///     InstagramHandle max 50 sin @, Description max 500.
+    /// El Name se cambia por separado vía Rename() — está en otro
+    /// "concepto" (identidad legal vs info pública).
+    /// </summary>
+    public void UpdateInfo(
+        string? address,
+        string? phone,
+        string? contactEmail,
+        string? logoUrl,
+        string? instagramHandle,
+        string? description)
+    {
+        var addr = Normalize(address, 200, nameof(address));
+        var ph   = Normalize(phone, 30, nameof(phone));
+        var em   = Normalize(contactEmail, 150, nameof(contactEmail));
+        if (em is not null && !em.Contains('@'))
+            throw new DomainException("El email de contacto no parece válido.");
+        var logo = Normalize(logoUrl, 500, nameof(logoUrl));
+        if (logo is not null && !logo.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                              && !logo.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            throw new DomainException("El logo debe ser una URL http(s).");
+        var ig = Normalize(instagramHandle, 50, nameof(instagramHandle));
+        if (ig is not null && ig.StartsWith('@')) ig = ig[1..];  // tolerante: limpia @
+        var desc = Normalize(description, 500, nameof(description));
+
+        Address = addr;
+        Phone = ph;
+        ContactEmail = em;
+        LogoUrl = logo;
+        InstagramHandle = ig;
+        Description = desc;
+    }
+
+    private static string? Normalize(string? value, int maxLen, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var v = value.Trim();
+        if (v.Length > maxLen)
+            throw new DomainException($"{fieldName} no puede pasar de {maxLen} caracteres.");
+        return v;
     }
 }
