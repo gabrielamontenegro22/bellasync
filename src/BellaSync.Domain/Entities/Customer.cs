@@ -37,7 +37,7 @@ public class Customer : BaseEntity, ITenantEntity
 
         var customer = new Customer { TenantId = tenantId };
         customer.FullName = fullName.Trim();
-        customer.Phone = phone.Trim();
+        customer.Phone = NormalizePhone(phone);
         customer.Email = NormalizeOptional(email)?.ToLowerInvariant();
         customer.Birthday = birthday;
         customer.DocumentNumber = NormalizeOptional(documentNumber);
@@ -106,7 +106,7 @@ public class Customer : BaseEntity, ITenantEntity
     {
         if (string.IsNullOrWhiteSpace(phone))
             throw new DomainException("El teléfono del cliente es obligatorio.");
-        Phone = phone.Trim();
+        Phone = NormalizePhone(phone);
         Email = NormalizeOptional(email)?.ToLowerInvariant();
         Address = NormalizeOptional(address);
     }
@@ -133,4 +133,34 @@ public class Customer : BaseEntity, ITenantEntity
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Normaliza un teléfono colombiano para usar como identidad canónica
+    /// (deduplicación). Quita espacios, guiones, paréntesis, puntos y el
+    /// prefijo +57 (que está implícito si el número tiene 10 dígitos
+    /// arrancando en 3, formato celular colombiano).
+    ///
+    /// Ejemplos:
+    ///   "+57 318 555 1234" → "3185551234"
+    ///   "318-555-1234"     → "3185551234"
+    ///   "(318) 555 1234"   → "3185551234"
+    ///   "3185551234"       → "3185551234"  (ya canónico)
+    ///
+    /// Caso B2 del audit: antes "318 555 1234" y "+57 318 555 1234" se
+    /// veían como dos clientes distintos. Esta normalización debe usarse
+    /// en CreateCustomer / UpdateCustomer / búsquedas para evitar duplicados.
+    /// </summary>
+    public static string NormalizePhone(string phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return string.Empty;
+
+        // Solo dígitos (descarta espacios, +, -, (, ), ., etc).
+        var digits = new string(phone.Where(char.IsDigit).ToArray());
+
+        // Prefijo país Colombia opcional.
+        if (digits.StartsWith("57") && digits.Length == 12)
+            digits = digits[2..];
+
+        return digits;
+    }
 }

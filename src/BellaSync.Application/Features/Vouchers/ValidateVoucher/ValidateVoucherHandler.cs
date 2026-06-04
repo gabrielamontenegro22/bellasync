@@ -75,7 +75,22 @@ public sealed class ValidateVoucherHandler
                         // Solo cancelamos si la cita está en estado cancelable
                         // (Pending/Confirmed). Si ya está cancelada o terminal,
                         // Cancel() es idempotente o lanza — el catch externo lo maneja.
-                        if (rejectedAppt.Status == AppointmentStatus.Pending
+                        // M11 del audit: si la cita ya fue cancelada por otro
+                        // path (ReleaseExpiredHolds o la admin a mano entre que
+                        // el voucher llegó y se rechazó), igualmente cancelamos
+                        // los WhatsApp Queued para que la cliente no reciba un
+                        // recordatorio de una cita rechazada. La cita en sí no
+                        // se vuelve a tocar (Cancel sería no-op).
+                        if (rejectedAppt.Status == AppointmentStatus.Cancelled
+                            || rejectedAppt.Status == AppointmentStatus.NoShow)
+                        {
+                            _logger.LogWarning(
+                                "Voucher {VoucherId} rechazado pero cita {AppointmentId} ya estaba {Status} — solo limpio WhatsApp Queued.",
+                                voucher.Id, rejectedAppt.Id, rejectedAppt.Status);
+                            await _whatsApp.CancelQueuedForAppointmentAsync(
+                                rejectedAppt.TenantId, rejectedAppt.Id, ct);
+                        }
+                        else if (rejectedAppt.Status == AppointmentStatus.Pending
                             || rejectedAppt.Status == AppointmentStatus.Confirmed)
                         {
                             var wasConfirmed = rejectedAppt.Status == AppointmentStatus.Confirmed;

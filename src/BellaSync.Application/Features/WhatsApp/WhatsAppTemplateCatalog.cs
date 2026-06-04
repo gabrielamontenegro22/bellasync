@@ -23,7 +23,19 @@ public static class WhatsAppTemplateCatalog
         string Title,
         string Description,
         string DefaultBody,
-        bool DefaultEnabled);
+        bool DefaultEnabled,
+        /// <summary>
+        /// True si el mensaje es comunicación de marketing/publicitaria
+        /// (no transaccional). Habeas data (Ley 1581/2012 Colombia)
+        /// requiere opt-in explícito del cliente para enviarlos. El
+        /// WhatsAppEnqueuer chequea Customer.AcceptsMarketing antes de
+        /// encolar kinds marcados como marketing.
+        ///
+        /// Transaccionales (false): ConfirmCreated, Reminder24h, Ready2h,
+        /// PendingDeposit, AppointmentCancelled, AppointmentRescheduled.
+        /// Marketing (true): Birthday (es promo/descuento, no info de cita).
+        /// </summary>
+        bool IsMarketing = false);
 
     /// <summary>
     /// Catálogo completo. El orden es el que se muestra al usuario en la
@@ -64,7 +76,8 @@ public static class WhatsAppTemplateCatalog
             "Cumpleaños",
             "El día del cumpleaños de la clienta",
             "¡Feliz cumpleaños {nombre}! 🎉 En {salon} queremos consentirte: ven este mes y recibe un 15% en tu servicio favorito.",
-            DefaultEnabled: false),
+            DefaultEnabled: false,
+            IsMarketing: true),  // Habeas data: requiere opt-in del cliente
 
         new CatalogEntry(
             WhatsAppTemplateKind.AppointmentCancelled,
