@@ -13,9 +13,11 @@ import {
   LogOut,
   ShieldCheck,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
 import { useCommissionsSetting } from '@/features/commissions/useCommissionsSetting'
+import { getDashboardSummary } from '@/api/dashboard'
 
 interface AppSidebarProps {
   /** En mobile, el sidebar es un drawer controlado externamente */
@@ -83,6 +85,17 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
   const navigate = useNavigate()
   const { data: commissionsSetting } = useCommissionsSetting()
 
+  // Reusamos el mismo query que el Dashboard para badges. Compartir
+  // la queryKey hace que ambos componentes lean el mismo cache — sin
+  // queries duplicados ni desincronización.
+  // No corremos para SuperAdmin (no tiene tenant ni vouchers).
+  const { data: dashboard } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: getDashboardSummary,
+    refetchInterval: 60_000,
+    enabled: user?.role !== 'SuperAdmin' && !!user,
+  })
+
   // Pipeline:
   //   1. SuperAdmin (dueño BellaSync) tiene su propio item dedicado
   //   2. Para salones: arranca con BASE_NAV_ITEMS
@@ -111,6 +124,18 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
     if (!isAdmin) {
       items = items.filter(i => !i.adminOnly)
     }
+
+    // Inyectamos badges desde el dashboard summary. Los hace silenciar
+    // cuando el conteo es 0 (no queremos un "(0)" estético).
+    items = items.map((item) => {
+      if (item.to === '/validacion' && dashboard?.pendingVouchersCount) {
+        return { ...item, badge: dashboard.pendingVouchersCount.toString() }
+      }
+      if (item.to === '/caja' && dashboard?.cashClosingPending) {
+        return { ...item, badge: '!' }
+      }
+      return item
+    })
 
     return items
   })()
