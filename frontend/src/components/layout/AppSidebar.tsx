@@ -232,26 +232,35 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
           })}
         </nav>
 
-        {/* Footer con datos del usuario */}
+        {/* Footer con datos del usuario.
+            El bloque avatar+nombre es cliqueable y lleva a /mi-cuenta;
+            el botón logout queda separado al costado. */}
         <div className="border-t border-warm-150 p-3 m-3 mt-2 rounded-xl bg-warm-50/60">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gold-200 text-gold-600 flex items-center justify-center font-semibold text-[13px]">
-              {initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-medium text-warm-800 truncate">
-                {user?.fullName || 'Usuario'}
+            <button
+              type="button"
+              onClick={() => { onClose(); navigate('/mi-cuenta') }}
+              title="Mi cuenta"
+              className="flex items-center gap-3 flex-1 min-w-0 text-left rounded-lg hover:bg-white px-1 py-1 -m-1 transition"
+            >
+              <div className="w-9 h-9 rounded-full bg-gold-200 text-gold-600 flex items-center justify-center font-semibold text-[13px] flex-shrink-0">
+                {initials}
               </div>
-              <div className="text-[11.5px] text-warm-500 truncate">
-                {roleLabel(user?.role)}
-                {user?.tenantName ? ` · ${user.tenantName}` : ''}
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium text-warm-800 truncate">
+                  {user?.fullName || 'Usuario'}
+                </div>
+                <div className="text-[11.5px] text-warm-500 truncate">
+                  {roleLabel(user?.role)}
+                  {user?.tenantName ? ` · ${user.tenantName}` : ''}
+                </div>
               </div>
-            </div>
+            </button>
             <button
               type="button"
               onClick={handleLogout}
               title="Cerrar sesión"
-              className="p-1.5 text-warm-400 hover:text-warm-700 rounded-md hover:bg-white"
+              className="p-1.5 text-warm-400 hover:text-warm-700 rounded-md hover:bg-white flex-shrink-0"
             >
               <LogOut size={16} />
             </button>
