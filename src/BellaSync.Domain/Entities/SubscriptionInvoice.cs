@@ -202,6 +202,28 @@ public class SubscriptionInvoice : BaseEntity, ITenantEntity
         UpdatedAt = utcNow;
     }
 
+    /// <summary>
+    /// Actualiza plan y monto de una factura Pending. Usado cuando el
+    /// salón cambia de plan ANTES de pagar la factura emitida — para que
+    /// la cobranza siga al plan vigente. Solo válido en Pending; si ya
+    /// fue Reported/Paid/etc., el cambio de plan tiene que respetarla
+    /// (la valida o rechaza el SuperAdmin antes que María pueda cambiar).
+    /// </summary>
+    public void UpdatePlanInfo(string newPlanCode, Money newAmount, DateTime utcNow)
+    {
+        if (Status != SubscriptionInvoiceStatus.Pending)
+            throw new DomainException(
+                "Solo se puede actualizar plan en facturas pendientes (sin reportar).");
+        if (string.IsNullOrWhiteSpace(newPlanCode))
+            throw new DomainException("PlanCode es obligatorio.");
+        if (newAmount.Amount <= 0m)
+            throw new DomainException("El monto debe ser mayor a cero.");
+
+        PlanCode = newPlanCode.Trim().ToLowerInvariant();
+        Amount = newAmount;
+        UpdatedAt = utcNow;
+    }
+
     public void Waive(string reason, DateTime utcNow)
     {
         if (Status == SubscriptionInvoiceStatus.Paid)
