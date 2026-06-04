@@ -8,6 +8,7 @@ import type {
 import { StylistCard } from './components/StylistCard'
 import { StylistModal } from './components/StylistModal'
 import { StylistFilters } from './components/StylistFilters'
+import { StylistTimeOffModal } from './components/StylistTimeOffModal'
 import {
   useStylists,
   useCreateStylist,
@@ -35,6 +36,7 @@ export function StylistsPage() {
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<StylistResponse | null>(null)
+  const [timeOffStylist, setTimeOffStylist] = useState<StylistResponse | null>(null)
 
   const stylistsQ = useStylists(true) // includeInactive=true
   const createMut = useCreateStylist()
@@ -278,6 +280,7 @@ export function StylistsPage() {
               onEdit={handleOpenEdit}
               onToggleStatus={handleToggleStatus}
               onDelete={handleHardDelete}
+              onTimeOff={setTimeOffStylist}
             />
           ))}
           <AddCard onClick={handleOpenNew} />
@@ -291,6 +294,14 @@ export function StylistsPage() {
           onClose={handleClose}
           onSave={handleSave}
           onDelete={editing ? handleDelete : undefined}
+        />
+      )}
+
+      {/* Modal de vacaciones / días libres */}
+      {timeOffStylist && (
+        <StylistTimeOffModal
+          stylist={timeOffStylist}
+          onClose={() => setTimeOffStylist(null)}
         />
       )}
     </div>

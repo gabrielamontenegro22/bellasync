@@ -99,3 +99,67 @@ export async function updateStylist(
 export async function deleteStylist(id: string): Promise<void> {
   await api.delete(`/api/Stylists/${id}`)
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Vacaciones / días libres (StylistTimeOff)                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface StylistTimeOff {
+  id: string
+  stylistId: string
+  fromDate: string  // "YYYY-MM-DD"
+  toDate: string
+  reason: string | null
+  isPast: boolean
+  createdAt: string
+}
+
+export interface AddTimeOffRequest {
+  fromDate: string  // "YYYY-MM-DD"
+  toDate: string
+  reason?: string | null
+}
+
+export interface AffectedAppointment {
+  appointmentId: string
+  customerName: string
+  customerPhone: string | null
+  serviceName: string
+  startAt: string  // ISO UTC
+  endAt: string
+  status: string
+}
+
+export async function listStylistTimeOffs(stylistId: string): Promise<StylistTimeOff[]> {
+  const { data } = await api.get<StylistTimeOff[]>(
+    `/api/Stylists/${stylistId}/time-off`,
+  )
+  return data
+}
+
+export async function addStylistTimeOff(
+  stylistId: string,
+  req: AddTimeOffRequest,
+): Promise<StylistTimeOff> {
+  const { data } = await api.post<StylistTimeOff>(
+    `/api/Stylists/${stylistId}/time-off`,
+    req,
+  )
+  return data
+}
+
+export async function removeStylistTimeOff(timeOffId: string): Promise<void> {
+  await api.delete(`/api/Stylists/time-off/${timeOffId}`)
+}
+
+export async function getAffectedAppointments(
+  stylistId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<AffectedAppointment[]> {
+  const { data } = await api.get<AffectedAppointment[]>(
+    `/api/Stylists/${stylistId}/affected-appointments`,
+    { params: { from: fromDate, to: toDate } },
+  )
+  return data
+}

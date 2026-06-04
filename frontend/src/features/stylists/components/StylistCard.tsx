@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mail, Phone, IdCard, Calendar, MoreVertical, Pencil, Pause, Play, Trash2, Check, X, Ghost } from 'lucide-react'
+import { Mail, Phone, IdCard, Calendar, MoreVertical, Pencil, Pause, Play, Trash2, Check, X, Ghost, Palmtree } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import type { StylistResponse } from '@/api/stylists'
 import { STATUS_META, fmtJoinedDate } from '../types'
@@ -10,6 +10,7 @@ interface StylistCardProps {
   onEdit: (s: StylistResponse) => void
   onToggleStatus: (s: StylistResponse) => void
   onDelete: (s: StylistResponse) => void
+  onTimeOff: (s: StylistResponse) => void
 }
 
 /**
@@ -20,7 +21,7 @@ interface StylistCardProps {
  *   - Info de contacto: email, phone, cédula, fecha de joined
  *   - Footer con stats (placeholder hasta tener módulo de citas)
  */
-export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete }: StylistCardProps) {
+export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete, onTimeOff }: StylistCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const status = STATUS_META[stylist.status]
 
@@ -84,6 +85,14 @@ export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete }: Styli
                   onClick={() => {
                     setMenuOpen(false)
                     onEdit(stylist)
+                  }}
+                />
+                <MenuItem
+                  icon={<Palmtree size={13} />}
+                  label="Días libres"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onTimeOff(stylist)
                   }}
                 />
                 <MenuItem
