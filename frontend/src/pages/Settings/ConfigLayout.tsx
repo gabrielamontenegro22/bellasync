@@ -7,6 +7,7 @@ import {
   MessageCircle,
   CreditCard,
   ChevronRight,
+  Users,
 } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import { AppShell } from '@/components/layout/AppShell'
@@ -32,6 +33,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
   { to: '/configuracion/pagos',       label: 'Política de pagos',          icon: Wallet,         hint: 'Cupo reservado y anticipación' },
   { to: '/configuracion/comisiones',  label: 'Comisiones',                 icon: Percent,        hint: 'Activar o desactivar el módulo' },
   { to: '/configuracion/whatsapp',    label: 'Notificaciones WhatsApp',    icon: MessageCircle,  hint: 'Plantillas y envíos' },
+  { to: '/configuracion/usuarios',    label: 'Usuarios del equipo',        icon: Users,          hint: 'Recepcionistas y administradoras' },
   { to: '/configuracion/suscripcion', label: 'Suscripción y facturación',  icon: CreditCard,     hint: 'Plan BellaSync' },
 ]
 

@@ -17,6 +17,7 @@ import { TenantInfoPage } from '@/features/settings/TenantInfoPage'
 import { HorarioPage } from '@/features/settings/HorarioPage'
 import { WhatsAppPage } from '@/features/settings/WhatsAppPage'
 import { SuscripcionPage } from '@/features/settings/SuscripcionPage'
+import { UsuariosPage } from '@/features/settings/UsuariosPage'
 import { CommissionsPage } from '@/features/commissions/CommissionsPage'
 import { CashClosingPage } from '@/features/cash/CashClosingPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
@@ -134,6 +135,7 @@ export function AppRouter() {
         <Route path="pagos"       element={<PaymentPolicyPage />} />
         <Route path="comisiones"  element={<CommissionsSettingPage />} />
         <Route path="whatsapp"    element={<WhatsAppPage />} />
+        <Route path="usuarios"    element={<UsuariosPage />} />
         <Route path="suscripcion" element={<SuscripcionPage />} />
       </Route>
 

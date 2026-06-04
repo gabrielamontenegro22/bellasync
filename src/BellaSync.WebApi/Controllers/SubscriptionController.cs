@@ -1,4 +1,5 @@
 using BellaSync.Application.Common.Handlers;
+using BellaSync.Application.Features.Subscription.CancelSubscription;
 using BellaSync.Application.Features.Subscription.ChangePlan;
 using BellaSync.Application.Features.Subscription.Dtos;
 using BellaSync.Application.Features.Subscription.GetSubscription;
@@ -69,6 +70,25 @@ public class SubscriptionController : ControllerBase
         var result = await handler.HandleAsync(cmd, ct);
         return result.ToActionResult();
     }
+
+    /// <summary>
+    /// La admin del salón cancela su suscripción a BellaSync. Bloqueado
+    /// si hay un pago Reported esperando validación (esperar la decisión
+    /// del SuperAdmin primero).
+    /// </summary>
+    [HttpPost("cancel")]
+    [ProducesResponseType(typeof(SubscriptionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Cancel(
+        [FromBody] CancelSubscriptionRequest request,
+        [FromServices] ICommandHandler<CancelSubscriptionCommand, SubscriptionResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(
+            new CancelSubscriptionCommand(request.Reason), ct);
+        return result.ToActionResult();
+    }
 }
 
 public sealed class ChangePlanRequest
@@ -80,4 +100,10 @@ public sealed class ReportPaymentRequest
 {
     public string PaymentMethod { get; set; } = string.Empty;
     public string? Reference { get; set; }
+}
+
+public sealed class CancelSubscriptionRequest
+{
+    /// <summary>Razón opcional de la cancelación — para feedback.</summary>
+    public string? Reason { get; set; }
 }
