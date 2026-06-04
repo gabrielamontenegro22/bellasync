@@ -116,6 +116,30 @@ public class Tenant : BaseEntity
     /// <summary>Descripción corta del salón. Aparece en el portal público de booking.</summary>
     public string? Description { get; private set; }
 
+    // ===== HORARIO DEL SALÓN (flags) =====
+    // Los horarios de cada día y los cierres puntuales viven en tablas
+    // aparte (SalonWeeklyHours, SalonClosedDate). Acá quedan los flags
+    // simples que pertenecen al tenant.
+
+    /// <summary>
+    /// Si está activo, la agenda bloquea reservas en la franja
+    /// LunchBreakFromHour–LunchBreakToHour todos los días.
+    /// </summary>
+    public bool LunchBreakEnabled { get; private set; }
+
+    /// <summary>Hora de inicio del bloqueo de almuerzo (0-24).</summary>
+    public int LunchBreakFromHour { get; private set; } = 13;
+
+    /// <summary>Hora de fin del bloqueo de almuerzo (0-24, &gt; from).</summary>
+    public int LunchBreakToHour { get; private set; } = 14;
+
+    /// <summary>
+    /// Si está activo, los festivos nacionales de Colombia se tratan
+    /// como días cerrados automáticamente (sin necesidad de agregarlos
+    /// uno por uno en SalonClosedDate).
+    /// </summary>
+    public bool IsHolidaysClosed { get; private set; }
+
     // Relación inversa: usuarios que pertenecen a este salón
     public ICollection<User> Users { get; private set; } = new List<User>();
 
@@ -207,6 +231,34 @@ public class Tenant : BaseEntity
         LogoUrl = logo;
         InstagramHandle = ig;
         Description = desc;
+    }
+
+    /// <summary>
+    /// Actualiza los flags del horario (la franja de almuerzo y si los
+    /// festivos cuentan como cerrados). Las horas semanales y los
+    /// cierres puntuales se manejan vía SalonWeeklyHours/SalonClosedDate
+    /// porque son colecciones, no propiedades simples.
+    /// </summary>
+    public void UpdateScheduleFlags(
+        bool lunchEnabled,
+        int lunchFromHour,
+        int lunchToHour,
+        bool holidaysClosed)
+    {
+        if (lunchEnabled)
+        {
+            if (lunchFromHour < 0 || lunchFromHour > 24)
+                throw new DomainException("Hora de almuerzo: from debe estar entre 0 y 24.");
+            if (lunchToHour < 0 || lunchToHour > 24)
+                throw new DomainException("Hora de almuerzo: to debe estar entre 0 y 24.");
+            if (lunchFromHour >= lunchToHour)
+                throw new DomainException("Hora de almuerzo: from debe ser anterior a to.");
+        }
+
+        LunchBreakEnabled = lunchEnabled;
+        LunchBreakFromHour = lunchFromHour;
+        LunchBreakToHour = lunchToHour;
+        IsHolidaysClosed = holidaysClosed;
     }
 
     private static string? Normalize(string? value, int maxLen, string fieldName)

@@ -37,6 +37,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<CommissionPayout> CommissionPayouts => Set<CommissionPayout>();
     public DbSet<CashClosing> CashClosings => Set<CashClosing>();
+    public DbSet<SalonWeeklyHours> SalonWeeklyHours => Set<SalonWeeklyHours>();
+    public DbSet<SalonClosedDate> SalonClosedDates => Set<SalonClosedDate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

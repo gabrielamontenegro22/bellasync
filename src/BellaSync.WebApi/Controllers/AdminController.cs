@@ -3,9 +3,11 @@ using BellaSync.Application.Features.Admin.SeedDemo;
 using BellaSync.Application.Features.Tenants.Dtos;
 using BellaSync.Application.Features.Tenants.GetCommissionsSetting;
 using BellaSync.Application.Features.Tenants.GetPaymentPolicy;
+using BellaSync.Application.Features.Tenants.GetSalonHours;
 using BellaSync.Application.Features.Tenants.GetTenantInfo;
 using BellaSync.Application.Features.Tenants.UpdateCommissionsSetting;
 using BellaSync.Application.Features.Tenants.UpdatePaymentPolicy;
+using BellaSync.Application.Features.Tenants.UpdateSalonHours;
 using BellaSync.Application.Features.Tenants.UpdateTenantInfo;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
@@ -149,6 +151,41 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> UpdateTenantInfo(
         [FromBody] UpdateTenantInfoCommand command,
         [FromServices] ICommandHandler<UpdateTenantInfoCommand, TenantInfoResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(command, ct);
+        return result.ToActionResult();
+    }
+
+    // ============================================================
+    // Horario del salón
+    // ============================================================
+
+    /// <summary>
+    /// GET /api/Admin/salon-hours
+    /// Devuelve el horario completo (días, almuerzo, festivos, cierres).
+    /// </summary>
+    [HttpGet("salon-hours")]
+    [ProducesResponseType(typeof(SalonHoursResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSalonHours(
+        [FromServices] IQueryHandler<GetSalonHoursQuery, SalonHoursResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetSalonHoursQuery(), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// PUT /api/Admin/salon-hours
+    /// Replace-all del horario: actualiza flags, días y cierres puntuales
+    /// en una transacción.
+    /// </summary>
+    [HttpPut("salon-hours")]
+    [ProducesResponseType(typeof(SalonHoursResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateSalonHours(
+        [FromBody] UpdateSalonHoursCommand command,
+        [FromServices] ICommandHandler<UpdateSalonHoursCommand, SalonHoursResponse> handler,
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(command, ct);

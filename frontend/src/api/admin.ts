@@ -96,3 +96,27 @@ export async function updateTenantInfo(req: UpdateTenantInfoRequest): Promise<Te
   const { data } = await api.put<TenantInfo>('/api/Admin/tenant-info', req)
   return data
 }
+
+/**
+ * Horario completo del salón. days es un dict 0-6 (Lunes..Domingo)
+ * donde la clave numérica viene como string en JSON ("0", "1", …).
+ * El frontend normaliza al consumirlo.
+ */
+export interface SalonHoursDto {
+  days: Record<string, { fromHour: number; toHour: number } | null>
+  lunchBreakEnabled: boolean
+  lunchBreakFromHour: number
+  lunchBreakToHour: number
+  isHolidaysClosed: boolean
+  closedDates: string[]  // YYYY-MM-DD
+}
+
+export async function getSalonHours(): Promise<SalonHoursDto> {
+  const { data } = await api.get<SalonHoursDto>('/api/Admin/salon-hours')
+  return data
+}
+
+export async function updateSalonHours(req: SalonHoursDto): Promise<SalonHoursDto> {
+  const { data } = await api.put<SalonHoursDto>('/api/Admin/salon-hours', req)
+  return data
+}

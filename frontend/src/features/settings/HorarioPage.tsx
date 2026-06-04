@@ -1,31 +1,45 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Calendar, CalendarClock, Clock, AlertCircle, ChevronDown, Plus, X,
 } from 'lucide-react'
 import { cls } from '@/lib/cls'
+import { extractApiError } from '@/lib/extractApiError'
 import {
-  SettingsHeader, SettingsBlock, SaveBar, PreviewNotice, ToggleRow, Toggle,
+  SettingsHeader, SettingsBlock, SaveBar, ToggleRow, Toggle,
 } from './_primitives'
+import {
+  getSalonHours, updateSalonHours, type SalonHoursDto,
+} from '@/api/admin'
 
 /**
  * `/configuracion/horario` — días y franjas de atención del salón.
+ * Conectado al backend: GET/PUT /api/Admin/salon-hours.
  *
- * Por ahora es mockup visual: estado local, "Guardar" cambia el banner
- * verde pero nada se persiste. Cuando hagamos el sprint de backend,
- * los días-franjas se mueven a la entidad Tenant (o nueva entidad
- * SalonHours) y la agenda los lee para validar slots disponibles.
+ * El backend es replace-all (manda todo el horario en cada update),
+ * así que el form de acá también lo es: hay un único objeto FormShape
+ * que representa el estado completo, y "Guardar" lo manda entero.
+ *
+ * Los presets son UX puro — no se persisten. Después de cargar, si
+ * el day map matchea alguna plantilla conocida, la pintamos como
+ * activa; sino mostramos "Personalizado".
  */
+
+// ───────────────────────────────────────────────────────────────────────
+// Tipos locales y constantes
+// ───────────────────────────────────────────────────────────────────────
+
 type Range = [number, number]
-type DaysMap = Record<string, Range | null>
+type DaysMap = Record<number, Range | null>
 
 const DIAS = [
-  { id: 'lun', label: 'Lunes' },
-  { id: 'mar', label: 'Martes' },
-  { id: 'mie', label: 'Miércoles' },
-  { id: 'jue', label: 'Jueves' },
-  { id: 'vie', label: 'Viernes' },
-  { id: 'sab', label: 'Sábado' },
-  { id: 'dom', label: 'Domingo' },
+  { id: 0, label: 'Lunes' },
+  { id: 1, label: 'Martes' },
+  { id: 2, label: 'Miércoles' },
+  { id: 3, label: 'Jueves' },
+  { id: 4, label: 'Viernes' },
+  { id: 5, label: 'Sábado' },
+  { id: 6, label: 'Domingo' },
 ] as const
 
 const HOUR_OPTS = Array.from({ length: 25 }, (_, i) => i)
@@ -33,54 +47,45 @@ const HOUR_OPTS = Array.from({ length: 25 }, (_, i) => i)
 const PRESETS: Record<string, { label: string; days: DaysMap }> = {
   lunsab: {
     label: 'Lun–Sáb · 9am–7pm',
-    days: { lun: [9,19], mar: [9,19], mie: [9,19], jue: [9,19], vie: [9,19], sab: [9,19], dom: null },
+    days: { 0:[9,19], 1:[9,19], 2:[9,19], 3:[9,19], 4:[9,19], 5:[9,19], 6: null },
   },
   mardom: {
     label: 'Mar–Dom · 10am–8pm',
-    days: { lun: null, mar: [10,20], mie: [10,20], jue: [10,20], vie: [10,20], sab: [10,20], dom: [10,20] },
+    days: { 0: null, 1:[10,20], 2:[10,20], 3:[10,20], 4:[10,20], 5:[10,20], 6:[10,20] },
   },
   lundom: {
     label: 'Lun–Dom · 8am–8pm',
-    days: { lun: [8,20], mar: [8,20], mie: [8,20], jue: [8,20], vie: [8,20], sab: [8,20], dom: [8,20] },
+    days: { 0:[8,20], 1:[8,20], 2:[8,20], 3:[8,20], 4:[8,20], 5:[8,20], 6:[8,20] },
   },
 }
 
 type FormShape = {
-  preset: string
   days: DaysMap
   lunchOn: boolean
   lunch: Range
   holidaysOff: boolean
-  closedDates: string[]
+  closedDates: string[]  // YYYY-MM-DD
 }
 
-/**
- * closedDates se almacena en ISO YYYY-MM-DD para:
- *  - Sortear cronológicamente sin parsear strings ambiguos.
- *  - Comparar duplicados con string equality directo.
- *  - Cuando hagamos backend, el formato ya es el correcto para
- *    DateOnly de C#.
- * Se renderiza al usuario con Intl.DateTimeFormat en español.
- */
-const INITIAL: FormShape = {
-  preset: 'lunsab',
-  days: PRESETS.lunsab.days,
-  lunchOn: true,
+// Estado vacío al iniciar sin data del backend — todos los días cerrados.
+const EMPTY_FORM: FormShape = {
+  days: { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
+  lunchOn: false,
   lunch: [13, 14],
-  holidaysOff: true,
-  closedDates: ['2026-12-24', '2026-12-25'],
+  holidaysOff: false,
+  closedDates: [],
 }
 
-/** Hoy en formato YYYY-MM-DD local (para min del date picker). */
+// ───────────────────────────────────────────────────────────────────────
+// Helpers
+// ───────────────────────────────────────────────────────────────────────
+
 function todayISO(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-/** "Vie 25 dic 2026" — para mostrar las fechas en chips. */
 function formatHumanDate(iso: string): string {
-  // Parseamos manualmente para evitar el problema de zona horaria con
-  // new Date(iso) que en algunos browsers asume UTC y muestra un día menos.
   const [y, m, d] = iso.split('-').map(Number)
   if (!y || !m || !d) return iso
   const date = new Date(y, m - 1, d)
@@ -92,16 +97,98 @@ function formatHumanDate(iso: string): string {
   }).format(date).replace(/\.$/, '')
 }
 
+/** Convierte el DTO del backend al FormShape local. */
+function dtoToForm(dto: SalonHoursDto): FormShape {
+  const days: DaysMap = {} as DaysMap
+  for (let d = 0; d < 7; d++) {
+    const r = dto.days[String(d)]
+    days[d] = r ? [r.fromHour, r.toHour] : null
+  }
+  return {
+    days,
+    lunchOn: dto.lunchBreakEnabled,
+    lunch: [dto.lunchBreakFromHour, dto.lunchBreakToHour],
+    holidaysOff: dto.isHolidaysClosed,
+    closedDates: [...dto.closedDates].sort(),
+  }
+}
+
+/** Convierte el FormShape al DTO que espera el backend. */
+function formToDto(f: FormShape): SalonHoursDto {
+  const days: SalonHoursDto['days'] = {}
+  for (let d = 0; d < 7; d++) {
+    const r = f.days[d]
+    days[String(d)] = r ? { fromHour: r[0], toHour: r[1] } : null
+  }
+  return {
+    days,
+    lunchBreakEnabled: f.lunchOn,
+    lunchBreakFromHour: f.lunch[0],
+    lunchBreakToHour: f.lunch[1],
+    isHolidaysClosed: f.holidaysOff,
+    closedDates: f.closedDates,
+  }
+}
+
+/** Compara la day-map con cada preset; devuelve el id matcheante o 'custom'. */
+function detectPreset(days: DaysMap): string {
+  for (const [k, p] of Object.entries(PRESETS)) {
+    let match = true
+    for (let d = 0; d < 7; d++) {
+      const a = days[d]
+      const b = p.days[d]
+      if (a === null && b === null) continue
+      if (a === null || b === null) { match = false; break }
+      if (a[0] !== b[0] || a[1] !== b[1]) { match = false; break }
+    }
+    if (match) return k
+  }
+  return 'custom'
+}
+
+// ───────────────────────────────────────────────────────────────────────
+
 export function HorarioPage() {
-  const [form, setForm] = useState<FormShape>(INITIAL)
+  const qc = useQueryClient()
+  const { data: serverData, isLoading } = useQuery({
+    queryKey: ['salonHours'],
+    queryFn: getSalonHours,
+  })
+
+  // Snapshot del estado del servidor — sirve como "valor inicial" para
+  // detectar dirty y para Discard.
+  const serverForm: FormShape = useMemo(
+    () => (serverData ? dtoToForm(serverData) : EMPTY_FORM),
+    [serverData],
+  )
+
+  const [form, setForm] = useState<FormShape>(EMPTY_FORM)
+  useEffect(() => { setForm(serverForm) }, [serverForm])
+
   const [saved, setSaved] = useState(false)
   const [newDate, setNewDate] = useState('')
 
+  const mut = useMutation({
+    mutationFn: (req: SalonHoursDto) => updateSalonHours(req),
+    onSuccess: (r) => {
+      qc.setQueryData(['salonHours'], r)
+      setSaved(true)
+    },
+    onError: () => { /* el error lo muestra el SaveBar abajo */ },
+  })
+
+  useEffect(() => {
+    if (!saved) return
+    const t = setTimeout(() => setSaved(false), 3000)
+    return () => clearTimeout(t)
+  }, [saved])
+
   const isDirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(INITIAL),
-    [form],
+    () => JSON.stringify(form) !== JSON.stringify(serverForm),
+    [form, serverForm],
   )
 
+  const preset = useMemo(() => detectPreset(form.days), [form.days])
   const openCount = useMemo(
     () => Object.values(form.days).filter(Boolean).length,
     [form.days],
@@ -113,27 +200,25 @@ export function HorarioPage() {
   }
 
   const applyPreset = (k: string) => {
-    setForm(f => ({ ...f, preset: k, days: PRESETS[k].days }))
+    setForm(f => ({ ...f, days: { ...PRESETS[k].days } }))
     setSaved(false)
   }
 
-  const toggleDay = (d: string) => {
+  const toggleDay = (d: number) => {
     setForm(f => ({
       ...f,
-      preset: 'custom',
       days: { ...f.days, [d]: f.days[d] ? null : [9, 19] },
     }))
     setSaved(false)
   }
 
-  const setRange = (d: string, idx: 0 | 1, value: number) => {
+  const setRange = (d: number, idx: 0 | 1, value: number) => {
     setForm(f => {
       const r = ([...(f.days[d] ?? [9, 19])] as Range)
       r[idx] = value
-      // Forzamos start <= end mínimo +1h.
       if (idx === 0 && r[0] >= r[1]) r[1] = Math.min(24, r[0] + 1)
       if (idx === 1 && r[1] <= r[0]) r[0] = Math.max(0, r[1] - 1)
-      return { ...f, preset: 'custom', days: { ...f.days, [d]: r } }
+      return { ...f, days: { ...f.days, [d]: r } }
     })
     setSaved(false)
   }
@@ -141,26 +226,24 @@ export function HorarioPage() {
   const addClosedDate = () => {
     const v = newDate.trim()
     if (!v) return
-    // Evitar duplicados — si la admin hace click dos veces sin querer.
     if (form.closedDates.includes(v)) {
       setNewDate('')
       return
     }
-    // Ordenar cronológicamente para que los chips se vean en orden real.
     const next = [...form.closedDates, v].sort()
     set('closedDates', next)
     setNewDate('')
   }
 
-  const sortedClosedDates = useMemo(
-    () => [...form.closedDates].sort(),
-    [form.closedDates],
-  )
+  if (isLoading) {
+    return (
+      <div className="px-6 lg:px-10 py-8 text-[13px] text-warm-500">Cargando…</div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-full">
       <div className="flex-1 px-6 lg:px-10 py-8 max-w-3xl">
-        <PreviewNotice />
         <SettingsHeader
           eyebrow="Ajustes del salón"
           title="Horario de atención"
@@ -171,7 +254,7 @@ export function HorarioPage() {
         <SettingsBlock icon={<CalendarClock size={16} />} title="Plantillas rápidas">
           <div className="grid sm:grid-cols-2 gap-2.5">
             {Object.entries(PRESETS).map(([k, p]) => {
-              const active = form.preset === k
+              const active = preset === k
               return (
                 <button
                   key={k}
@@ -194,7 +277,7 @@ export function HorarioPage() {
             <div
               className={cls(
                 'px-3.5 py-3 rounded-xl border text-left',
-                form.preset === 'custom'
+                preset === 'custom'
                   ? 'border-brand-500 bg-brand-50/60 ring-2 ring-brand-100'
                   : 'border-warm-200 bg-white',
               )}
@@ -249,12 +332,12 @@ export function HorarioPage() {
               <span className="text-[12.5px] text-warm-600">De</span>
               <HourSelect
                 value={form.lunch[0]}
-                onChange={(v) => set('lunch', [v, form.lunch[1]] as Range)}
+                onChange={(v) => set('lunch', [v, Math.max(form.lunch[1], v + 1)] as Range)}
               />
               <span className="text-warm-400 text-[12px]">a</span>
               <HourSelect
                 value={form.lunch[1]}
-                onChange={(v) => set('lunch', [form.lunch[0], v] as Range)}
+                onChange={(v) => set('lunch', [Math.min(form.lunch[0], v - 1), v] as Range)}
               />
             </div>
           )}
@@ -277,12 +360,12 @@ export function HorarioPage() {
               Días cerrados puntuales
             </div>
             <div className="flex flex-wrap gap-2 mb-2.5">
-              {sortedClosedDates.length === 0 ? (
+              {form.closedDates.length === 0 ? (
                 <span className="text-[11.5px] text-warm-400 italic">
                   Ninguno aún — elegí una fecha abajo.
                 </span>
               ) : (
-                sortedClosedDates.map(d => (
+                form.closedDates.map(d => (
                   <span
                     key={d}
                     className="inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-full bg-warm-100 text-warm-700 capitalize"
@@ -346,8 +429,10 @@ export function HorarioPage() {
       <SaveBar
         show={isDirty}
         saved={saved}
-        onSave={() => setSaved(true)}
-        onDiscard={() => { setForm(INITIAL); setSaved(false) }}
+        saving={mut.isPending}
+        error={mut.error ? extractApiError(mut.error, 'No se pudo guardar el horario.') : null}
+        onSave={() => mut.mutate(formToDto(form))}
+        onDiscard={() => { setForm(serverForm); setSaved(false) }}
       />
     </div>
   )
