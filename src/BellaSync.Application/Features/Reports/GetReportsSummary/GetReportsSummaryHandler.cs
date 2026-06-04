@@ -95,7 +95,7 @@ public sealed class GetReportsSummaryHandler
 
         var paymentsCurrent = await _db.Payments
             .Where(p => p.TenantId == tenantId && apptIds.Contains(p.AppointmentId))
-            .Select(p => new { p.AppointmentId, p.Method, p.Amount, p.Tip })
+            .Select(p => new { p.AppointmentId, p.Method, p.Provider, p.Amount, p.Tip })
             .ToListAsync(ct);
 
         var totalRevenue = paymentsCurrent.Sum(p => p.Amount.Amount + p.Tip.Amount);
@@ -162,6 +162,7 @@ public sealed class GetReportsSummaryHandler
                     meta.StylistId,
                     meta.StartAt,
                     p.Method,
+                    p.Provider,
                     p.Amount.Amount + p.Tip.Amount);
             })
             .ToList();
@@ -268,11 +269,16 @@ public sealed class GetReportsSummaryHandler
         }
 
         // ===== Métodos de pago (para la dona) =====
+        // Agrupamos por (Method, Provider) — el mockup muestra Bancolombia,
+        // Nequi, Daviplata como líneas separadas porque son providers de
+        // Transfer. Si Provider es null (Cash, Other sin provider), se
+        // usa el label genérico del método.
         var methodAgg = enriched
-            .GroupBy(x => x.Method)
+            .GroupBy(x => new { x.Method, x.Provider })
             .Select(g => new
             {
-                Method = g.Key,
+                g.Key.Method,
+                g.Key.Provider,
                 Revenue = g.Sum(x => x.Total),
             })
             .OrderByDescending(x => x.Revenue)
@@ -282,7 +288,10 @@ public sealed class GetReportsSummaryHandler
             .Select(m => new PaymentMethodRow
             {
                 Method = m.Method.ToString(),
-                Label = LabelForMethod(m.Method),
+                Provider = m.Provider,
+                Label = !string.IsNullOrWhiteSpace(m.Provider)
+                    ? m.Provider!
+                    : LabelForMethod(m.Method),
                 Revenue = m.Revenue,
                 Percentage = totalRevenue > 0
                     ? (double)(m.Revenue / totalRevenue) * 100.0
@@ -539,5 +548,6 @@ public sealed class GetReportsSummaryHandler
         Guid StylistId,
         DateTime StartAt,
         PaymentMethod Method,
+        string? Provider,
         decimal Total);
 }

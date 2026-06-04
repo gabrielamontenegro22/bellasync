@@ -496,12 +496,43 @@ function formatHumanDate(iso: string): string {
 // Dona de métodos de pago
 // ───────────────────────────────────────────────────────────────────────
 
-// Color por método. Cash brand, Transfer gold, Card plum, Other terra.
-const METHOD_COLORS: Record<string, string> = {
-  Cash:     '#3f8a7a',
-  Transfer: '#d4a72b',
-  Card:     '#5d7a8a',
-  Other:    '#c026a8',
+// Paletas:
+//   - Color por método base (Cash brand, Card neutro)
+//   - Colores específicos por provider conocido (Bancolombia gold, Nequi
+//     plum, Daviplata rojo, etc.) para que la dona los distinga
+//   - Fallback cíclico para providers desconocidos.
+const METHOD_BASE_COLORS: Record<string, string> = {
+  Cash:     '#3f8a7a',  // verde brand
+  Card:     '#5d7a8a',  // gris-azulado neutro
+  Other:    '#80796a',  // warm
+}
+
+const PROVIDER_COLORS: Record<string, string> = {
+  // Bancos / billeteras frecuentes en CO
+  Bancolombia: '#d4a72b',  // gold institucional
+  Nequi:       '#c026a8',  // magenta Nequi
+  Daviplata:   '#d33333',  // rojo Davivienda
+  Davivienda:  '#d33333',
+  BBVA:        '#1a4488',
+  Scotiabank:  '#e60000',
+  Colpatria:   '#c00000',
+  Bogotá:      '#a4a4a4',
+  // Marcas de tarjeta
+  Visa:        '#1a1f71',
+  Mastercard:  '#eb001b',
+  AMEX:        '#016fd0',
+  // Otros
+  'Datáfono':  '#5d7a8a',
+  Datafono:    '#5d7a8a',
+}
+
+// Colores cíclicos cuando no hay match arriba.
+const FALLBACK_PALETTE = ['#3f8a7a', '#d4a72b', '#c026a8', '#5d7a8a', '#d6bc78', '#b96f5b', '#3d6453']
+
+function colorFor(method: string, provider: string | null, index: number): string {
+  if (provider && PROVIDER_COLORS[provider]) return PROVIDER_COLORS[provider]
+  if (!provider && METHOD_BASE_COLORS[method]) return METHOD_BASE_COLORS[method]
+  return FALLBACK_PALETTE[index % FALLBACK_PALETTE.length]
 }
 
 function MethodsDonut({
@@ -512,11 +543,11 @@ function MethodsDonut({
   let offsetAcc = 0
   const segs = rows
     .filter(r => r.revenue > 0)
-    .map(r => {
+    .map((r, idx) => {
       const frac = totalRevenue > 0 ? r.revenue / totalRevenue : 0
       const seg = {
         ...r,
-        color: METHOD_COLORS[r.method] ?? '#80796a',
+        color: colorFor(r.method, r.provider, idx),
         dash: frac * C,
         offset: offsetAcc * C,
       }

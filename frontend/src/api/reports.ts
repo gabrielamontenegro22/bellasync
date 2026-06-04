@@ -66,7 +66,10 @@ export interface DailyRevenuePoint {
 
 export interface PaymentMethodRow {
   method: string  // "Cash" | "Transfer" | "Card" | "Other"
-  label: string   // "Efectivo" | "Transferencia" | ...
+  /** Banco/billetera/marca (Bancolombia, Nequi, Visa…). null para Cash. */
+  provider: string | null
+  /** Label de UI: Provider si existe, sino label genérico del método. */
+  label: string
   revenue: number
   percentage: number
 }
