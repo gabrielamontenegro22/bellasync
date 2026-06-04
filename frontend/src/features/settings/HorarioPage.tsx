@@ -10,6 +10,7 @@ import {
 } from './_primitives'
 import { updateSalonHours, type SalonHoursDto } from '@/api/admin'
 import { useSalonHours } from './useSalonHours'
+import { DatePicker } from '@/components/ui'
 
 /**
  * `/configuracion/horario` — días y franjas de atención del salón.
@@ -78,11 +79,6 @@ const EMPTY_FORM: FormShape = {
 // ───────────────────────────────────────────────────────────────────────
 // Helpers
 // ───────────────────────────────────────────────────────────────────────
-
-function todayISO(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 function formatHumanDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number)
@@ -382,22 +378,13 @@ export function HorarioPage() {
               )}
             </div>
             <div className="flex gap-2">
-              <div className="flex-1 flex items-center rounded-lg border border-warm-200 bg-white overflow-hidden focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
-                <span className="pl-3 pr-2 text-warm-400 flex-shrink-0">
-                  <Calendar size={14} strokeWidth={1.8} />
-                </span>
-                <input
-                  type="date"
+              <div className="flex-1">
+                <DatePicker
                   value={newDate}
-                  min={todayISO()}
-                  onChange={(e) => setNewDate(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addClosedDate()
-                    }
-                  }}
-                  className="flex-1 py-2 pr-3 text-[13px] text-warm-800 tabular-nums outline-none bg-transparent"
+                  onChange={setNewDate}
+                  min="today"
+                  placeholder="Elegir fecha…"
+                  fullWidth
                 />
               </div>
               <button

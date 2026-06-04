@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Percent, CheckCircle2, Wallet, X } from 'lucide-react'
 import { cls } from '@/lib/cls'
+import { DatePicker } from '@/components/ui'
 import { useAuth } from '@/features/auth/useAuth'
 import { fmtCop } from '@/features/customers/lib/customerLook'
 import { extractApiError } from '@/lib/extractApiError'
@@ -119,20 +120,18 @@ function CommissionsBody({ tenantName }: { tenantName: string }) {
             )
           })}
           <div className="flex items-center gap-1.5 ml-2">
-            <input
-              type="date"
+            <DatePicker
               value={period.from}
               max={period.to}
-              onChange={(e) => setPeriod({ ...period, from: e.target.value })}
-              className="px-2.5 py-1.5 rounded-lg border border-warm-200 bg-white text-[12.5px] text-warm-800 tabular-nums"
+              onChange={(v) => setPeriod({ ...period, from: v })}
+              size="sm"
             />
             <span className="text-warm-400 text-[12px]">a</span>
-            <input
-              type="date"
+            <DatePicker
               value={period.to}
               min={period.from}
-              onChange={(e) => setPeriod({ ...period, to: e.target.value })}
-              className="px-2.5 py-1.5 rounded-lg border border-warm-200 bg-white text-[12.5px] text-warm-800 tabular-nums"
+              onChange={(v) => setPeriod({ ...period, to: v })}
+              size="sm"
             />
           </div>
         </div>

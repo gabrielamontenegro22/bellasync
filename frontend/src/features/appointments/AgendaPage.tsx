@@ -25,6 +25,7 @@ import {
   useMarkNoShow,
   useStartAppointment,
 } from './hooks'
+import { DatePicker } from '@/components/ui'
 import { NewAppointmentModal } from './components/NewAppointmentModal'
 import { AgendaTimeline } from './components/AgendaTimeline'
 import { RescheduleModal } from './components/RescheduleModal'
@@ -298,12 +299,9 @@ function Header({
           <span>Mañana</span> <ChevronRight size={16} />
         </button>
         <div className="ml-2 hidden md:block">
-          <input
-            type="date"
-            value={date}
-            onChange={e => onDateChange(e.target.value)}
-            className="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-[12.5px] text-warm-700"
-          />
+          {/* DatePicker custom (ver components/ui/DatePicker.tsx) — reemplaza
+              el input nativo que rompía el look junto a los pills Ayer/Hoy/Mañana. */}
+          <DatePicker value={date} onChange={onDateChange} size="sm" />
         </div>
       </div>
     </header>

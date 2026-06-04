@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, Input, Modal, ModalFooter, SearchablePicker } from '@/components/ui'
+import { Button, DateTimePicker, Input, Modal, ModalFooter, SearchablePicker } from '@/components/ui'
 import { listServices, type ServiceResponse } from '@/api/services'
 import { listStylists, type StylistResponse } from '@/api/stylists'
 import { createCustomer, listCustomers, type CustomerResponse } from '@/api/customers'
@@ -113,12 +113,19 @@ export function NewAppointmentModal({
           )}
         </div>
 
-        <Input
-          label="Fecha y hora"
-          type="datetime-local"
-          value={startAtLocal}
-          onChange={e => setStartAtLocal(e.target.value)}
-        />
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">
+            Fecha y hora
+          </label>
+          <DateTimePicker
+            value={startAtLocal}
+            onChange={setStartAtLocal}
+            min="today"
+            minHour={6}
+            maxHour={22}
+            fullWidth
+          />
+        </div>
 
         {isAdmin && (
           <label className="flex items-start gap-2 rounded-md bg-gold-50/50 p-2 text-sm cursor-pointer">
