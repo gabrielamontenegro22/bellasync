@@ -158,25 +158,46 @@ export function AgendaPage() {
         </div>
       </div>
 
-      {/* Panel detalle — SOLO cuando hay cita seleccionada. Slide-in desde
-          la derecha replicando el mockup. Cuando no hay selección, el
-          timeline ocupa el ancho completo.
-          El propio DetailPanel maneja su scroll interno (header arriba +
-          body scrollable + footer pegado abajo). */}
+      {/* Panel detalle — SOLO cuando hay cita seleccionada.
+          - Desktop (≥lg): empuja el timeline (panel sólido 420px a la derecha)
+          - Mobile/tablet (<lg): se monta como overlay sobre el timeline para
+            no aplastar la grilla. En iPad llega hasta 420px desde la derecha
+            con backdrop; en mobile (<sm) ocupa todo el ancho.
+          Antes este panel era `hidden lg:block`, así que en iPad/mobile el
+          click en una cita no mostraba absolutamente nada — bug real. */}
       {selected && (
-        <aside className="hidden lg:block w-[420px] flex-shrink-0 border-l border-warm-150 bg-white shadow-panel animate-slide overflow-hidden">
-          <DetailPanel appointment={selected} onClose={() => setSelectedId(null)} />
-        </aside>
+        <>
+          {/* Backdrop solo en <lg para cerrar al tocar fuera. */}
+          <div
+            onClick={() => setSelectedId(null)}
+            className="lg:hidden fixed inset-0 bg-warm-900/30 z-30 anim-fade"
+            aria-hidden="true"
+          />
+          <aside
+            className={cls(
+              'bg-white border-l border-warm-150 shadow-panel overflow-hidden animate-slide',
+              // Mobile/tablet: overlay fixed desde la derecha
+              'fixed inset-y-0 right-0 z-40 w-full sm:w-[420px]',
+              // Desktop: empuja el timeline en flujo normal
+              'lg:static lg:w-[420px] lg:flex-shrink-0 lg:z-auto',
+            )}
+          >
+            <DetailPanel appointment={selected} onClose={() => setSelectedId(null)} />
+          </aside>
+        </>
       )}
 
-      {/* FAB Nueva cita — fixed abajo-derecha. Cuando hay panel se mueve
-          a su izquierda para no taparlo. */}
+      {/* FAB Nueva cita — fixed abajo-derecha.
+          - Desktop: si hay panel detalle, se mueve a su izquierda (right-[440px])
+          - Mobile/iPad: si hay panel detalle (que es overlay), el FAB se oculta
+            porque el detalle cubre toda la pantalla y el FAB encima sería ruido.
+          z-20 < panel(z-40) para que el panel quede arriba. */}
       <button
         type="button"
         onClick={() => setShowNewModal(true)}
         className={cls(
-          'fixed bottom-6 z-30 flex items-center gap-2 pl-4 pr-5 py-3.5 rounded-full bg-brand-700 hover:bg-brand-800 text-white shadow-pop font-medium text-[14px] transition-all',
-          selected ? 'right-6 lg:right-[440px]' : 'right-6',
+          'fixed bottom-6 z-20 flex items-center gap-2 pl-4 pr-5 py-3.5 rounded-full bg-brand-700 hover:bg-brand-800 text-white shadow-pop font-medium text-[14px] transition-all',
+          selected ? 'hidden lg:flex right-6 lg:right-[440px]' : 'right-6',
         )}
       >
         <Plus size={18} strokeWidth={2.25} />
