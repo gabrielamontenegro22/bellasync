@@ -40,3 +40,61 @@ export async function getDailyCashSummary(date?: string): Promise<DailyCashSumma
   })
   return data
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Cierres persistidos
+// ───────────────────────────────────────────────────────────────────────
+
+export interface CashClosing {
+  id: string
+  closedDate: string  // YYYY-MM-DD
+  baseAmount: number
+  cashSales: number
+  cashExpenses: number
+  expectedCash: number
+  countedCash: number
+  /** counted − expected. Negativo=faltó, positivo=sobró, 0=cuadró. */
+  diff: number
+  diffNote: string | null
+  totalAmount: number
+  closedAt: string  // ISO
+  closedByUserId: string | null
+}
+
+export interface CreateCashClosingRequest {
+  closedDate?: string | null
+  baseAmount: number
+  countedCash: number
+  diffNote?: string | null
+}
+
+export async function createCashClosing(
+  req: CreateCashClosingRequest,
+): Promise<CashClosing> {
+  const { data } = await api.post<CashClosing>('/api/Cash/closings', req)
+  return data
+}
+
+export async function listCashClosings(
+  from?: string,
+  to?: string,
+): Promise<CashClosing[]> {
+  const { data } = await api.get<CashClosing[]>('/api/Cash/closings', {
+    params: { from, to },
+  })
+  return data
+}
+
+/**
+ * Devuelve el cierre del día indicado, o null si todavía no se ha cerrado.
+ * Usa 404 del backend como señal de "no existe" (no es un error).
+ */
+export async function getCashClosingForDate(date: string): Promise<CashClosing | null> {
+  try {
+    const { data } = await api.get<CashClosing>(`/api/Cash/closings/by-date/${date}`)
+    return data
+  } catch (e: any) {
+    if (e?.response?.status === 404) return null
+    throw e
+  }
+}

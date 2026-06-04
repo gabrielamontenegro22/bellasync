@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowDownRight, ArrowUpRight,
   Banknote, Clock, CreditCard,
@@ -9,7 +9,15 @@ import { PROVIDER_COLORS, PROVIDER_FALLBACK_COLOR } from '@/features/payments/pa
 import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
 import { fmtCop } from '@/features/customers/lib/customerLook'
-import { getDailyCashSummary, type DailyCashSummary } from '@/api/cash'
+import { extractApiError } from '@/lib/extractApiError'
+import {
+  getDailyCashSummary,
+  getCashClosingForDate,
+  createCashClosing,
+  listCashClosings,
+  type DailyCashSummary,
+  type CashClosing,
+} from '@/api/cash'
 import type { ExpenseResponse } from '@/api/expenses'
 import type { PaymentResponse } from '@/api/payments'
 import { getPaymentBadge } from '@/features/payments/paymentBadge'
@@ -35,15 +43,11 @@ import { RegisterExpenseModal } from './components/RegisterExpenseModal'
  */
 export function CashClosingPage() {
   const { user } = useAuth()
+  const qc = useQueryClient()
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy')
   const [filterMethod, setFilterMethod] = useState<string>('all')
   const [closeOpen, setCloseOpen] = useState(false)
   const [expenseOpen, setExpenseOpen] = useState(false)
-  const [closed, setClosed] = useState<{
-    counted: number
-    diff: number
-    note: string
-  } | null>(null)
 
   // Por ahora fijamos hoy. Cuando el endpoint acepte navegación,
   // exponemos un date picker (ver TODO en /caja date nav).
@@ -52,6 +56,25 @@ export function CashClosingPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['cash', today],
     queryFn: () => getDailyCashSummary(today),
+  })
+
+  // ¿Ya se cerró hoy? Lo persistido manda — si refrescás la página, el
+  // pill "Caja cerrada" sigue visible y el botón de cerrar deshabilitado.
+  const { data: existingClosing } = useQuery({
+    queryKey: ['cashClosing', today],
+    queryFn: () => getCashClosingForDate(today),
+  })
+  const isClosedToday = !!existingClosing
+
+  // Mutación de cierre. Al éxito invalida ambas queries (estado actual
+  // y lista del historial) para que el pill y la tabla se actualicen.
+  const createMutation = useMutation({
+    mutationFn: createCashClosing,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cashClosing'] })
+      qc.invalidateQueries({ queryKey: ['cashClosings'] })
+      setCloseOpen(false)
+    },
   })
 
   return (
@@ -78,7 +101,7 @@ export function CashClosingPage() {
           >
             <Download size={14} strokeWidth={1.8} /> Exportar
           </button>
-          {!closed && (
+          {!isClosedToday && (
             <button
               type="button"
               onClick={() => setCloseOpen(true)}
@@ -110,10 +133,10 @@ export function CashClosingPage() {
               {formatHumanDate(new Date())} · Abierta desde las 8:00 am
             </p>
           </div>
-          {closed ? (
+          {existingClosing ? (
             <div
               className="rounded-xl bg-brand-50 ring-1 ring-brand-200 px-4 py-2.5 flex items-center gap-2.5 max-w-[420px]"
-              title={closed.note ? `Nota: ${closed.note}` : undefined}
+              title={existingClosing.diffNote ? `Nota: ${existingClosing.diffNote}` : undefined}
             >
               <span className="w-7 h-7 rounded-full bg-brand-700 text-white flex items-center justify-center flex-shrink-0">
                 <CheckCircle2 size={15} strokeWidth={2.4} />
@@ -122,13 +145,13 @@ export function CashClosingPage() {
                 <div className="text-[12.5px] font-medium text-brand-800">Caja cerrada</div>
                 <div className="text-[11px] text-warm-600">
                   Diferencia:{' '}
-                  {closed.diff === 0
+                  {existingClosing.diff === 0
                     ? 'cuadró perfecto'
-                    : (closed.diff > 0 ? '+' : '') + fmtCop(closed.diff)}
+                    : (existingClosing.diff > 0 ? '+' : '') + fmtCop(existingClosing.diff)}
                 </div>
-                {closed.note && (
+                {existingClosing.diffNote && (
                   <div className="text-[11px] text-warm-500 italic truncate mt-0.5">
-                    “{closed.note}”
+                    “{existingClosing.diffNote}”
                   </div>
                 )}
               </div>
@@ -216,7 +239,7 @@ export function CashClosingPage() {
           onFilterChange={setFilterMethod}
           onOpenClose={() => setCloseOpen(true)}
           onOpenExpense={() => setExpenseOpen(true)}
-          closed={!!closed}
+          closed={isClosedToday}
         />
       ) : (
         <TabHistorial />
@@ -228,9 +251,15 @@ export function CashClosingPage() {
         expected={expectedCashFor(data)}
         cashSales={cashSalesFor(data)}
         cashExpenses={cashExpensesFor(data)}
-        onConfirm={(counted, diff, note) => {
-          setClosed({ counted, diff, note })
-          setCloseOpen(false)
+        submitting={createMutation.isPending}
+        submitError={createMutation.error ? extractApiError(createMutation.error, 'No se pudo cerrar la caja.') : null}
+        onConfirm={(counted, _diff, note) => {
+          createMutation.mutate({
+            closedDate: today,
+            baseAmount: BASE_INICIAL,
+            countedCash: counted,
+            diffNote: note || null,
+          })
         }}
       />
 
@@ -583,10 +612,15 @@ function TxnRow({ txn }: { txn: PaymentResponse }) {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Tab Historial — placeholder hasta que exista entidad CashClosing.
+// Tab Historial — datos reales del backend (últimos 30 días).
 // ───────────────────────────────────────────────────────────────────────
 
 function TabHistorial() {
+  const { data: closings, isLoading, error } = useQuery({
+    queryKey: ['cashClosings'],
+    queryFn: () => listCashClosings(),
+  })
+
   return (
     <div className="px-6 lg:px-8 py-6">
       <div className="bg-white rounded-2xl border border-warm-150 shadow-soft overflow-hidden">
@@ -594,29 +628,80 @@ function TabHistorial() {
           <thead>
             <tr className="bg-warm-50 border-b border-warm-150 text-[10.5px] tracking-[0.14em] uppercase text-warm-500">
               <th className="text-left font-medium px-5 py-3">Fecha</th>
-              <th className="text-right font-medium px-5 py-3">Total</th>
+              <th className="text-right font-medium px-5 py-3">Total recaudado</th>
               <th className="text-right font-medium px-5 py-3 hidden sm:table-cell">
-                Transacciones
+                Efectivo contado
               </th>
               <th className="text-right font-medium px-5 py-3">Diferencia</th>
-              <th className="text-left font-medium px-5 py-3 hidden md:table-cell">
-                Cerrada por
-              </th>
-              <th className="px-5 py-3 w-10" />
+              <th className="text-left font-medium px-5 py-3 hidden md:table-cell">Nota</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={6} className="px-5 py-16 text-center text-[13px] text-warm-500">
-                Cuando empieces a cerrar la caja cada noche, el historial
-                aparecerá acá. (próximamente)
-              </td>
-            </tr>
+            {isLoading && (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-warm-400">
+                  Cargando historial…
+                </td>
+              </tr>
+            )}
+            {error && (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-[13px] text-terra-500">
+                  No se pudo cargar el historial.
+                </td>
+              </tr>
+            )}
+            {!isLoading && !error && (closings?.length ?? 0) === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-16 text-center text-[13px] text-warm-500">
+                  Cuando empieces a cerrar la caja cada noche, el historial aparecerá acá.
+                </td>
+              </tr>
+            )}
+            {closings?.map((cc: CashClosing) => {
+              const diffColor =
+                cc.diff === 0 ? 'text-brand-700' : cc.diff > 0 ? 'text-gold-600' : 'text-terra-500'
+              const diffLabel =
+                cc.diff === 0 ? 'Cuadró' : (cc.diff > 0 ? '+' : '') + fmtCop(cc.diff)
+              return (
+                <tr key={cc.id} className="border-b border-warm-100 last:border-0 hover:bg-warm-50/40">
+                  <td className="px-5 py-3.5 font-medium text-warm-800 tabular-nums">
+                    {formatHumanDateShort(cc.closedDate)}
+                  </td>
+                  <td className="px-5 py-3.5 text-right tabular-nums text-warm-800">
+                    {fmtCop(cc.totalAmount)}
+                  </td>
+                  <td className="px-5 py-3.5 text-right tabular-nums text-warm-700 hidden sm:table-cell">
+                    {fmtCop(cc.countedCash)}
+                    <span className="text-warm-400 text-[11px] ml-1">
+                      / {fmtCop(cc.expectedCash)}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-right tabular-nums">
+                    <span className={cls('font-medium', diffColor)}>{diffLabel}</span>
+                  </td>
+                  <td className="px-5 py-3.5 text-warm-500 hidden md:table-cell italic truncate max-w-[260px]">
+                    {cc.diffNote ?? '—'}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
     </div>
   )
+}
+
+/** "Mié 3 jun" — compacto para tabla. */
+function formatHumanDateShort(yyyyMmDd: string): string {
+  const [y, m, d] = yyyyMmDd.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  return new Intl.DateTimeFormat('es-CO', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(date)
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -629,6 +714,8 @@ function CloseModal({
   expected,
   cashSales,
   cashExpenses,
+  submitting = false,
+  submitError = null,
   onConfirm,
 }: {
   open: boolean
@@ -636,6 +723,8 @@ function CloseModal({
   expected: number
   cashSales: number
   cashExpenses: number
+  submitting?: boolean
+  submitError?: string | null
   onConfirm: (counted: number, diff: number, note: string) => void
 }) {
   const [counted, setCounted] = useState('')
@@ -788,18 +877,27 @@ function CloseModal({
           )}
         </div>
 
+        {submitError && (
+          <div className="px-6 pb-3">
+            <div className="rounded-lg bg-terra-100/60 ring-1 ring-terra-300 px-3 py-2 text-[12.5px] text-terra-500">
+              {submitError}
+            </div>
+          </div>
+        )}
+
         <div className="px-6 py-4 bg-warm-50 border-t border-warm-150 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-lg text-[13px] text-warm-700 hover:bg-warm-150"
+            disabled={submitting}
+            className="px-4 py-2.5 rounded-lg text-[13px] text-warm-700 hover:bg-warm-150 disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={() => onConfirm(countedNum, diff, note.trim())}
-            disabled={!hasCount || (hasDiff && !note.trim())}
+            disabled={!hasCount || (hasDiff && !note.trim()) || submitting}
             title={
               hasDiff && !note.trim()
                 ? 'Explicá brevemente la diferencia antes de cerrar'
@@ -807,12 +905,13 @@ function CloseModal({
             }
             className={cls(
               'px-5 py-2.5 rounded-lg text-[13px] font-medium flex items-center gap-2 transition',
-              hasCount && (!hasDiff || note.trim())
+              hasCount && (!hasDiff || note.trim()) && !submitting
                 ? 'bg-brand-700 hover:bg-brand-800 text-white shadow-soft'
                 : 'bg-warm-200 text-warm-400 cursor-not-allowed',
             )}
           >
-            <Lock size={15} strokeWidth={1.8} /> Confirmar cierre
+            <Lock size={15} strokeWidth={1.8} />
+            {submitting ? 'Guardando…' : 'Confirmar cierre'}
           </button>
         </div>
       </div>

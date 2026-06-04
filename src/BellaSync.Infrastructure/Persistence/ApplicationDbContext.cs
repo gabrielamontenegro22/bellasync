@@ -36,6 +36,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<CommissionPayout> CommissionPayouts => Set<CommissionPayout>();
+    public DbSet<CashClosing> CashClosings => Set<CashClosing>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
