@@ -9,6 +9,14 @@ import { PaymentMethodPicker } from './PaymentMethodPicker'
 
 interface RegisterPaymentModalProps {
   appointment: AppointmentResponse
+  /**
+   * Pagos YA registrados para esta cita (suma de Payment.total).
+   * El parent (típicamente DetailPanel del agenda) lo calcula desde
+   * `useCustomerPayments` y lo pasa para que el modal compute el saldo
+   * correctamente: saldo = precio − anticipo validado − ya pagado.
+   * Si no se pasa, asume 0 (modo legacy / compat).
+   */
+  alreadyPaid?: number
   onClose: () => void
 }
 
@@ -23,15 +31,20 @@ interface RegisterPaymentModalProps {
  * NO procesa pagos reales. El dinero entra por fuera (efectivo, app
  * bancaria, datáfono); esto solo deja el registro contable.
  */
-export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentModalProps) {
+export function RegisterPaymentModal({
+  appointment, alreadyPaid = 0, onClose,
+}: RegisterPaymentModalProps) {
   const [method, setMethod] = useState<PaymentMethod>('Cash')
   const [provider, setProvider] = useState<string | null>(null)
-  // Saldo restante = total servicio - lo que ya entró por anticipo.
-  // Si no hubo anticipo, validatedDepositAmount es 0 y queda el total.
-  // Si la cliente sobre-pagó el anticipo (raro), queda negativo y el
-  // form mostraría 0 (no tiene sentido cobrar negativo).
-  const remaining = Math.max(0, appointment.priceSnapshot - appointment.validatedDepositAmount)
+  // Saldo restante = total servicio − anticipo validado − pagos ya
+  // registrados. Si la cliente sobre-pagó (raro), queda negativo y el
+  // form muestra 0.
+  const remaining = Math.max(
+    0,
+    appointment.priceSnapshot - appointment.validatedDepositAmount - alreadyPaid,
+  )
   const hasDeposit = appointment.validatedDepositAmount > 0
+  const hasPriorPayments = alreadyPaid > 0
   const [amount, setAmount] = useState(remaining)
   const [tip, setTip] = useState(0)
   const [reference, setReference] = useState('')
@@ -81,8 +94,13 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
 
   // Si es Transfer, no podemos enviar sin banco — el backend devolvería 400.
   const providerRequired = method === 'Transfer'
+  // Cap por overpay: el backend ahora rechaza amount > remaining con
+  // un error explícito (defensa en profundidad). Acá lo prevenimos en
+  // el UI mostrando el error antes de hacer la request.
+  const exceedsRemaining = amount > remaining
   const canSubmit =
     amount > 0 &&
+    !exceedsRemaining &&
     !submittingRef.current &&
     (!providerRequired || !!provider)
 
@@ -139,19 +157,27 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
           <div className="text-warm-600 mt-0.5">
             {appointment.serviceName} · {appointment.stylistName}
           </div>
-          {hasDeposit ? (
-            // Cuando hay anticipo, mostramos el breakdown para que la
-            // recepcionista entienda por qué el monto pre-rellenado
-            // es menor que el precio del servicio.
+          {hasDeposit || hasPriorPayments ? (
+            // Mostramos el breakdown cuando hay anticipo y/o pagos
+            // parciales previos: la recepcionista entiende de dónde sale
+            // el "falta cobrar" pre-rellenado.
             <div className="mt-2 pt-2 border-t border-warm-200 space-y-0.5 text-xs tabular-nums">
               <div className="flex justify-between text-warm-600">
                 <span>Total servicio</span>
                 <span>${appointment.priceSnapshot.toLocaleString('es-CO')}</span>
               </div>
-              <div className="flex justify-between text-brand-700">
-                <span>− Anticipo validado</span>
-                <span>${appointment.validatedDepositAmount.toLocaleString('es-CO')}</span>
-              </div>
+              {hasDeposit && (
+                <div className="flex justify-between text-brand-700">
+                  <span>− Anticipo validado</span>
+                  <span>${appointment.validatedDepositAmount.toLocaleString('es-CO')}</span>
+                </div>
+              )}
+              {hasPriorPayments && (
+                <div className="flex justify-between text-brand-700">
+                  <span>− Pagos previos</span>
+                  <span>${alreadyPaid.toLocaleString('es-CO')}</span>
+                </div>
+              )}
               <div className="flex justify-between font-semibold text-warm-800 pt-0.5 border-t border-warm-200/60">
                 <span>Falta cobrar</span>
                 <span>${remaining.toLocaleString('es-CO')}</span>
@@ -183,14 +209,29 @@ export function RegisterPaymentModal({ appointment, onClose }: RegisterPaymentMo
           <div>
             <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">
               Monto
+              <span className="ml-1 normal-case text-warm-400 tracking-normal">
+                (máx ${remaining.toLocaleString('es-CO')})
+              </span>
             </label>
             <Input
               type="number"
               min={0}
+              max={remaining}
               step={1000}
               value={amount}
-              onChange={e => setAmount(Number(e.target.value))}
+              onChange={e => {
+                // Cap visual: si tipea más del saldo, lo recortamos. El
+                // backend igual valida; esto evita que vean "Total
+                // $250.000" cuando solo deben $50.000.
+                const n = Number(e.target.value)
+                setAmount(Number.isFinite(n) ? Math.min(n, remaining) : 0)
+              }}
             />
+            {exceedsRemaining && (
+              <p className="mt-1 text-[11.5px] text-terra-500">
+                No puede ser mayor a ${remaining.toLocaleString('es-CO')}.
+              </p>
+            )}
           </div>
           <div>
             <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">

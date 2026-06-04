@@ -67,6 +67,38 @@ public sealed class RegisterPaymentHandler
             return ApplicationError.Validation("payment.invalid_amount", ex.Message);
         }
 
+        // 3.5. Validar que no se sobre-pague. Saldo = precio del servicio
+        //      − anticipos validados − pagos ya registrados. La propina
+        //      (tip) NO cuenta para el saldo: es plata extra que va al
+        //      estilista, no parte del cobro del servicio.
+        //
+        //      Suma en memoria porque Money/HasConversion no traduce bien
+        //      en SUM() de SQL (mismo problema que tuvimos antes).
+        var alreadyValidatedDeposits = await _db.PaymentVouchers
+            .AsNoTracking()
+            .Where(v => v.AppointmentId == appointment.Id
+                     && v.Status == PaymentVoucherStatus.Validated)
+            .Select(v => v.ReportedAmount)
+            .ToListAsync(ct);
+        var alreadyPaidPayments = await _db.Payments
+            .AsNoTracking()
+            .Where(p => p.AppointmentId == appointment.Id)
+            .Select(p => p.Amount)
+            .ToListAsync(ct);
+
+        var alreadyPaid = alreadyValidatedDeposits.Sum(m => m.Amount)
+                        + alreadyPaidPayments.Sum(m => m.Amount);
+        var remaining = appointment.PriceSnapshot.Amount - alreadyPaid;
+
+        if (amount.Amount > remaining)
+        {
+            return ApplicationError.Validation(
+                "payment.exceeds_remaining",
+                $"El monto ({amount.Amount:N0}) supera el saldo pendiente ({remaining:N0}). " +
+                $"Servicio: {appointment.PriceSnapshot.Amount:N0}, ya pagado: {alreadyPaid:N0}. " +
+                "Si la cliente quiere dar extra, va como propina.");
+        }
+
         // 4. Crear el pago vía factory del dominio (que valida invariantes adicionales).
         Payment payment;
         try

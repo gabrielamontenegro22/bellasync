@@ -742,15 +742,32 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
         {/* Cobrar — disponible para citas InProgress o Completed.
             Cuando la cita ya pasó, registrar el pago es lo más importante
             que puede hacer la recepcionista; por eso va full-width arriba
-            de WhatsApp. */}
+            de WhatsApp.
+
+            Si el saldo (precio − anticipo − pagos previos) ya es 0,
+            mostramos "Pagado ✓" en lugar de un botón habilitado —
+            cobrar dos veces no tiene sentido. */}
         {(appointment.status === 'InProgress' || appointment.status === 'Completed') && (
-          <button
-            type="button"
-            onClick={() => setShowPayment(true)}
-            className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-gold-500 hover:bg-gold-600 text-white text-[12.5px] font-medium"
-          >
-            <Wallet size={14} /> Registrar pago
-          </button>
+          (() => {
+            const saldoRestante = Math.max(
+              0,
+              appointment.priceSnapshot - appointment.validatedDepositAmount - totalPaid,
+            )
+            const fullyPaid = saldoRestante === 0
+            return fullyPaid ? (
+              <div className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-brand-50 border border-brand-200 text-brand-800 text-[12.5px] font-medium">
+                <Wallet size={14} /> Servicio pagado completo
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowPayment(true)}
+                className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-gold-500 hover:bg-gold-600 text-white text-[12.5px] font-medium"
+              >
+                <Wallet size={14} /> Registrar pago · falta ${saldoRestante.toLocaleString('es-CO')}
+              </button>
+            )
+          })()
         )}
 
         {/* WhatsApp — siempre disponible, ocupa toda la fila */}
@@ -773,6 +790,7 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
       {showPayment && (
         <RegisterPaymentModal
           appointment={appointment}
+          alreadyPaid={totalPaid}
           onClose={() => setShowPayment(false)}
         />
       )}
