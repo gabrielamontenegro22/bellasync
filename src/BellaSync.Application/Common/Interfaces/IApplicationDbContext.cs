@@ -24,6 +24,8 @@ public interface IApplicationDbContext
     DbSet<Expense> Expenses { get; }
     DbSet<CommissionPayout> CommissionPayouts { get; }
     DbSet<CashClosing> CashClosings { get; }
+    DbSet<SalonWeeklyHours> SalonWeeklyHours { get; }
+    DbSet<SalonClosedDate> SalonClosedDates { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

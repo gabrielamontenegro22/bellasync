@@ -45,6 +45,15 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.InstagramHandle).HasMaxLength(50);
         builder.Property(t => t.Description).HasMaxLength(500);
 
+        // Flags del horario. LunchBreak default OFF, horas 13-14 si se
+        // activa. Holidays default OFF también — la admin decide
+        // explícitamente. Los días-franjas y los cierres puntuales
+        // viven en salon_weekly_hours y salon_closed_dates.
+        builder.Property(t => t.LunchBreakEnabled).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.LunchBreakFromHour).IsRequired().HasDefaultValue(13);
+        builder.Property(t => t.LunchBreakToHour).IsRequired().HasDefaultValue(14);
+        builder.Property(t => t.IsHolidaysClosed).IsRequired().HasDefaultValue(false);
+
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.UpdatedAt);
 
