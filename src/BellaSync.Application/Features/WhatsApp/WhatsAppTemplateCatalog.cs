@@ -65,6 +65,13 @@ public static class WhatsAppTemplateCatalog
             "El día del cumpleaños de la clienta",
             "¡Feliz cumpleaños {nombre}! 🎉 En {salon} queremos consentirte: ven este mes y recibe un 15% en tu servicio favorito.",
             DefaultEnabled: false),
+
+        new CatalogEntry(
+            WhatsAppTemplateKind.AppointmentCancelled,
+            "Cita cancelada",
+            "Al cancelar una cita ya confirmada",
+            "Hola {nombre}, te confirmamos que tu cita de {servicio} del {fecha} a las {hora} fue cancelada. Si querés reagendar, respondé este mensaje. ¡Te esperamos pronto en {salon}!",
+            DefaultEnabled: true),
     };
 
     public static CatalogEntry Get(WhatsAppTemplateKind kind)

@@ -22,4 +22,12 @@ public enum WhatsAppTemplateKind
     Ready2h = 2,
     PendingDeposit = 3,
     Birthday = 4,
+
+    /// <summary>
+    /// Notificación al cliente cuando una cita se cancela. Se dispara desde
+    /// CancelAppointmentHandler. Si la cita tenía anticipo validado (no
+    /// reembolsable), el mensaje puede mencionarlo según el body que la
+    /// admin haya configurado.
+    /// </summary>
+    AppointmentCancelled = 5,
 }

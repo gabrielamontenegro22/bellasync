@@ -3,10 +3,37 @@ using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Commissions.Dtos;
+using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace BellaSync.Application.Features.Commissions.GetCommissionsSummary;
 
+/// <summary>
+/// Calcula las comisiones devengadas por cada estilista en el rango.
+///
+/// Reglas de negocio:
+///
+///   - Solo citas Completed o InProgress generan comisión. Las
+///     Cancelled / NoShow no — aunque el salón se haya quedado con el
+///     anticipo (forfeiture), el estilista NO trabajó esa cita.
+///
+///   - Base de comisión = TODA la plata cobrada por la cita
+///     (Payments + Vouchers Validated), no solo el saldo final.
+///     Antes el handler sumaba solo Payments, lo que subestimaba la
+///     comisión en cualquier cita con anticipo. Ejemplo: cita $150k,
+///     anticipo $80k + saldo $70k:
+///       - Antes: comisión sobre $70k = $21k (mal)
+///       - Ahora: comisión sobre $150k = $45k (correcto)
+///
+///   - Período: filtramos por Appointment.StartAt (fecha del servicio),
+///     no por fecha del pago. "Comisiones de julio" = "servicios
+///     realizados en julio", que es el mental model natural del salón.
+///     Si el saldo se cobra después (ej: cita el 30/jul, saldo cobrado
+///     el 1/ago), igual cuenta en julio.
+///
+/// Como Money * Percentage no se traduce a SQL (mismo bug histórico),
+/// traemos en memoria y agregamos en C#.
+/// </summary>
 public sealed class GetCommissionsSummaryHandler
     : IQueryHandler<GetCommissionsSummaryQuery, CommissionsSummaryResponse>
 {
@@ -28,34 +55,84 @@ public sealed class GetCommissionsSummaryHandler
         var dayStartUtc = new DateTimeOffset(query.From.ToDateTime(TimeOnly.MinValue), ColombiaOffset).UtcDateTime;
         var dayEndUtc   = new DateTimeOffset(query.To.AddDays(1).ToDateTime(TimeOnly.MinValue), ColombiaOffset).UtcDateTime;
 
-        // 1) Pagos del rango con join a appointment + service + stylist.
-        //    Traemos en memoria porque la comisión derivada involucra
-        //    multiplicar Money * Percentage (VOs con HasConversion) y
-        //    EF no lo traduce bien en GROUP BY (mismo problema histórico).
-        var payments = await _db.Payments
+        // 1) Citas atendidas en el rango (Completed o InProgress).
+        //    Cancelled/NoShow NO generan comisión aunque haya forfeiture.
+        var attendedAppts = await _db.Appointments
             .AsNoTracking()
-            .Include(p => p.Appointment)!.ThenInclude(a => a!.Service)
-            .Include(p => p.Appointment)!.ThenInclude(a => a!.Stylist)
-            .Where(p => p.RegisteredAt >= dayStartUtc && p.RegisteredAt < dayEndUtc)
+            .Include(a => a.Service)
+            .Include(a => a.Stylist)
+            .Where(a => a.StartAt >= dayStartUtc
+                     && a.StartAt < dayEndUtc
+                     && (a.Status == AppointmentStatus.Completed
+                         || a.Status == AppointmentStatus.InProgress))
             .ToListAsync(ct);
 
-        // 2) Agrupar por estilista en C#.
-        var grouped = payments
-            .Where(p => p.Appointment?.Stylist is not null && p.Appointment?.Service is not null)
-            .GroupBy(p => p.Appointment!.Stylist!)
-            .Select(g => new
+        if (attendedAppts.Count == 0)
+        {
+            // Sigue habiendo payouts en el rango aunque no haya nuevas
+            // atendidas — los pintamos abajo igual.
+        }
+
+        var attendedIds = attendedAppts.Select(a => a.Id).ToList();
+
+        // 2) Payments asociados a esas citas (saldos finales + propinas).
+        var payments = await _db.Payments
+            .AsNoTracking()
+            .Where(p => attendedIds.Contains(p.AppointmentId))
+            .Select(p => new { p.AppointmentId, p.Amount, p.Tip })
+            .ToListAsync(ct);
+
+        var paymentsByAppt = payments
+            .GroupBy(p => p.AppointmentId)
+            .ToDictionary(g => g.Key, g => g.Sum(p => p.Amount.Amount + p.Tip.Amount));
+
+        // 3) Vouchers Validated asociados (anticipos que entraron a caja).
+        var vouchers = await _db.PaymentVouchers
+            .AsNoTracking()
+            .Where(v => attendedIds.Contains(v.AppointmentId)
+                     && v.Status == PaymentVoucherStatus.Validated)
+            .Select(v => new { v.AppointmentId, v.ReportedAmount })
+            .ToListAsync(ct);
+
+        var depositsByAppt = vouchers
+            .GroupBy(v => v.AppointmentId)
+            .ToDictionary(g => g.Key, g => g.Sum(v => v.ReportedAmount.Amount));
+
+        // 4) Para cada cita atendida, calcular base + comisión.
+        //    Base = sum(Payments) + sum(Validated Vouchers).
+        //    Comisión = base * Service.CommissionPercentage / 100.
+        var perAppt = attendedAppts
+            .Where(a => a.Service is not null && a.Stylist is not null)
+            .Select(a =>
             {
-                Stylist = g.Key,
-                PaymentsCount = g.Count(),
-                CobradoTotal = g.Sum(p => p.Amount.Amount),
-                // Comisión = sumatoria(amount * pct / 100) por cada pago.
-                CommissionEarned = g.Sum(p =>
-                    p.Amount.Amount * p.Appointment!.Service!.CommissionPercentage.Value / 100m),
+                var paid = paymentsByAppt.GetValueOrDefault(a.Id, 0m);
+                var deposit = depositsByAppt.GetValueOrDefault(a.Id, 0m);
+                var base_ = paid + deposit;
+                var pct = a.Service!.CommissionPercentage.Value;
+                var commission = base_ * pct / 100m;
+                return new
+                {
+                    a.Id,
+                    Stylist = a.Stylist!,
+                    Base = base_,
+                    Commission = commission,
+                };
             })
             .ToList();
 
-        // 3) Payouts cuyo período se solapa con el rango. Para v1
-        //    "se solapa" = period_to >= From AND period_from <= To.
+        // 5) Agrupar por estilista.
+        var grouped = perAppt
+            .GroupBy(x => x.Stylist)
+            .Select(g => new
+            {
+                Stylist = g.Key,
+                PaymentsCount = g.Count(),  // citas atendidas (no pagos)
+                CobradoTotal = g.Sum(x => x.Base),
+                CommissionEarned = g.Sum(x => x.Commission),
+            })
+            .ToList();
+
+        // 6) Payouts cuyo período se solapa con el rango.
         var payouts = await _db.CommissionPayouts
             .AsNoTracking()
             .Where(cp => cp.PeriodTo >= query.From && cp.PeriodFrom <= query.To)
@@ -65,12 +142,10 @@ public sealed class GetCommissionsSummaryHandler
             .GroupBy(cp => cp.StylistId)
             .ToDictionary(g => g.Key, g => g.Sum(cp => cp.Amount.Amount));
 
-        // 4) Construir filas. Incluimos también estilistas que SOLO
-        //    tienen payouts en el rango (sin pagos nuevos) — para que
-        //    aparezcan en el historial con su "paid".
-        var stylistIdsConPagos = grouped.Select(g => g.Stylist.Id).ToHashSet();
+        // 7) Filas combinadas (estilistas con citas atendidas + con payouts).
+        var stylistIdsConCitas = grouped.Select(g => g.Stylist.Id).ToHashSet();
         var stylistIdsConPayouts = paidByStylist.Keys.ToHashSet();
-        var allStylistIds = stylistIdsConPagos.Union(stylistIdsConPayouts).ToList();
+        var allStylistIds = stylistIdsConCitas.Union(stylistIdsConPayouts).ToList();
 
         var stylistsLookup = await _db.Stylists
             .AsNoTracking()
@@ -96,8 +171,6 @@ public sealed class GetCommissionsSummaryHandler
                     Pending = Math.Max(0m, earned - paid),
                 };
             })
-            // Orden: por pending descendente (los que más se le debe arriba),
-            // luego por earned, luego alfabético.
             .OrderByDescending(r => r.Pending)
             .ThenByDescending(r => r.CommissionEarned)
             .ThenBy(r => r.StylistName)
