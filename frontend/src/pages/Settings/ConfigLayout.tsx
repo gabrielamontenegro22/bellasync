@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import { AppShell } from '@/components/layout/AppShell'
+import { SearchablePicker } from '@/components/ui'
 import { useAuth } from '@/features/auth/useAuth'
 
 interface ConfigSection {
@@ -166,23 +167,24 @@ function MobileSubsectionSwitcher({ current }: { current: string }) {
   const enabled = CONFIG_SECTIONS.filter((s) => !s.disabled)
   const navigate = useNavigate()
 
+  // Usamos SearchablePicker (no <select> nativo) por la misma razón que en
+  // los date pickers: el dropdown del browser nativo en mobile/iPad rompe
+  // la identidad visual (fondo blanco, fila azul de Chrome, fuente del SO).
+  // SearchablePicker tiene threshold default 8 → con 6 secciones no muestra
+  // input de búsqueda; solo aparece como lista limpia.
   return (
     <div className="lg:hidden bg-white border-b border-warm-150 px-4 py-3 flex-shrink-0">
-      <select
+      <SearchablePicker
         value={current}
-        onChange={(e) => {
-          // navigate() en vez de window.location.assign para no recargar
-          // el bundle entero (resetea react-query cache, hace flash blanco).
-          navigate(e.target.value)
-        }}
-        className="w-full px-3 py-2 rounded-md border border-warm-200 bg-white text-[13.5px] text-warm-800"
-      >
-        {enabled.map((s) => (
-          <option key={s.to} value={s.to}>
-            {s.label}
-          </option>
-        ))}
-      </select>
+        onChange={(v) => navigate(v)}
+        options={enabled.map((s) => ({
+          value: s.to,
+          label: s.label,
+          sublabel: s.hint,
+        }))}
+        placeholder="Seleccionar sección…"
+        size="md"
+      />
     </div>
   )
 }
