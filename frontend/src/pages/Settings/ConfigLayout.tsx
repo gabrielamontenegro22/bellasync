@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Building2,
   CalendarClock,
@@ -51,11 +51,16 @@ export function ConfigLayout() {
       <div className="flex-1 min-w-0 flex">
         <ConfigSidebar tenantName={user?.tenantName ?? 'Salón'} />
 
-        {/* Mobile: select para cambiar de subsección */}
-        <MobileSubsectionSwitcher current={location.pathname} />
-
-        <div className="flex-1 min-w-0">
-          <Outlet />
+        {/* Columna de contenido: el switcher mobile va ENCIMA del Outlet,
+            no como hermano del flex row. Si quedaba al lado, con su
+            `w-full` ocupaba todo el ancho y el Outlet se renderizaba con
+            0px → la página parecía vacía (este era el bug visible en
+            /configuracion/general en iPad). */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <MobileSubsectionSwitcher current={location.pathname} />
+          <div className="flex-1 min-w-0 min-h-0">
+            <Outlet />
+          </div>
         </div>
       </div>
     </AppShell>
@@ -159,13 +164,16 @@ function ConfigSidebar({ tenantName }: { tenantName: string }) {
 
 function MobileSubsectionSwitcher({ current }: { current: string }) {
   const enabled = CONFIG_SECTIONS.filter((s) => !s.disabled)
+  const navigate = useNavigate()
 
   return (
-    <div className="lg:hidden bg-white border-b border-warm-150 px-4 py-3 w-full">
+    <div className="lg:hidden bg-white border-b border-warm-150 px-4 py-3 flex-shrink-0">
       <select
         value={current}
         onChange={(e) => {
-          window.location.assign(e.target.value)
+          // navigate() en vez de window.location.assign para no recargar
+          // el bundle entero (resetea react-query cache, hace flash blanco).
+          navigate(e.target.value)
         }}
         className="w-full px-3 py-2 rounded-md border border-warm-200 bg-white text-[13.5px] text-warm-800"
       >

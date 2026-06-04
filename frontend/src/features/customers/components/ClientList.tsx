@@ -67,8 +67,12 @@ export function ClientList({ selectedId, onSelect, onNew }: ClientListProps) {
     })
   }, [items, tab])
 
+  // En mobile (<md) la aside ocupa todo el ancho — el detalle no se ve hasta tap.
+  // En tablet/desktop (≥md) se reduce a 38% (max 440px) para que el panel derecho
+  // con la ficha tenga lugar. Antes el breakpoint era `lg` (1024px) así que iPad
+  // (768px) se quedaba en modo "solo lista" y se veía vacío a la derecha.
   return (
-    <aside className="w-full lg:w-[40%] lg:max-w-[440px] flex-shrink-0 border-r border-warm-150 bg-white flex flex-col min-h-0">
+    <aside className="w-full md:w-[38%] md:max-w-[440px] flex-shrink-0 border-r border-warm-150 bg-white flex flex-col min-h-0">
       {/* Header con título + búsqueda + tabs */}
       <div className="px-5 pt-5 pb-3">
         <div className="flex items-start justify-between gap-3">
