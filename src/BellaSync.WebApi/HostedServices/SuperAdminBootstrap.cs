@@ -35,6 +35,24 @@ public sealed class SuperAdminBootstrap : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Bootstrap envuelto en try/catch: nunca queremos que un fallo del
+        // seed tire la API abajo. Loggeamos y seguimos — la app arranca
+        // sin SuperAdmin (el SuperAdmin podrá crearse manualmente más
+        // tarde si se requiere).
+        try
+        {
+            await SeedAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "SuperAdminBootstrap falló — la API arranca igual sin SuperAdmin. " +
+                "Verificar la BD manualmente.");
+        }
+    }
+
+    private async Task SeedAsync(CancellationToken cancellationToken)
+    {
         var section = _config.GetSection("SuperAdmin");
         var email = section["Email"];
         var password = section["Password"];
@@ -60,9 +78,27 @@ public sealed class SuperAdminBootstrap : IHostedService
         // initializer = Guid.NewGuid() que EF respeta — y sobreescribir
         // a Guid.Empty puede dispararle "value not set" en algunos
         // value generators. SQL directo evita todo eso y es más explícito.
-        // Limpieza defensiva: bootstraps previos podrían haber creado el
-        // system tenant con Id aleatorio (BaseEntity initializer pisaba
-        // el override). Borramos cualquier _system orphan antes del UPSERT.
+        // Limpieza defensiva en 2 pasos: bootstraps viejos podían crear
+        // el system tenant con Id aleatorio (BaseEntity initializer pisaba
+        // el override Guid.Empty).
+        //
+        // Paso 1a: re-asignar cualquier SuperAdmin user que apunte a un
+        //          _system orphan a Guid.Empty (donde estará la fila buena).
+        // Paso 1b: borrar los _system orphans (ya sin FK violations).
+        //
+        // Sin el paso 1a, el DELETE viola fk_users_tenants_tenant_id y
+        // la API queda fuera de servicio en cualquier entorno con data
+        // legacy. Era exactamente el bug que descubrió el audit (C2).
+        await rawDb.Database.ExecuteSqlRawAsync(
+            @"UPDATE users
+              SET tenant_id = '00000000-0000-0000-0000-000000000000'
+              WHERE tenant_id IN (
+                  SELECT id FROM tenants
+                  WHERE slug = '_system'
+                    AND id <> '00000000-0000-0000-0000-000000000000'
+              );",
+            cancellationToken);
+
         await rawDb.Database.ExecuteSqlRawAsync(
             @"DELETE FROM tenants
               WHERE slug = '_system'

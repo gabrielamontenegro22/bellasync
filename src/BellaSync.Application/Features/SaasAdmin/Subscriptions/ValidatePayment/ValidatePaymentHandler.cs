@@ -49,9 +49,6 @@ public sealed class ValidatePaymentHandler : ICommandHandler<ValidatePaymentComm
             return ApplicationError.NotFound(
                 "subscription.invoice_not_found", "Factura no encontrada.");
 
-        if (invoice.Status == SubscriptionInvoiceStatus.Paid)
-            return Result.Success();  // idempotente
-
         var sub = await _db.TenantSubscriptions
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(s => s.TenantId == invoice.TenantId, ct);
@@ -63,15 +60,50 @@ public sealed class ValidatePaymentHandler : ICommandHandler<ValidatePaymentComm
 
         var now = _clock.UtcNow;
 
+        // Idempotencia con reconciliación (bug C4 del audit): si la factura
+        // ya está Paid pero la sub no refleja el pago (ej. crash entre
+        // invoice.Validate y sub.Renew en una corrida anterior), corremos
+        // sub.Renew/Activate ahora para reconciliar. Sin esto, una sub
+        // podía quedar PastDue eternamente aunque la factura figuraba Paid.
+        if (invoice.Status == SubscriptionInvoiceStatus.Paid)
+        {
+            var subAlreadyCoversPeriod =
+                sub.Status == SubscriptionStatus.Active
+                && sub.CurrentPeriodEnd >= invoice.PeriodEnd;
+            if (subAlreadyCoversPeriod) return Result.Success();
+
+            // Reconciliar sin re-marcar la invoice (que ya está Paid).
+            try
+            {
+                if (sub.Status == SubscriptionStatus.Trial)
+                    sub.ActivateFromInvoice(invoice.PeriodEnd, now);
+                else
+                    sub.RenewFromInvoice(invoice.PeriodEnd, now);
+            }
+            catch (DomainException ex)
+            {
+                return ApplicationError.Conflict("subscription.validation_failed", ex.Message);
+            }
+
+            await _db.SaveChangesAsync(ct);
+            _logger.LogWarning(
+                "Reconciliación: invoice {InvoiceId} ya estaba Paid pero sub {TenantId} no reflejaba el pago. Sincronizado.",
+                invoice.Id, invoice.TenantId);
+            return Result.Success();
+        }
+
         try
         {
             invoice.Validate(_currentUser.UserId.Value, now);
 
-            // Trial → Active. Active/PastDue → Renew (extiende +1 mes).
+            // Trial → Active. Active/PastDue → Renew. Usamos la variante
+            // FromInvoice para mantener el período facturado == cobrado
+            // (bug M6 del audit: antes había 1 día de desfase entre lo
+            // que cobrábamos y lo que activábamos).
             if (sub.Status == SubscriptionStatus.Trial)
-                sub.Activate(now);
+                sub.ActivateFromInvoice(invoice.PeriodEnd, now);
             else
-                sub.Renew(now);
+                sub.RenewFromInvoice(invoice.PeriodEnd, now);
         }
         catch (DomainException ex)
         {

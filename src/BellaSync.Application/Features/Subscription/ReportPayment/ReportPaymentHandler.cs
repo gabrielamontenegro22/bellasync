@@ -64,6 +64,17 @@ public sealed class ReportPaymentHandler
                 "subscription.method_required",
                 "El método de pago es obligatorio.");
 
+        // M3 del audit: chequeo explícito de Cancelled antes de gastar
+        // ciclos emitiendo factura. Sin esto el flujo seguía hasta que
+        // el IssueInvoiceHandler la rechazaba con un mensaje genérico.
+        // Mensaje claro acá ahorra confusión.
+        var sub = await _db.TenantSubscriptions
+            .FirstOrDefaultAsync(s => s.TenantId == _currentTenant.TenantId, ct);
+        if (sub is not null && sub.Status == SubscriptionStatus.Cancelled)
+            return ApplicationError.Conflict(
+                "subscription.cancelled",
+                "Tu suscripción está cancelada. Contacta a BellaSync para reactivar.");
+
         // Emite (o devuelve la pending existente)
         var issueResult = await _issue.HandleAsync(new IssueInvoiceCommand(), ct);
         if (issueResult.IsFailure) return issueResult.Error!;

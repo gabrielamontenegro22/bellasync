@@ -13,7 +13,8 @@ public class ReleaseExpiredHoldsHandlerTests
     {
         var ctx = new AppointmentTestContext();
         var handler = new ReleaseExpiredHoldsHandler(
-            ctx.Base.Db, ctx.Base.Clock, ctx.Base.Logger<ReleaseExpiredHoldsHandler>());
+            ctx.Base.Db, ctx.Base.Clock, ctx.WhatsAppEnqueuer,
+            ctx.Base.Logger<ReleaseExpiredHoldsHandler>());
         return (ctx, handler);
     }
 

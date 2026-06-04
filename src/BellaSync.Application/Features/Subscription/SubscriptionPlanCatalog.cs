@@ -69,8 +69,11 @@ public static class SubscriptionPlanCatalog
             IsHighlighted: false),
     };
 
-    public static Plan? Get(string code)
-        => All.FirstOrDefault(p => p.Code == code.Trim().ToLowerInvariant());
+    public static Plan? Get(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        return All.FirstOrDefault(p => p.Code == code.Trim().ToLowerInvariant());
+    }
 
     /// <summary>Default usado al crear un tenant nuevo (trial).</summary>
     public const string DefaultPlanCode = "professional";

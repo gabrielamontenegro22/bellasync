@@ -57,6 +57,11 @@ public sealed class GetSubscriptionHandler
         // de Suscripción y no tiene aún su TenantSubscription, la creamos
         // acá. Los tenants nuevos vienen ya con la sub creada en
         // RegisterSalonHandler — esto cubre solamente los legacy.
+        //
+        // M2 del audit: si dos requests del mismo tenant entran simultáneos
+        // (ej. dos pestañas abiertas), ambos pasaban el `is null` y ambos
+        // intentaban Add → el segundo violaba el unique index y se rompía.
+        // Fix: catch UniqueViolation y re-leer. Idempotente.
         if (sub is null)
         {
             sub = TenantSubscription.StartTrial(
@@ -65,7 +70,18 @@ public sealed class GetSubscriptionHandler
                 trialDays: SubscriptionPlanCatalog.DefaultTrialDays,
                 utcNow: now);
             _db.TenantSubscriptions.Add(sub);
-            await _db.SaveChangesAsync(ct);
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // Otra request ganó la carrera. Descartamos nuestra entity
+                // y leemos la que persistió la otra request.
+                _db.TenantSubscriptions.Entry(sub).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+                sub = await _db.TenantSubscriptions
+                    .FirstAsync(s => s.TenantId == tenantId, ct);
+            }
         }
 
         var plan = SubscriptionPlanCatalog.Get(sub.PlanCode);

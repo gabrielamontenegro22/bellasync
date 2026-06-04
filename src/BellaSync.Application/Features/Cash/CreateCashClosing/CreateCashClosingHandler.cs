@@ -70,13 +70,33 @@ public sealed class CreateCashClosingHandler
             .Where(e => e.RegisteredAt >= dayStartUtc && e.RegisteredAt < dayEndUtc)
             .ToListAsync(ct);
 
+        // Anticipos validados del día (transferencias bancarias confirmadas).
+        // Bug histórico C6 del audit: el snapshot ignoraba estos vouchers
+        // y subreportaba ingresos del día (a veces millones para salones
+        // con uso intenso de anticipos tipo balayage/keratina). La pantalla
+        // /caja en vivo SÍ los incluía pero el cierre persistido NO →
+        // reportes mensuales mostraban menos plata de la real.
+        var validatedVouchers = await _db.PaymentVouchers
+            .AsNoTracking()
+            .Where(v => v.Status == PaymentVoucherStatus.Validated
+                     && v.DecidedAt != null
+                     && v.DecidedAt >= dayStartUtc
+                     && v.DecidedAt < dayEndUtc)
+            .Select(v => new { Amount = v.ReportedAmount.Amount })
+            .ToListAsync(ct);
+
         var cashSales = payments
             .Where(p => p.Method == PaymentMethod.Cash)
             .Sum(p => p.Amount.Amount + p.Tip.Amount);
         var cashExpenses = expenses
             .Where(e => e.Method == PaymentMethod.Cash)
             .Sum(e => e.Amount.Amount);
-        var totalAmount = payments.Sum(p => p.Amount.Amount + p.Tip.Amount);
+
+        // totalAmount = payments del día + anticipos validados del día.
+        // Los vouchers no van en cashSales (siempre son transferencia, no
+        // efectivo), solo en el total general que se preserva en el snapshot.
+        var totalAmount = payments.Sum(p => p.Amount.Amount + p.Tip.Amount)
+                        + validatedVouchers.Sum(v => v.Amount);
 
         Money baseM, countedM, cashSalesM, cashExpensesM, totalM;
         try

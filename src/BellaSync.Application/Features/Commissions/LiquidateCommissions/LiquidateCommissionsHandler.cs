@@ -33,6 +33,13 @@ public sealed class LiquidateCommissionsHandler
     public async Task<Result<CommissionPayoutResponse>> HandleAsync(
         LiquidateCommissionsCommand command, CancellationToken ct)
     {
+        // 0. Validar rango antes de gastar IO. UI puede mandar invertido si
+        //    el picker se calibra mal o el usuario juega con las fechas.
+        if (command.PeriodFrom > command.PeriodTo)
+            return ApplicationError.Validation(
+                "commission.bad_range",
+                "El período es inválido: 'desde' es posterior a 'hasta'.");
+
         // 1. Validar que el estilista exista y sea del tenant actual.
         var stylist = await _db.Stylists
             .FirstOrDefaultAsync(s => s.Id == command.StylistId, ct);
