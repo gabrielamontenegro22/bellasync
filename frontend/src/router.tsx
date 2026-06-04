@@ -12,6 +12,8 @@ import { ValidationQueuePage } from '@/features/vouchers/ValidationQueuePage'
 import { BookingPage } from '@/features/booking/BookingPage'
 import { CustomersPage } from '@/features/customers/CustomersPage'
 import { PaymentPolicyPage } from '@/features/settings/PaymentPolicyPage'
+import { CommissionsSettingPage } from '@/features/settings/CommissionsSettingPage'
+import { CommissionsPage } from '@/features/commissions/CommissionsPage'
 import { CashClosingPage } from '@/features/cash/CashClosingPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
@@ -121,9 +123,22 @@ export function AppRouter() {
         {/* /configuracion → redirige a /configuracion/pagos (única sección
             con pantalla real por ahora) */}
         <Route index element={<Navigate to="pagos" replace />} />
-        <Route path="pagos" element={<PaymentPolicyPage />} />
+        <Route path="pagos"      element={<PaymentPolicyPage />} />
+        <Route path="comisiones" element={<CommissionsSettingPage />} />
         {/* Aquí se agregarán: general, horario, whatsapp, suscripcion */}
       </Route>
+
+      {/* Comisiones de estilistas — opt-in. Si el tenant no la activó,
+          el sidebar oculta el item, pero la URL sigue accesible y la
+          propia pantalla muestra un empty state explicando cómo activarla. */}
+      <Route
+        path="/comisiones"
+        element={
+          <ProtectedRoute>
+            <AppShell><CommissionsPage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
 
       {/* Defaults */}
       <Route path="/"  element={<Navigate to="/dashboard" replace />} />

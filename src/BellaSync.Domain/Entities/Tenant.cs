@@ -36,6 +36,10 @@ public class Tenant : BaseEntity
         tenant.HoldDurationHours = 3;
         tenant.HoldMinBeforeAppointmentMinutes = 30;
         tenant.MinAdvanceMinutes = 30;
+        // Comisiones OFF por default — no asumimos que el salón paga
+        // por comisión. La admin decide activarlo desde Configuración
+        // cuando le sirve (sueldos fijos, alquiler de silla, etc.).
+        tenant.CommissionsEnabled = false;
         return tenant;
     }
 
@@ -76,6 +80,18 @@ public class Tenant : BaseEntity
     /// walk-ins imprevistos.
     /// </summary>
     public int MinAdvanceMinutes { get; private set; } = 30;
+
+    // ===== COMISIONES (opt-in) =====
+
+    /// <summary>
+    /// Si el salón quiere llevar registro de comisiones por estilista.
+    /// OFF por default — muchos salones pagan sueldo fijo o trabajan
+    /// con alquiler de silla y no necesitan esto. Cuando está OFF, el
+    /// módulo de Comisiones (pantalla, sidebar item, campo % en
+    /// servicios) queda invisible. La admin lo activa desde
+    /// Configuración → Comisiones cuando lo necesita.
+    /// </summary>
+    public bool CommissionsEnabled { get; private set; }
 
     // Relación inversa: usuarios que pertenecen a este salón
     public ICollection<User> Users { get; private set; } = new List<User>();
@@ -118,5 +134,17 @@ public class Tenant : BaseEntity
         HoldDurationHours = holdDurationHours;
         HoldMinBeforeAppointmentMinutes = holdMinBeforeAppointmentMinutes;
         MinAdvanceMinutes = minAdvanceMinutes;
+    }
+
+    /// <summary>
+    /// Activa o desactiva el módulo de comisiones. Cambiarlo es
+    /// idempotente y no afecta datos históricos: si se apaga después
+    /// de tener payouts hechos, los payouts viejos siguen existiendo
+    /// pero la pantalla deja de ser visible. Si se reactiva, el
+    /// historial vuelve a verse intacto.
+    /// </summary>
+    public void SetCommissionsEnabled(bool enabled)
+    {
+        CommissionsEnabled = enabled;
     }
 }

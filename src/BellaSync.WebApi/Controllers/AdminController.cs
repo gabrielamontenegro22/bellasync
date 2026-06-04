@@ -1,7 +1,9 @@
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Features.Admin.SeedDemo;
 using BellaSync.Application.Features.Tenants.Dtos;
+using BellaSync.Application.Features.Tenants.GetCommissionsSetting;
 using BellaSync.Application.Features.Tenants.GetPaymentPolicy;
+using BellaSync.Application.Features.Tenants.UpdateCommissionsSetting;
 using BellaSync.Application.Features.Tenants.UpdatePaymentPolicy;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
@@ -77,6 +79,39 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> UpdatePaymentPolicy(
         [FromBody] UpdatePaymentPolicyCommand command,
         [FromServices] ICommandHandler<UpdatePaymentPolicyCommand, TenantPaymentPolicyResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(command, ct);
+        return result.ToActionResult();
+    }
+
+    // ============================================================
+    // Comisiones (opt-in)
+    // ============================================================
+
+    /// <summary>
+    /// GET /api/Admin/commissions-setting
+    /// Lee si el módulo de comisiones está activo para este salón.
+    /// </summary>
+    [HttpGet("commissions-setting")]
+    [ProducesResponseType(typeof(CommissionsSettingResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCommissionsSetting(
+        [FromServices] IQueryHandler<GetCommissionsSettingQuery, CommissionsSettingResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetCommissionsSettingQuery(), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// PUT /api/Admin/commissions-setting
+    /// Activa/desactiva el módulo. Idempotente.
+    /// </summary>
+    [HttpPut("commissions-setting")]
+    [ProducesResponseType(typeof(CommissionsSettingResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateCommissionsSetting(
+        [FromBody] UpdateCommissionsSettingCommand command,
+        [FromServices] ICommandHandler<UpdateCommissionsSettingCommand, CommissionsSettingResponse> handler,
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(command, ct);

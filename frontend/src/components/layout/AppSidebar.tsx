@@ -7,12 +7,14 @@ import {
   Box,
   Wallet,
   Banknote,
+  Percent,
   BarChart3,
   Settings,
   LogOut,
 } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
+import { useCommissionsSetting } from '@/features/commissions/useCommissionsSetting'
 
 interface AppSidebarProps {
   /** En mobile, el sidebar es un drawer controlado externamente */
@@ -29,7 +31,13 @@ interface NavItem {
   disabled?: boolean
 }
 
-const NAV_ITEMS: NavItem[] = [
+/**
+ * Items base. El item de "Comisiones" se inyecta condicionalmente
+ * abajo dependiendo de Tenant.CommissionsEnabled — algunos salones no
+ * usan comisiones (sueldo fijo / alquiler de silla) y no queremos
+ * ensuciarles el sidebar.
+ */
+const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/agenda',                  label: 'Agenda',              icon: Calendar                 },
   { to: '/clientes',                label: 'Clientes',            icon: Users                    },
   { to: '/servicios',               label: 'Servicios',           icon: Sparkles                 },
@@ -40,6 +48,11 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/reportes',                label: 'Reportes',            icon: BarChart3, disabled: true  },
   { to: '/configuracion',           label: 'Configuración',       icon: Settings                 },
 ]
+
+/** Item Comisiones — solo aparece si el módulo está activo. */
+const COMMISSIONS_ITEM: NavItem = {
+  to: '/comisiones', label: 'Comisiones', icon: Percent,
+}
 
 /**
  * Sidebar principal de la aplicación.
@@ -52,6 +65,20 @@ const NAV_ITEMS: NavItem[] = [
 export function AppSidebar({ open, onClose }: AppSidebarProps) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { data: commissionsSetting } = useCommissionsSetting()
+
+  // Inyectamos "Comisiones" entre Cierre de caja y Reportes solo
+  // cuando el módulo está activo. Sin esto, salones que pagan sueldo
+  // fijo ven un item que no usan.
+  const navItems = (() => {
+    if (!commissionsSetting?.enabled) return BASE_NAV_ITEMS
+    const idx = BASE_NAV_ITEMS.findIndex(i => i.to === '/reportes')
+    return [
+      ...BASE_NAV_ITEMS.slice(0, idx),
+      COMMISSIONS_ITEM,
+      ...BASE_NAV_ITEMS.slice(idx),
+    ]
+  })()
 
   const handleLogout = () => {
     logout()
@@ -92,7 +119,7 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 pt-2 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             if (item.disabled) {
               return (
                 <button
