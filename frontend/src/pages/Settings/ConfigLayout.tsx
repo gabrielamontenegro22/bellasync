@@ -1,8 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Building2,
-  Sparkles,
-  Scissors,
   CalendarClock,
   Wallet,
   MessageCircle,
@@ -22,12 +20,14 @@ interface ConfigSection {
   disabled?: boolean
 }
 
+// Solo ajustes "verdaderos" — lo operativo (servicios, estilistas, cola
+// de validación) vive como item top-level en el sidebar principal porque
+// se usa día a día. Acá quedan cosas que se configuran una vez y rara
+// vez se tocan.
 const CONFIG_SECTIONS: ConfigSection[] = [
   { to: '/configuracion/general',     label: 'Información general',       icon: Building2,      hint: 'Nombre, dirección, logo',     disabled: true },
-  { to: '/configuracion/servicios',   label: 'Servicios',                  icon: Sparkles,       hint: 'Catálogo y precios' },
-  { to: '/configuracion/estilistas',  label: 'Estilistas',                 icon: Scissors,       hint: 'Equipo y asignaciones' },
   { to: '/configuracion/horario',     label: 'Horario del salón',          icon: CalendarClock,  hint: 'Días y franjas',              disabled: true },
-  { to: '/configuracion/pagos',       label: 'Política de pagos',          icon: Wallet,         hint: 'Tiempo de cupo reservado' },
+  { to: '/configuracion/pagos',       label: 'Política de pagos',          icon: Wallet,         hint: 'Cupo reservado y anticipación' },
   { to: '/configuracion/whatsapp',    label: 'Notificaciones WhatsApp',    icon: MessageCircle,  hint: 'Plantillas y envíos',         disabled: true },
   { to: '/configuracion/suscripcion', label: 'Suscripción y facturación',  icon: CreditCard,     hint: 'Plan BellaSync',              disabled: true },
 ]
