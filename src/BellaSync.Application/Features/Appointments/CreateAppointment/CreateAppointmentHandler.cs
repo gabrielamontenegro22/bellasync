@@ -16,6 +16,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
     private readonly ICurrentTenantService _currentTenant;
     private readonly IClock _clock;
     private readonly AppointmentValidator _validator;
+    private readonly SalonScheduleValidator _scheduleValidator;
     private readonly ITenantAppointmentSettings _settings;
     private readonly ILogger<CreateAppointmentHandler> _logger;
 
@@ -24,6 +25,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
         ICurrentTenantService currentTenant,
         IClock clock,
         AppointmentValidator validator,
+        SalonScheduleValidator scheduleValidator,
         ITenantAppointmentSettings settings,
         ILogger<CreateAppointmentHandler> logger)
     {
@@ -31,6 +33,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
         _currentTenant = currentTenant;
         _clock = clock;
         _validator = validator;
+        _scheduleValidator = scheduleValidator;
         _settings = settings;
         _logger = logger;
     }
@@ -68,6 +71,19 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
 
         var refs = refsResult.Value!;
         var endAtUtc = command.StartAtUtc.AddMinutes(refs.Service.DurationMinutes);
+
+        // Validar que la franja cae dentro del horario configurado por
+        // el salón (día abierto, dentro del rango, no en lunch, no en
+        // cierre puntual, no en festivo). El mismo flag de bypass que
+        // permite walk-ins se honra acá — la admin puede meter un
+        // walk-in fuera de hora si lo necesita.
+        var scheduleResult = await _scheduleValidator.ValidateAsync(
+            tenantId: _currentTenant.TenantId,
+            startUtc: command.StartAtUtc,
+            endUtc: endAtUtc,
+            bypass: command.BypassAdvanceWindow,
+            ct: ct);
+        if (scheduleResult.IsFailure) return scheduleResult.Error!;
 
         var appointment = Appointment.Create(
             tenantId: _currentTenant.TenantId,

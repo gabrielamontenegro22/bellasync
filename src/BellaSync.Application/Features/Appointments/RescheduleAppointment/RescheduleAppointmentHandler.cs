@@ -15,6 +15,7 @@ public sealed class RescheduleAppointmentHandler
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
     private readonly AppointmentValidator _validator;
+    private readonly SalonScheduleValidator _scheduleValidator;
     private readonly ITenantAppointmentSettings _settings;
     private readonly ILogger<RescheduleAppointmentHandler> _logger;
 
@@ -22,12 +23,14 @@ public sealed class RescheduleAppointmentHandler
         IApplicationDbContext db,
         IClock clock,
         AppointmentValidator validator,
+        SalonScheduleValidator scheduleValidator,
         ITenantAppointmentSettings settings,
         ILogger<RescheduleAppointmentHandler> logger)
     {
         _db = db;
         _clock = clock;
         _validator = validator;
+        _scheduleValidator = scheduleValidator;
         _settings = settings;
         _logger = logger;
     }
@@ -59,6 +62,18 @@ public sealed class RescheduleAppointmentHandler
             ct: ct);
 
         if (refsResult.IsFailure) return refsResult.Error!;
+
+        // Validar que la nueva franja cae dentro del horario configurado
+        // por el salón. Misma lógica que en CreateAppointment: bypass
+        // honra el flag del comando para que SalonAdmin pueda forzar.
+        var newEndUtc = command.NewStartAtUtc.AddMinutes(refsResult.Value!.Service.DurationMinutes);
+        var scheduleResult = await _scheduleValidator.ValidateAsync(
+            tenantId: appointment.TenantId,
+            startUtc: command.NewStartAtUtc,
+            endUtc: newEndUtc,
+            bypass: command.BypassAdvanceWindow,
+            ct: ct);
+        if (scheduleResult.IsFailure) return scheduleResult.Error!;
 
         // Delegamos al dominio: éste valida estado + nueva hora > now y
         // recalcula EndAt + hold.

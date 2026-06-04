@@ -24,17 +24,20 @@ public sealed class CreatePublicAppointmentHandler
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
     private readonly AppointmentValidator _validator;
+    private readonly SalonScheduleValidator _scheduleValidator;
     private readonly ILogger<CreatePublicAppointmentHandler> _logger;
 
     public CreatePublicAppointmentHandler(
         IApplicationDbContext db,
         IClock clock,
         AppointmentValidator validator,
+        SalonScheduleValidator scheduleValidator,
         ILogger<CreatePublicAppointmentHandler> logger)
     {
         _db = db;
         _clock = clock;
         _validator = validator;
+        _scheduleValidator = scheduleValidator;
         _logger = logger;
     }
 
@@ -84,6 +87,17 @@ public sealed class CreatePublicAppointmentHandler
 
         var refs = refsResult.Value!;
         var endAtUtc = command.StartAtUtc.AddMinutes(refs.Service.DurationMinutes);
+
+        // Validar horario del salón (sin bypass — el portal público
+        // NO debería ofrecer slots fuera de horario). Si llegara una
+        // request fuera de hora, rechazamos con un mensaje claro.
+        var scheduleResult = await _scheduleValidator.ValidateAsync(
+            tenantId: tenant.Id,
+            startUtc: command.StartAtUtc,
+            endUtc: endAtUtc,
+            bypass: false,
+            ct: ct);
+        if (scheduleResult.IsFailure) return scheduleResult.Error!;
 
         var appointment = Appointment.Create(
             tenantId: tenant.Id,

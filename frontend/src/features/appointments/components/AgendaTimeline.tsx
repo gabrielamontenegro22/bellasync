@@ -4,6 +4,7 @@ import { listStylists, type StylistResponse } from '@/api/stylists'
 import type { AppointmentResponse, AppointmentStatus } from '@/api/appointments'
 import { cls } from '@/lib/cls'
 import { initialsOf, toneOf } from '@/features/customers/lib/customerLook'
+import { useSalonHours } from '@/features/settings/useSalonHours'
 
 /**
  * Vista timeline tipo Google Calendar — columnas por estilista, eje vertical
@@ -56,6 +57,14 @@ export function AgendaTimeline({ appointments, date, selectedId, onSelect }: Age
     queryFn: () => listStylists(),
   })
   const stylists = (stylistsQ.data ?? []).filter(s => s.status !== 'Inactive')
+
+  // Horario del salón — para pintar las franjas cerradas. Si no hay
+  // configurado (opt-in), no se dibuja nada (= todos los días abiertos).
+  const { data: salonHours } = useSalonHours()
+  const closedBands = useMemo(
+    () => computeClosedBands(date, salonHours),
+    [date, salonHours],
+  )
 
   // Agrupar citas por stylist para acceso O(1) por columna
   const byStylist = useMemo(() => {
@@ -212,6 +221,34 @@ export function AgendaTimeline({ appointments, date, selectedId, onSelect }: Age
               railHeight={railHeight}
             />
           ))}
+
+          {/* Bandas grises sobre franjas cerradas del salón (fuera de
+              horario, lunch, día/festivo entero). Se dibujan por encima
+              del fondo pero por debajo de las citas, abarcando todas
+              las columnas de estilistas. */}
+          {closedBands.map((band, i) => {
+            const top = (band.fromMin - DAY_START_MIN) * PX_PER_MIN
+            const height = (band.toMin - band.fromMin) * PX_PER_MIN
+            if (height <= 0) return null
+            return (
+              <div
+                key={`closed-${i}`}
+                className="absolute left-[72px] right-0 pointer-events-none z-[1] bg-warm-150/40"
+                style={{ top: Math.max(0, top), height }}
+                title={band.label}
+              >
+                {/* Etiqueta opcional centrada — solo si la franja es
+                    grande (>40px) para no saturar bandas chicas. */}
+                {height > 40 && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[10.5px] tracking-[0.12em] uppercase text-warm-500 font-medium bg-white/70 px-2 py-0.5 rounded">
+                      {band.label}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
 
           {/* línea "ahora" — se dibuja por encima de las columnas */}
           {showNow && (
@@ -411,4 +448,107 @@ function formatLocalDate(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   return `${yyyy}-${mm}-${dd}`
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Bandas "cerrado" del salón
+// ───────────────────────────────────────────────────────────────────────
+
+interface ClosedBand {
+  /** Minuto desde medianoche local en que arranca la banda. */
+  fromMin: number
+  /** Minuto en que termina. */
+  toMin: number
+  /** Etiqueta para tooltip + para mostrar si la banda es grande. */
+  label: string
+}
+
+/**
+ * Calcula las bandas grises a dibujar sobre el timeline según el horario
+ * del salón:
+ *  - Antes de la apertura → banda
+ *  - Después del cierre → banda
+ *  - Lunch break (si activo) → banda
+ *  - Día entero cerrado (no hay rango para ese día, o fecha en
+ *    SalonClosedDates) → banda full-day
+ *
+ * Las bandas se clampean al rango visible del timeline (DAY_START_MIN
+ * a DAY_END_MIN) para no dibujar fuera del viewport.
+ */
+function computeClosedBands(
+  dateStr: string,
+  hours: SalonHoursLike | null | undefined,
+): ClosedBand[] {
+  if (!hours) return []  // sin horario configurado → no dibujamos nada
+
+  const bands: ClosedBand[] = []
+
+  // ¿Día cerrado puntual?
+  if (hours.closedDates.includes(dateStr)) {
+    bands.push({
+      fromMin: DAY_START_MIN,
+      toMin: DAY_END_MIN,
+      label: 'Salón cerrado',
+    })
+    return bands
+  }
+
+  // Día de la semana: convertir YYYY-MM-DD local → Mon=0..Sun=6
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const jsDate = new Date(y, m - 1, d)
+  const jsDow = jsDate.getDay()              // Sun=0..Sat=6
+  const dayOfWeek = (jsDow + 6) % 7           // Mon=0..Sun=6
+
+  const dayRange = hours.days[String(dayOfWeek)]
+  if (!dayRange) {
+    bands.push({
+      fromMin: DAY_START_MIN,
+      toMin: DAY_END_MIN,
+      label: 'Día cerrado',
+    })
+    return bands
+  }
+
+  // Antes de la apertura
+  const openMin = dayRange.fromHour * 60
+  if (openMin > DAY_START_MIN) {
+    bands.push({
+      fromMin: DAY_START_MIN,
+      toMin: Math.min(openMin, DAY_END_MIN),
+      label: 'Cerrado',
+    })
+  }
+
+  // Después del cierre
+  const closeMin = dayRange.toHour * 60
+  if (closeMin < DAY_END_MIN) {
+    bands.push({
+      fromMin: Math.max(closeMin, DAY_START_MIN),
+      toMin: DAY_END_MIN,
+      label: 'Cerrado',
+    })
+  }
+
+  // Lunch break
+  if (hours.lunchBreakEnabled) {
+    const lunchFromMin = hours.lunchBreakFromHour * 60
+    const lunchToMin = hours.lunchBreakToHour * 60
+    const from = Math.max(DAY_START_MIN, lunchFromMin)
+    const to = Math.min(DAY_END_MIN, lunchToMin)
+    if (to > from) {
+      bands.push({ fromMin: from, toMin: to, label: 'Almuerzo' })
+    }
+  }
+
+  return bands
+}
+
+/** Subset de SalonHoursDto que usa computeClosedBands — evita acoplar
+ *  el helper al tipo importado del módulo de admin. */
+interface SalonHoursLike {
+  days: Record<string, { fromHour: number; toHour: number } | null>
+  lunchBreakEnabled: boolean
+  lunchBreakFromHour: number
+  lunchBreakToHour: number
+  closedDates: string[]
 }

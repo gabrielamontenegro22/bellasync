@@ -35,6 +35,12 @@ public static class DependencyInjection
         // disponible, etc. Reutilizado por CreateAppointment y CreatePublic.
         services.AddScoped<AppointmentValidator>();
 
+        // Validador del horario del salón: chequea que la cita caiga dentro
+        // del horario configurado (día abierto, dentro de franja, fuera de
+        // lunch break, no en cierre puntual, no en festivo nacional si
+        // IsHolidaysClosed=true).
+        services.AddScoped<BellaSync.Application.Features.Appointments.Shared.SalonScheduleValidator>();
+
         return services;
     }
 
