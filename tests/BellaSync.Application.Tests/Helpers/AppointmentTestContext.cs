@@ -16,6 +16,17 @@ public sealed class AppointmentTestContext : IDisposable
     public AppointmentValidator Validator { get; }
 
     /// <summary>
+    /// Validador del horario del salón. Por default los tests usan un
+    /// tenant sin SalonWeeklyHours/SalonClosedDates configurados, lo
+    /// que técnicamente lo trataría como "todos los días cerrados".
+    /// Para evitar romper tests existentes que crean citas a cualquier
+    /// hora, los tests pasan `bypass: true` al construir/reschedulear,
+    /// y los handlers que reciben `BypassAdvanceWindow` se lo pasan al
+    /// scheduleValidator.
+    /// </summary>
+    public BellaSync.Application.Features.Appointments.Shared.SalonScheduleValidator ScheduleValidator { get; }
+
+    /// <summary>
     /// Settings de pagos por tenant — mock que devuelve los valores
     /// históricos default (3 / 30 / 30). Si un test necesita cambiar
     /// los valores, puede sobreescribir el mock con .Returns(...).
@@ -28,6 +39,7 @@ public sealed class AppointmentTestContext : IDisposable
     {
         Base = new HandlerTestContext();
         Validator = new AppointmentValidator(Base.Db);
+        ScheduleValidator = new BellaSync.Application.Features.Appointments.Shared.SalonScheduleValidator(Base.Db);
 
         AppointmentSettings = Substitute.For<ITenantAppointmentSettings>();
         AppointmentSettings.GetHoldDurationHoursAsync(Arg.Any<CancellationToken>())

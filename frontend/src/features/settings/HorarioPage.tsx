@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Calendar, CalendarClock, Clock, AlertCircle, ChevronDown, Plus, X,
 } from 'lucide-react'
@@ -8,9 +8,8 @@ import { extractApiError } from '@/lib/extractApiError'
 import {
   SettingsHeader, SettingsBlock, SaveBar, ToggleRow, Toggle,
 } from './_primitives'
-import {
-  getSalonHours, updateSalonHours, type SalonHoursDto,
-} from '@/api/admin'
+import { updateSalonHours, type SalonHoursDto } from '@/api/admin'
+import { useSalonHours } from './useSalonHours'
 
 /**
  * `/configuracion/horario` — días y franjas de atención del salón.
@@ -150,10 +149,7 @@ function detectPreset(days: DaysMap): string {
 
 export function HorarioPage() {
   const qc = useQueryClient()
-  const { data: serverData, isLoading } = useQuery({
-    queryKey: ['salonHours'],
-    queryFn: getSalonHours,
-  })
+  const { data: serverData, isLoading } = useSalonHours()
 
   // Snapshot del estado del servidor — sirve como "valor inicial" para
   // detectar dirty y para Discard.

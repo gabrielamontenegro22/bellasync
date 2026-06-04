@@ -15,7 +15,8 @@ public class CreateAppointmentHandlerTests
         var ctx = new AppointmentTestContext();
         var handler = new CreateAppointmentHandler(
             ctx.Base.Db, ctx.Base.CurrentTenant, ctx.Base.Clock,
-            ctx.Validator, ctx.AppointmentSettings, ctx.Base.Logger<CreateAppointmentHandler>());
+            ctx.Validator, ctx.ScheduleValidator, ctx.AppointmentSettings,
+            ctx.Base.Logger<CreateAppointmentHandler>());
         return (ctx, handler);
     }
 
