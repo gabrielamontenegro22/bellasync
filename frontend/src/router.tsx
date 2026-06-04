@@ -24,6 +24,7 @@ import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SaasAdminSubscriptionsPage } from '@/features/saasAdmin/SaasAdminSubscriptionsPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
+import { RequireRole } from '@/components/layout/RequireRole'
 import { useAuth } from '@/features/auth/useAuth'
 
 /**
@@ -122,10 +123,18 @@ export function AppRouter() {
       <Route path="/configuracion/validacion" element={<Navigate to="/validacion" replace />} />
 
       {/* Configuración — sólo lo que es ajuste real (info, horario,
-          política, plantillas, suscripción). Lo operativo vive arriba. */}
+          política, plantillas, suscripción). Lo operativo vive arriba.
+          SalonAdmin-only: recepción no debería ver info de suscripción,
+          usuarios del salón, ni cambiar políticas de pago. */}
       <Route
         path="/configuracion"
-        element={<ProtectedRoute><ConfigLayout /></ProtectedRoute>}
+        element={
+          <ProtectedRoute>
+            <RequireRole roles={['SalonAdmin']}>
+              <ConfigLayout />
+            </RequireRole>
+          </ProtectedRoute>
+        }
       >
         {/* /configuracion → redirige a /configuracion/pagos (única sección
             con pantalla real por ahora) */}
@@ -139,38 +148,41 @@ export function AppRouter() {
         <Route path="suscripcion" element={<SuscripcionPage />} />
       </Route>
 
-      {/* Comisiones de estilistas — opt-in. Si el tenant no la activó,
-          el sidebar oculta el item, pero la URL sigue accesible y la
-          propia pantalla muestra un empty state explicando cómo activarla. */}
+      {/* Comisiones de estilistas — opt-in. SalonAdmin-only: implica ver
+          ingresos por estilista y liquidar pagos, no es info para recepción. */}
       <Route
         path="/comisiones"
         element={
           <ProtectedRoute>
-            <AppShell><CommissionsPage /></AppShell>
+            <RequireRole roles={['SalonAdmin']}>
+              <AppShell><CommissionsPage /></AppShell>
+            </RequireRole>
           </ProtectedRoute>
         }
       />
 
-      {/* Reportes — dashboard de KPIs (solo SalonAdmin lo ve útil, pero
-          el endpoint también lo restringe). */}
+      {/* Reportes — KPIs financieros del salón. SalonAdmin-only. */}
       <Route
         path="/reportes"
         element={
           <ProtectedRoute>
-            <AppShell><ReportsPage /></AppShell>
+            <RequireRole roles={['SalonAdmin']}>
+              <AppShell><ReportsPage /></AppShell>
+            </RequireRole>
           </ProtectedRoute>
         }
       />
 
-      {/* Panel SaaS Admin — solo accesible si el user tiene role SuperAdmin.
-          El endpoint del backend ya lo restringe; acá no pongo guard de
-          rol explícito porque cualquier otro user verá un 403 desde la
-          API y la pantalla mostrará el error. */}
+      {/* Panel SaaS Admin — exclusivo del dueño de BellaSync (SuperAdmin).
+          Si un SalonAdmin/Receptionist intenta entrar, lo mandamos a su
+          /agenda. El backend igual rechaza con 403, esto es defensa UI. */}
       <Route
         path="/saas-admin/subscriptions"
         element={
           <ProtectedRoute>
-            <AppShell><SaasAdminSubscriptionsPage /></AppShell>
+            <RequireRole roles={['SuperAdmin']}>
+              <AppShell><SaasAdminSubscriptionsPage /></AppShell>
+            </RequireRole>
           </ProtectedRoute>
         }
       />

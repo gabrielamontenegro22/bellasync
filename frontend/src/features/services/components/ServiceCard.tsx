@@ -11,9 +11,14 @@ import { useCommissionsSetting } from '@/features/commissions/useCommissionsSett
 
 interface ServiceCardProps {
   service: ServiceResponse
-  onEdit: (service: ServiceResponse) => void
-  onDuplicate: (service: ServiceResponse) => void
-  onToggleActive: (service: ServiceResponse) => void
+  /**
+   * Handlers de CRUD. Si NO se pasan (recepción / stylist viendo el
+   * catálogo para crear citas), el footer de acciones no se renderiza.
+   * El backend igual rechaza POST/PUT/DELETE de no-admin.
+   */
+  onEdit?: (service: ServiceResponse) => void
+  onDuplicate?: (service: ServiceResponse) => void
+  onToggleActive?: (service: ServiceResponse) => void
   /** Lista de estilistas para mostrar avatares (vendrá del API en F5; por ahora vacío) */
   stylists?: Array<{ id: string; name: string; tone?: string }>
 }
@@ -197,45 +202,53 @@ export function ServiceCard({
           </div>
         )}
 
-        {/* Footer acciones */}
-        <div className="mt-4 pt-3 border-t border-warm-150 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onEdit(service)}
-            className="flex-1 px-2.5 py-1.5 rounded-md text-[12px] text-warm-700 hover:bg-warm-50 flex items-center justify-center gap-1.5"
-          >
-            <Pencil size={12} /> Editar
-          </button>
-          <span className="w-px h-4 bg-warm-150" />
-          <button
-            type="button"
-            onClick={() => onDuplicate(service)}
-            className="flex-1 px-2.5 py-1.5 rounded-md text-[12px] text-warm-700 hover:bg-warm-50 flex items-center justify-center gap-1.5"
-          >
-            <Copy size={12} /> Duplicar
-          </button>
-          <span className="w-px h-4 bg-warm-150" />
-          <button
-            type="button"
-            onClick={() => onToggleActive(service)}
-            className={cls(
-              'flex-1 px-2.5 py-1.5 rounded-md text-[12px] flex items-center justify-center gap-1.5',
-              service.isActive
-                ? 'text-warm-600 hover:bg-warm-50'
-                : 'text-brand-700 hover:bg-brand-50',
+        {/* Footer acciones — solo si hay handlers (admin) */}
+        {(onEdit || onDuplicate || onToggleActive) && (
+          <div className="mt-4 pt-3 border-t border-warm-150 flex items-center gap-1">
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => onEdit(service)}
+                className="flex-1 px-2.5 py-1.5 rounded-md text-[12px] text-warm-700 hover:bg-warm-50 flex items-center justify-center gap-1.5"
+              >
+                <Pencil size={12} /> Editar
+              </button>
             )}
-          >
-            {service.isActive ? (
-              <>
-                <Ban size={12} /> Desactivar
-              </>
-            ) : (
-              <>
-                <CheckCircle size={12} /> Activar
-              </>
+            {onEdit && onDuplicate && <span className="w-px h-4 bg-warm-150" />}
+            {onDuplicate && (
+              <button
+                type="button"
+                onClick={() => onDuplicate(service)}
+                className="flex-1 px-2.5 py-1.5 rounded-md text-[12px] text-warm-700 hover:bg-warm-50 flex items-center justify-center gap-1.5"
+              >
+                <Copy size={12} /> Duplicar
+              </button>
             )}
-          </button>
-        </div>
+            {(onEdit || onDuplicate) && onToggleActive && <span className="w-px h-4 bg-warm-150" />}
+            {onToggleActive && (
+              <button
+                type="button"
+                onClick={() => onToggleActive(service)}
+                className={cls(
+                  'flex-1 px-2.5 py-1.5 rounded-md text-[12px] flex items-center justify-center gap-1.5',
+                  service.isActive
+                    ? 'text-warm-600 hover:bg-warm-50'
+                    : 'text-brand-700 hover:bg-brand-50',
+                )}
+              >
+                {service.isActive ? (
+                  <>
+                    <Ban size={12} /> Desactivar
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={12} /> Activar
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

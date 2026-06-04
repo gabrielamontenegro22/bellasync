@@ -18,6 +18,7 @@ import {
 import { serviceExtrasStorage } from './storage'
 import type { ServiceFormData } from './schemas'
 import type { StatusFilter } from './types'
+import { useIsAdmin } from '@/features/auth/useAuth'
 
 /**
  * Vista principal del Catálogo de Servicios.
@@ -33,6 +34,7 @@ import type { StatusFilter } from './types'
  * pueda mostrarlos en el frontend.
  */
 export function ServicesPage() {
+  const isAdmin = useIsAdmin()
   // Estado de filtros
   const [category, setCategory] = useState<ServiceCategoryEnum | 'all'>('all')
   const [status, setStatus] = useState<StatusFilter>('all')
@@ -182,16 +184,18 @@ export function ServicesPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={handleOpenNew}
-            className="px-4 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13.5px] font-medium flex items-center gap-1.5 shadow-soft"
-          >
-            <Plus size={15} />
-            Nuevo servicio
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleOpenNew}
+              className="px-4 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13.5px] font-medium flex items-center gap-1.5 shadow-soft"
+            >
+              <Plus size={15} />
+              Nuevo servicio
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Filtros — solo se muestran si hay servicios */}
@@ -246,16 +250,20 @@ export function ServicesPage() {
             Aún no tenés servicios en el catálogo
           </div>
           <div className="text-[13px] text-warm-500 mt-2 max-w-sm mx-auto">
-            Crea tu primer servicio para que tus clientes puedan agendar.
+            {isAdmin
+              ? 'Crea tu primer servicio para que tus clientes puedan agendar.'
+              : 'Pedile a la administradora del salón que cree los servicios del catálogo.'}
           </div>
-          <button
-            type="button"
-            onClick={handleOpenNew}
-            className="mt-6 px-5 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13.5px] font-medium inline-flex items-center gap-1.5 shadow-soft"
-          >
-            <Plus size={15} />
-            Crear primer servicio
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleOpenNew}
+              className="mt-6 px-5 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13.5px] font-medium inline-flex items-center gap-1.5 shadow-soft"
+            >
+              <Plus size={15} />
+              Crear primer servicio
+            </button>
+          )}
         </div>
       )}
 
@@ -287,9 +295,9 @@ export function ServicesPage() {
             <ServiceCard
               key={svc.id}
               service={svc}
-              onEdit={handleOpenEdit}
-              onDuplicate={handleDuplicate}
-              onToggleActive={handleToggleActive}
+              onEdit={isAdmin ? handleOpenEdit : undefined}
+              onDuplicate={isAdmin ? handleDuplicate : undefined}
+              onToggleActive={isAdmin ? handleToggleActive : undefined}
             />
           ))}
         </div>

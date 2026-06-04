@@ -9,7 +9,8 @@ interface StylistFiltersProps {
   onFilterChange: (f: StatusFilter) => void
   query: string
   onQueryChange: (q: string) => void
-  onNew: () => void
+  /** Si no se pasa (recepción), no renderizamos el botón "Nuevo" mobile. */
+  onNew?: () => void
 }
 
 const FILTERS: Array<{ id: StatusFilter; label: string }> = [
@@ -83,14 +84,16 @@ export function StylistFilters({
         />
       </div>
 
-      {/* Nuevo (en mobile aparece debajo) */}
-      <button
-        type="button"
-        onClick={onNew}
-        className="px-3.5 py-2 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[12.5px] font-medium flex items-center justify-center gap-1.5 shadow-soft sm:hidden"
-      >
-        <Plus size={15} /> Nuevo
-      </button>
+      {/* Nuevo (en mobile aparece debajo) — solo si hay handler (admin) */}
+      {onNew && (
+        <button
+          type="button"
+          onClick={onNew}
+          className="px-3.5 py-2 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[12.5px] font-medium flex items-center justify-center gap-1.5 shadow-soft sm:hidden"
+        >
+          <Plus size={15} /> Nuevo
+        </button>
+      )}
     </div>
   )
 }
