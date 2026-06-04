@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Building2, ImageIcon, AtSign, Phone, ExternalLink, Box,
+  Building2, ImageIcon, AtSign, Phone, ExternalLink, Box, Upload, Loader2,
 } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import { extractApiError } from '@/lib/extractApiError'
+import { absoluteUrl } from '@/lib/absoluteUrl'
 import {
   getTenantInfo,
   updateTenantInfo,
+  uploadTenantLogo,
   type UpdateTenantInfoRequest,
 } from '@/api/admin'
 import {
@@ -159,24 +161,16 @@ export function TenantInfoPage() {
 
         {/* LOGO */}
         <SettingsBlock icon={<ImageIcon size={16} />} title="Logo">
-          <SettingsField
-            label="URL del logo"
-            hint="Pegá un link público (Imgur, Cloudinary, Instagram CDN…)"
-          >
-            <div className="flex items-center gap-4">
-              <LogoPreview url={form.logoUrl} />
-              <input
-                value={form.logoUrl}
-                onChange={(e) => setField('logoUrl', e.target.value)}
-                className={inputCls}
-                placeholder="https://…"
-              />
-            </div>
-            <p className="text-[11.5px] text-warm-500 mt-2">
-              Cuando hagamos upload de archivos lo vas a poder subir desde acá. Por
-              ahora solo URL pública.
-            </p>
-          </SettingsField>
+          <LogoUploader
+            currentUrl={form.logoUrl}
+            onUploaded={(newUrl) => {
+              // Refrescamos el cache para que el preview muestre el nuevo
+              // logo, y reset del form para que NO quede dirty (el backend
+              // ya persistió, no hay que esperar al SaveBar).
+              setField('logoUrl', newUrl)
+              qc.invalidateQueries({ queryKey: ['tenantInfo'] })
+            }}
+          />
         </SettingsBlock>
 
         {/* CONTACTO */}
@@ -246,25 +240,100 @@ function LogoPreview({ url }: { url: string }) {
 
   if (!url) {
     return (
-      <div className="w-16 h-16 rounded-lg flex items-center justify-center bg-warm-100 text-warm-400 flex-shrink-0">
-        <Box size={20} />
+      <div className="w-20 h-20 rounded-xl flex items-center justify-center bg-warm-100 text-warm-400 flex-shrink-0">
+        <Box size={24} />
       </div>
     )
   }
   if (errored) {
     return (
-      <div className="w-16 h-16 rounded-lg flex flex-col items-center justify-center bg-terra-100/40 text-terra-500 flex-shrink-0 text-center px-1">
+      <div className="w-20 h-20 rounded-xl flex flex-col items-center justify-center bg-terra-100/40 text-terra-500 flex-shrink-0 text-center px-1">
         <span className="text-[9.5px] font-medium leading-tight">URL inválida</span>
       </div>
     )
   }
   return (
     <img
-      src={url}
+      src={absoluteUrl(url)}
       alt="Logo"
       onError={() => setErrored(true)}
-      className="w-16 h-16 rounded-lg border border-warm-150 object-cover bg-white flex-shrink-0"
+      className="w-20 h-20 rounded-xl border border-warm-150 object-cover bg-white flex-shrink-0"
     />
+  )
+}
+
+/**
+ * Bloque de upload de logo con preview + input file oculto disparado por
+ * botón. Sube apenas el usuario elige el archivo (no espera al SaveBar)
+ * porque el upload es una mutación independiente del resto del form.
+ */
+function LogoUploader({
+  currentUrl,
+  onUploaded,
+}: {
+  currentUrl: string
+  onUploaded: (newUrl: string) => void
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const uploadMut = useMutation({
+    mutationFn: (file: File) => uploadTenantLogo(file),
+    onSuccess: (data) => {
+      setErr(null)
+      onUploaded(data.logoUrl)
+    },
+    onError: (e) => setErr(extractApiError(e, 'No se pudo subir el logo.')),
+  })
+
+  const handlePick = () => fileInputRef.current?.click()
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''  // reset para que el mismo archivo pueda re-seleccionarse
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      setErr('El archivo supera 5 MB.')
+      return
+    }
+    uploadMut.mutate(file)
+  }
+
+  return (
+    <div className="flex items-start gap-5">
+      <LogoPreview url={currentUrl} />
+      <div className="flex-1 min-w-0">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          onChange={handleFile}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={handlePick}
+          disabled={uploadMut.isPending}
+          className={cls(
+            'inline-flex items-center gap-2 px-3.5 py-2 rounded-lg',
+            'border border-warm-200 bg-white text-[13px] text-warm-700 font-medium',
+            'hover:border-warm-300 hover:text-warm-800 transition',
+            'disabled:opacity-60 disabled:cursor-not-allowed',
+          )}
+        >
+          {uploadMut.isPending
+            ? <Loader2 size={14} className="animate-spin" />
+            : <Upload size={14} />}
+          {uploadMut.isPending ? 'Subiendo…' : currentUrl ? 'Cambiar logo' : 'Subir logo'}
+        </button>
+        <p className="text-[11.5px] text-warm-500 mt-2 leading-relaxed">
+          JPG, PNG o WebP. Máximo 5 MB. Se sube de inmediato — no necesitás guardar.
+        </p>
+        {err && (
+          <p className="text-[12px] text-terra-700 mt-2">{err}</p>
+        )}
+      </div>
+    </div>
   )
 }
 

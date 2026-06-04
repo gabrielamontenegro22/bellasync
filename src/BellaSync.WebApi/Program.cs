@@ -178,6 +178,11 @@ try
 
     app.UseCors();
 
+    // Servir archivos subidos (vouchers, logos) desde wwwroot/uploads.
+    // El path público es "/uploads/{category}/{guid}.ext", devuelto por
+    // IFileStorage.SaveAsync. Sin esto, las imágenes no se ven.
+    app.UseStaticFiles();
+
     app.UseAuthentication();
     app.UseAuthorization();
 

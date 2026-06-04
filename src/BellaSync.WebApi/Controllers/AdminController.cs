@@ -1,4 +1,5 @@
 using BellaSync.Application.Common.Handlers;
+using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Features.Admin.SeedDemo;
 using BellaSync.Application.Features.Tenants.Dtos;
 using BellaSync.Application.Features.Tenants.GetCommissionsSetting;
@@ -9,6 +10,7 @@ using BellaSync.Application.Features.Tenants.UpdateCommissionsSetting;
 using BellaSync.Application.Features.Tenants.UpdatePaymentPolicy;
 using BellaSync.Application.Features.Tenants.UpdateSalonHours;
 using BellaSync.Application.Features.Tenants.UpdateTenantInfo;
+using BellaSync.Application.Features.Tenants.UploadLogo;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -191,4 +193,62 @@ public class AdminController : ControllerBase
         var result = await handler.HandleAsync(command, ct);
         return result.ToActionResult();
     }
+
+    // ============================================================
+    // Logo del salón (upload de archivo)
+    // ============================================================
+
+    /// <summary>
+    /// POST /api/Admin/tenant/logo
+    /// Multipart: campo "file" con la imagen. Reemplaza el logo actual.
+    /// El archivo viejo se borra del storage si era nuestro.
+    /// Máx 5MB, formatos JPG/PNG/WebP/HEIC.
+    /// </summary>
+    [HttpPost("tenant/logo")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(FileUploadRules.MaxFileSizeBytes + 1024)]
+    [ProducesResponseType(typeof(LogoUploadResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UploadLogo(
+        [FromForm] LogoUploadRequest form,
+        [FromServices] IFileStorage storage,
+        [FromServices] ICommandHandler<UploadLogoCommand> handler,
+        CancellationToken ct)
+    {
+        if (form.File is null || form.File.Length == 0)
+            return BadRequest(new { error = "El archivo es obligatorio." });
+        if (form.File.Length > FileUploadRules.MaxFileSizeBytes)
+            return BadRequest(new { error = "El archivo supera 5 MB." });
+        if (!FileUploadRules.IsAllowedImage(form.File.ContentType))
+            return BadRequest(new { error = "Solo aceptamos imágenes (JPG/PNG/WebP/HEIC)." });
+
+        string newUrl;
+        await using (var stream = form.File.OpenReadStream())
+        {
+            newUrl = await storage.SaveAsync(
+                category: "logos",
+                fileName: form.File.FileName,
+                contentType: form.File.ContentType,
+                content: stream,
+                ct: ct);
+        }
+
+        var result = await handler.HandleAsync(new UploadLogoCommand(newUrl), ct);
+        if (result.IsFailure)
+        {
+            // Rollback del archivo huérfano si el handler falló.
+            await storage.DeleteAsync(newUrl, ct);
+            return result.ToActionResult();
+        }
+
+        return Ok(new LogoUploadResponse(newUrl));
+    }
 }
+
+public sealed class LogoUploadRequest
+{
+    public IFormFile? File { get; set; }
+}
+
+public sealed record LogoUploadResponse(string LogoUrl);
