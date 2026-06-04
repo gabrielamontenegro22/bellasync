@@ -53,9 +53,10 @@ public sealed class GetSubscriptionHandler
         var sub = await _db.TenantSubscriptions
             .FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
 
-        // Auto-bootstrap: si el tenant existía antes del sprint, le creamos
-        // una suscripción en trial. Es defensa para que la pantalla nunca
-        // se rompa con 404 y siempre el salón tenga algo que ver.
+        // Auto-bootstrap defensivo: si el tenant existía antes del sprint
+        // de Suscripción y no tiene aún su TenantSubscription, la creamos
+        // acá. Los tenants nuevos vienen ya con la sub creada en
+        // RegisterSalonHandler — esto cubre solamente los legacy.
         if (sub is null)
         {
             sub = TenantSubscription.StartTrial(
@@ -114,7 +115,8 @@ public sealed class GetSubscriptionHandler
             .OrderBy(i => i.DueDate)
             .FirstOrDefault();
 
-        var daysUntilNextCharge = (int)Math.Floor((sub.CurrentPeriodEnd - now).TotalDays);
+        // Ceiling: si faltan 5d 23h, mejor mostrar "6 días" que "5".
+        var daysUntilNextCharge = (int)Math.Ceiling((sub.CurrentPeriodEnd - now).TotalDays);
         var trialEndingSoon = sub.Status == SubscriptionStatus.Trial
             && sub.TrialEndsAt.HasValue
             && (sub.TrialEndsAt.Value - now).TotalDays <= 3;

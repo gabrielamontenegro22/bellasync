@@ -44,6 +44,12 @@ try
         BellaSync.Application.Common.Services.NoOpWhatsAppSender>();
     builder.Services.AddHostedService<BellaSync.WebApi.HostedServices.WhatsAppDispatcherService>();
 
+    // Suscripción SaaS: corre cada hora — emite facturas mensuales,
+    // marca trials vencidos como PastDue, emite facturas tempranas
+    // (7d antes del fin del período). Sin esto, las subs vencidas
+    // se quedan "Active" eternamente sin facturar.
+    builder.Services.AddHostedService<BellaSync.WebApi.HostedServices.SubscriptionDispatcherService>();
+
     // Política de citas (hold, anticipación mínima, etc.)
     builder.Services.Configure<BellaSync.Application.Auth.AppointmentSettings>(
         builder.Configuration.GetSection(BellaSync.Application.Auth.AppointmentSettings.SectionName));
