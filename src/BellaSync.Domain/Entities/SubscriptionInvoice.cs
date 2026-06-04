@@ -74,11 +74,88 @@ public class SubscriptionInvoice : BaseEntity, ITenantEntity
     /// <summary>Banco/billetera o referencia interna del pago.</summary>
     public string? Reference { get; private set; }
 
-    /// <summary>Razón cuando Status=Failed o Waived.</summary>
+    /// <summary>Razón cuando Status=Failed o Waived, o rejection reason.</summary>
     public string? Note { get; private set; }
+
+    // ===== Reporte (paso intermedio: salón dice que pagó) =====
+
+    /// <summary>Cuándo el SalonAdmin reportó el pago.</summary>
+    public DateTime? ReportedAt { get; private set; }
+
+    /// <summary>Método reportado ("Bancolombia", "Nequi", etc.).</summary>
+    public string? ReportedMethod { get; private set; }
+
+    /// <summary>Referencia del comprobante reportada por el salón.</summary>
+    public string? ReportedReference { get; private set; }
+
+    // ===== Validación (decisión del SuperAdmin) =====
+
+    /// <summary>UserId del SuperAdmin que validó.</summary>
+    public Guid? ValidatedByUserId { get; private set; }
+    public DateTime? ValidatedAt { get; private set; }
+
+    /// <summary>Cuándo fue rechazada (vuelve a Pending pero queda traza).</summary>
+    public DateTime? RejectedAt { get; private set; }
 
     // ===== MÉTODOS VERBALES =====
 
+    /// <summary>
+    /// Paso 1 del flujo anti-pasarela: el SalonAdmin reporta haber
+    /// transferido el dinero. La factura pasa a Reported y queda
+    /// esperando que el SuperAdmin verifique contra el banco.
+    /// La suscripción NO se activa todavía.
+    ///
+    /// Solo válido desde Pending. Si la factura ya está Reported,
+    /// permite re-reportar (override de método/referencia).
+    /// </summary>
+    public void ReportPayment(string method, string? reference, DateTime utcNow)
+    {
+        if (Status != SubscriptionInvoiceStatus.Pending
+            && Status != SubscriptionInvoiceStatus.Reported)
+            throw new DomainException(
+                "Solo se puede reportar pago sobre facturas pendientes.");
+        if (string.IsNullOrWhiteSpace(method))
+            throw new DomainException("El método de pago es obligatorio.");
+
+        Status = SubscriptionInvoiceStatus.Reported;
+        ReportedAt = utcNow;
+        ReportedMethod = method.Trim();
+        ReportedReference = string.IsNullOrWhiteSpace(reference) ? null : reference.Trim();
+        // Si venía de un Reject previo (Note seteado), limpiamos para
+        // no confundir.
+        Note = null;
+        RejectedAt = null;
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>
+    /// Paso 2: el SuperAdmin verificó el pago en el extracto bancario
+    /// y lo aprueba. La factura pasa a Paid y queda lista para que
+    /// el handler active/renueve la suscripción.
+    /// </summary>
+    public void Validate(Guid validatedByUserId, DateTime utcNow)
+    {
+        if (Status != SubscriptionInvoiceStatus.Reported)
+            throw new DomainException(
+                "Solo se puede validar una factura reportada.");
+        if (validatedByUserId == Guid.Empty)
+            throw new DomainException("El validador es obligatorio.");
+
+        Status = SubscriptionInvoiceStatus.Paid;
+        PaidAt = utcNow;
+        // Snapshot final: el método/referencia validados son los reportados.
+        PaymentMethod = ReportedMethod;
+        Reference = ReportedReference;
+        ValidatedByUserId = validatedByUserId;
+        ValidatedAt = utcNow;
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>
+    /// Alternativa al flujo Report+Validate: el SuperAdmin marca paga
+    /// directamente (caso "el salón pagó offline, yo lo registro").
+    /// Salta el paso de Reported.
+    /// </summary>
     public void MarkPaid(string method, string? reference, DateTime utcNow)
     {
         if (Status == SubscriptionInvoiceStatus.Paid) return;
@@ -92,6 +169,28 @@ public class SubscriptionInvoice : BaseEntity, ITenantEntity
         PaymentMethod = method.Trim();
         Reference = string.IsNullOrWhiteSpace(reference) ? null : reference.Trim();
         UpdatedAt = utcNow;
+    }
+
+    /// <summary>
+    /// Paso 2 alternativo: el SuperAdmin rechaza el pago reportado
+    /// (no encontró la transferencia en el banco). La factura vuelve
+    /// a Pending para que el salón pueda re-reportar.
+    /// La razón se guarda en Note.
+    /// </summary>
+    public void Reject(string reason, DateTime utcNow)
+    {
+        if (Status != SubscriptionInvoiceStatus.Reported)
+            throw new DomainException(
+                "Solo se puede rechazar una factura reportada.");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new DomainException("La razón del rechazo es obligatoria.");
+
+        Status = SubscriptionInvoiceStatus.Pending;
+        RejectedAt = utcNow;
+        Note = reason.Trim();
+        UpdatedAt = utcNow;
+        // ReportedAt/Method/Reference se preservan para que el salón
+        // vea qué reportó y entienda qué corregir.
     }
 
     public void MarkFailed(string reason, DateTime utcNow)

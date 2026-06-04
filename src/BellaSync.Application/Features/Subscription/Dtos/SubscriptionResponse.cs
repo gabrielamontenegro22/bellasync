@@ -37,6 +37,20 @@ public sealed class SubscriptionResponse
 
     /// <summary>Factura pendiente más cercana (para el botón "Pagar ahora").</summary>
     public InvoiceRow? NextDueInvoice { get; init; }
+
+    /// <summary>
+    /// Factura más reciente en estado Reported (pago reportado por la
+    /// admin, pendiente de validación del SuperAdmin). Si existe, el
+    /// frontend muestra el banner "Pago en validación".
+    /// </summary>
+    public InvoiceRow? PendingValidationInvoice { get; init; }
+
+    /// <summary>
+    /// Si la factura más reciente fue rechazada por el SuperAdmin, este
+    /// campo trae la razón para mostrarla al salón. Se vacía cuando el
+    /// salón vuelve a reportar.
+    /// </summary>
+    public string? LastRejectionReason { get; init; }
 }
 
 public sealed class PlanOption
@@ -61,9 +75,16 @@ public sealed class InvoiceRow
     public DateTime PeriodEnd { get; init; }
     public DateTime DueDate { get; init; }
     public DateTime IssuedAt { get; init; }
+    /// <summary>"Pending" | "Reported" | "Paid" | "Failed" | "Waived".</summary>
     public string Status { get; init; } = string.Empty;
     public DateTime? PaidAt { get; init; }
     public string? PaymentMethod { get; init; }
     public string? Reference { get; init; }
     public string? Note { get; init; }
+
+    // Reporte (paso intermedio anti-pasarela)
+    public DateTime? ReportedAt { get; init; }
+    public string? ReportedMethod { get; init; }
+    public string? ReportedReference { get; init; }
+    public DateTime? RejectedAt { get; init; }
 }

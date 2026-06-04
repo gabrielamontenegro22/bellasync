@@ -3,13 +3,17 @@ namespace BellaSync.Domain.Entities;
 /// <summary>
 /// Estado de una factura mensual de suscripción.
 ///
-///   Pending — emitida, esperando pago. Tiene DueDate.
-///   Paid    — la admin del salón pagó (marcada manualmente por
-///             SaaSAdmin de BellaSync por ahora; futuro: webhook
-///             de pasarela).
-///   Failed  — el pago intentó procesarse y falló. Reintentar.
-///   Waived  — perdón especial (regalo, promo, courtesy). No cuenta
-///             como deuda. Marcado por SaaSAdmin.
+///   Pending  — emitida, esperando que la admin del salón haga la
+///              transferencia.
+///   Reported — la admin del salón reportó que ya transfirió, con
+///              método + referencia. Pendiente de validación por el
+///              SuperAdmin (dueño de BellaSync) contra el extracto
+///              bancario. La suscripción NO se activa hasta validar.
+///   Paid     — el SuperAdmin verificó la transferencia en su banco
+///              y la marcó válida. La suscripción se activa/renueva.
+///   Failed   — un intento de procesamiento automático falló (futuro,
+///              cuando se integre pasarela).
+///   Waived   — cortesía/promo. No se cobra. Marcado por SuperAdmin.
 /// </summary>
 public enum SubscriptionInvoiceStatus
 {
@@ -17,4 +21,5 @@ public enum SubscriptionInvoiceStatus
     Paid = 1,
     Failed = 2,
     Waived = 3,
+    Reported = 4,
 }

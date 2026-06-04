@@ -2,8 +2,7 @@ using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Features.Subscription.ChangePlan;
 using BellaSync.Application.Features.Subscription.Dtos;
 using BellaSync.Application.Features.Subscription.GetSubscription;
-using BellaSync.Application.Features.Subscription.MarkInvoicePaid;
-using BellaSync.Application.Features.Subscription.PayCurrentPeriod;
+using BellaSync.Application.Features.Subscription.ReportPayment;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,12 +11,16 @@ namespace BellaSync.WebApi.Controllers;
 
 /// <summary>
 /// Endpoints para que la admin del salón gestione su suscripción a
-/// BellaSync (el SaaS). Solo SalonAdmin — receptionists no tocan plata
-/// de suscripción.
+/// BellaSync. Solo SalonAdmin — la admin del salón es la que paga,
+/// la recepción no toca plata de SaaS.
 ///
-///   GET    /api/Subscription                    → snapshot completo
-///   POST   /api/Subscription/change-plan        → cambia el plan
-///   POST   /api/Subscription/invoices/{id}/pay  → marca factura paga
+///   GET  /api/Subscription              → snapshot completo
+///   POST /api/Subscription/change-plan  → cambia el plan (prorrateo en upgrade)
+///   POST /api/Subscription/report-payment → reporta transferencia
+///                                          (queda en validación)
+///
+/// El pago "real" lo aprueba el SuperAdmin de BellaSync desde
+/// /api/SaasAdmin/subscriptions/* — anti-pasarela, hay humano en el medio.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -48,32 +51,21 @@ public class SubscriptionController : ControllerBase
         return result.ToActionResult();
     }
 
-    [HttpPost("pay")]
+    /// <summary>
+    /// La admin del salón reporta que hizo la transferencia. La factura
+    /// queda en estado Reported. La suscripción NO se activa hasta que
+    /// el SuperAdmin de BellaSync valide contra el extracto bancario.
+    /// </summary>
+    [HttpPost("report-payment")]
     [ProducesResponseType(typeof(SubscriptionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Pay(
-        [FromBody] PayInvoiceRequest request,
-        [FromServices] ICommandHandler<PayCurrentPeriodCommand, SubscriptionResponse> handler,
+    public async Task<IActionResult> ReportPayment(
+        [FromBody] ReportPaymentRequest request,
+        [FromServices] ICommandHandler<ReportPaymentCommand, SubscriptionResponse> handler,
         CancellationToken ct)
     {
-        var cmd = new PayCurrentPeriodCommand(request.PaymentMethod, request.Reference);
-        var result = await handler.HandleAsync(cmd, ct);
-        return result.ToActionResult();
-    }
-
-    [HttpPost("invoices/{id:guid}/pay")]
-    [ProducesResponseType(typeof(SubscriptionResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> PayInvoice(
-        Guid id,
-        [FromBody] PayInvoiceRequest request,
-        [FromServices] ICommandHandler<MarkInvoicePaidCommand, SubscriptionResponse> handler,
-        CancellationToken ct)
-    {
-        var cmd = new MarkInvoicePaidCommand(id, request.PaymentMethod, request.Reference);
+        var cmd = new ReportPaymentCommand(request.PaymentMethod, request.Reference);
         var result = await handler.HandleAsync(cmd, ct);
         return result.ToActionResult();
     }
@@ -84,7 +76,7 @@ public sealed class ChangePlanRequest
     public string PlanCode { get; set; } = string.Empty;
 }
 
-public sealed class PayInvoiceRequest
+public sealed class ReportPaymentRequest
 {
     public string PaymentMethod { get; set; } = string.Empty;
     public string? Reference { get; set; }

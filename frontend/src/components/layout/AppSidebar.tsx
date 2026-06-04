@@ -11,6 +11,7 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  ShieldCheck,
 } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
@@ -71,6 +72,19 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
   // cuando el módulo está activo. Sin esto, salones que pagan sueldo
   // fijo ven un item que no usan.
   const navItems = (() => {
+    // SuperAdmin (dueño de BellaSync, no de un salón) tiene su propia
+    // navegación reducida: solo el panel de validación SaaS. No usa
+    // agenda/clientes/etc. porque no tiene tenant asociado.
+    if (user?.role === 'SuperAdmin') {
+      return [
+        {
+          to: '/saas-admin/subscriptions',
+          label: 'Validación SaaS',
+          icon: ShieldCheck,
+        } as NavItem,
+      ]
+    }
+
     if (!commissionsSetting?.enabled) return BASE_NAV_ITEMS
     const idx = BASE_NAV_ITEMS.findIndex(i => i.to === '/reportes')
     return [

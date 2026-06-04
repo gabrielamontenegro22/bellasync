@@ -41,6 +41,7 @@ public static class DependencyInjection
         // Servicios de aplicación
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IEmailService, LoggingEmailService>();

@@ -4,8 +4,10 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle,
+  Clock,
   Sparkles,
   X,
+  XCircle,
 } from 'lucide-react'
 import { Modal, ModalFooter } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -13,7 +15,7 @@ import { extractApiError } from '@/lib/extractApiError'
 import {
   changePlan,
   getSubscription,
-  paySubscription,
+  reportPayment,
   type InvoiceRow,
   type PlanOption,
   type Subscription,
@@ -137,10 +139,10 @@ export function SuscripcionPage() {
       )}
 
       {payModalOpen && (
-        <PayInvoiceModal
+        <ReportPaymentModal
           sub={data}
           onClose={() => setPayModalOpen(false)}
-          onPaid={(next) => {
+          onReported={(next) => {
             onSubscriptionChange(next)
             setPayModalOpen(false)
           }}
@@ -155,6 +157,33 @@ export function SuscripcionPage() {
 // ───────────────────────────────────────────────────────────────────────
 
 function StatusBanner({ sub }: { sub: Subscription }) {
+  // Prioridad 1: pago en validación (lo más informativo y reciente).
+  if (sub.pendingValidationInvoice) {
+    const inv = sub.pendingValidationInvoice
+    return (
+      <div className="mb-5 rounded-xl bg-gold-50 border border-gold-200 px-4 py-3 flex items-start gap-2.5">
+        <Clock size={16} className="text-gold-600 mt-0.5 flex-shrink-0" />
+        <div className="text-[12.5px] text-gold-700 leading-relaxed">
+          <strong>Tu pago está en validación.</strong> Reportaste {fmt(inv.amount)} vía{' '}
+          {inv.reportedMethod}{inv.reportedReference ? ` (ref ${inv.reportedReference})` : ''}.
+          BellaSync lo verifica en el banco — suele tardar 1-2 días hábiles.
+        </div>
+      </div>
+    )
+  }
+  // Prioridad 2: último rechazo (para que sepa que su reporte fue inválido).
+  if (sub.lastRejectionReason) {
+    return (
+      <div className="mb-5 rounded-xl bg-terra-100 border border-terra-200 px-4 py-3 flex items-start gap-2.5">
+        <XCircle size={16} className="text-terra-700 mt-0.5 flex-shrink-0" />
+        <div className="text-[12.5px] text-terra-700 leading-relaxed">
+          <strong>Tu reporte de pago fue rechazado.</strong> Motivo: {sub.lastRejectionReason}.
+          Revisa los datos y vuelve a reportar.
+        </div>
+      </div>
+    )
+  }
+  // Prioridad 3: past-due.
   if (sub.status === 'PastDue') {
     return (
       <div className="mb-5 rounded-xl bg-terra-100 border border-terra-200 px-4 py-3 flex items-start gap-2.5">
@@ -174,8 +203,7 @@ function StatusBanner({ sub }: { sub: Subscription }) {
         <Sparkles size={16} className="text-gold-600 mt-0.5 flex-shrink-0" />
         <div className="text-[12.5px] text-gold-700 leading-relaxed">
           <strong>Tu período de prueba termina en {days} día{days === 1 ? '' : 's'}.</strong>{' '}
-          Cuando emitamos la primera factura podrás pagar desde acá para no perder
-          acceso.
+          Reporta tu transferencia para no perder acceso.
         </div>
       </div>
     )
@@ -197,15 +225,18 @@ function PlanCard({
   onPayClick: () => void
 }) {
   // Label inteligente del botón principal según el estado:
-  //   Trial      → "Activar plan ahora"
-  //   PastDue    → "Regularizar pago"
-  //   Active     → "Pagar ahora" (si hay factura) | "Renovar suscripción"
-  //   Cancelled  → null
+  //   Pago en validación → "Esperando validación" (disabled)
+  //   Trial              → "Reportar pago"
+  //   PastDue            → "Reportar pago"
+  //   Active + factura   → "Reportar pago"
+  //   Active sin factura → "Renovar suscripción"
+  //   Cancelled          → null
+  const isPendingValidation = !!sub.pendingValidationInvoice
   const payAction = (() => {
     if (sub.status === 'Cancelled') return null
-    if (sub.status === 'Trial') return 'Activar plan ahora'
-    if (sub.status === 'PastDue') return 'Regularizar pago'
-    return sub.nextDueInvoice ? 'Pagar ahora' : 'Renovar suscripción'
+    if (isPendingValidation) return 'Esperando validación'
+    if (sub.status === 'Active' && !sub.nextDueInvoice) return 'Renovar suscripción'
+    return 'Reportar pago'
   })()
 
   return (
@@ -252,7 +283,8 @@ function PlanCard({
             <button
               type="button"
               onClick={onPayClick}
-              className="px-3.5 py-2 rounded-lg bg-gold-300 hover:bg-gold-200 text-warm-800 text-[12.5px] font-medium"
+              disabled={isPendingValidation}
+              className="px-3.5 py-2 rounded-lg bg-gold-300 hover:bg-gold-200 text-warm-800 text-[12.5px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {payAction}
             </button>
@@ -356,10 +388,11 @@ function PaymentHistory({ invoices }: { invoices: InvoiceRow[] }) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    Paid:    { label: 'Pagado',   cls: 'text-brand-700 bg-brand-50' },
-    Pending: { label: 'Pendiente', cls: 'text-gold-700 bg-gold-50' },
-    Failed:  { label: 'Fallido',  cls: 'text-terra-700 bg-terra-100' },
-    Waived:  { label: 'Cortesía', cls: 'text-warm-600 bg-warm-100' },
+    Paid:     { label: 'Pagado',     cls: 'text-brand-700 bg-brand-50' },
+    Pending:  { label: 'Pendiente',  cls: 'text-gold-700 bg-gold-50' },
+    Reported: { label: 'En validación', cls: 'text-gold-700 bg-gold-100' },
+    Failed:   { label: 'Fallido',    cls: 'text-terra-700 bg-terra-100' },
+    Waived:   { label: 'Cortesía',   cls: 'text-warm-600 bg-warm-100' },
   }
   const v = map[status] ?? { label: status, cls: 'text-warm-600 bg-warm-100' }
   return (
@@ -495,14 +528,14 @@ function PlanRow({
 
 const PAY_METHODS = ['Bancolombia', 'Nequi', 'Daviplata', 'Davivienda', 'BBVA', 'Otro']
 
-function PayInvoiceModal({
+function ReportPaymentModal({
   sub,
   onClose,
-  onPaid,
+  onReported,
 }: {
   sub: Subscription
   onClose: () => void
-  onPaid: (next: Subscription) => void
+  onReported: (next: Subscription) => void
 }) {
   const [method, setMethod] = useState<string>('Bancolombia')
   const [reference, setReference] = useState('')
@@ -519,19 +552,20 @@ function PayInvoiceModal({
 
   const mut = useMutation({
     mutationFn: () =>
-      paySubscription({
+      reportPayment({
         paymentMethod: method,
         reference: reference.trim() || null,
       }),
-    onSuccess: (next) => onPaid(next),
+    onSuccess: (next) => onReported(next),
     onError: (e) => setErr(extractApiError(e)),
   })
 
   return (
-    <Modal title="Confirmar pago" onClose={onClose} size="md">
+    <Modal title="Reportar transferencia" onClose={onClose} size="md">
       <p className="text-[13px] text-warm-600 mb-4">
-        Transfiere a la cuenta de BellaSync y luego registra el pago acá. Lo
-        confirmamos cuando el banco lo refleje.
+        Reporta acá los datos de tu transferencia. BellaSync verificará
+        contra el banco y activará tu plan apenas confirme. Suele tardar
+        1-2 días hábiles.
       </p>
       <div className="rounded-xl bg-warm-50 border border-warm-150 p-4 mb-4">
         <div className="flex items-center justify-between text-[12.5px]">
@@ -596,7 +630,7 @@ function PayInvoiceModal({
           loading={mut.isPending}
           leftIcon={<CheckCircle size={14} />}
         >
-          Confirmar pago
+          Reportar transferencia
         </Button>
       </ModalFooter>
     </Modal>
