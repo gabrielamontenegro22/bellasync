@@ -36,6 +36,14 @@ try
     // del estilista para siempre. Ver ExpiredHoldsReleaseService.
     builder.Services.AddHostedService<BellaSync.WebApi.HostedServices.ExpiredHoldsReleaseService>();
 
+    // WhatsApp: el sender es swappable (NoOp por default, después Twilio/Meta
+    // sin tocar handlers). El dispatcher background corre cada 2min y se
+    // encarga de encolar recordatorios + despacharlos.
+    builder.Services.AddScoped<
+        BellaSync.Application.Common.Interfaces.IWhatsAppSender,
+        BellaSync.Application.Common.Services.NoOpWhatsAppSender>();
+    builder.Services.AddHostedService<BellaSync.WebApi.HostedServices.WhatsAppDispatcherService>();
+
     // Política de citas (hold, anticipación mínima, etc.)
     builder.Services.Configure<BellaSync.Application.Auth.AppointmentSettings>(
         builder.Configuration.GetSection(BellaSync.Application.Auth.AppointmentSettings.SectionName));

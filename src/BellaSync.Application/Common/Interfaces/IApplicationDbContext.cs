@@ -26,6 +26,8 @@ public interface IApplicationDbContext
     DbSet<CashClosing> CashClosings { get; }
     DbSet<SalonWeeklyHours> SalonWeeklyHours { get; }
     DbSet<SalonClosedDate> SalonClosedDates { get; }
+    DbSet<WhatsAppTemplate> WhatsAppTemplates { get; }
+    DbSet<WhatsAppMessage> WhatsAppMessages { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -39,6 +39,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<CashClosing> CashClosings => Set<CashClosing>();
     public DbSet<SalonWeeklyHours> SalonWeeklyHours => Set<SalonWeeklyHours>();
     public DbSet<SalonClosedDate> SalonClosedDates => Set<SalonClosedDate>();
+    public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
+    public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
