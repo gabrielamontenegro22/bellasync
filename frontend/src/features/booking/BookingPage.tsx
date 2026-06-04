@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { Button, Card, DateTimePicker, Input } from '@/components/ui'
 import {
   getPublicServices,
   getPublicStylists,
   publicBook,
+  uploadPublicVoucher,
   type PublicBookingResponse,
   type PublicService,
   type PublicStylist,
@@ -70,7 +71,7 @@ export function BookingPage() {
     }
   }
 
-  if (result) return <SuccessScreen result={result} />
+  if (result) return <SuccessScreen result={result} tenantSlug={tenantSlug} />
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-6">
@@ -310,7 +311,13 @@ function ClientStep({
 
 // ===== Success =====
 
-function SuccessScreen({ result }: { result: PublicBookingResponse }) {
+function SuccessScreen({
+  result,
+  tenantSlug,
+}: {
+  result: PublicBookingResponse
+  tenantSlug: string
+}) {
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-6">
       <Card className="p-6 text-center">
@@ -333,9 +340,12 @@ function SuccessScreen({ result }: { result: PublicBookingResponse }) {
             <p><strong>Banco:</strong> Bancolombia (cuenta del salón)</p>
             <p><strong>Concepto:</strong> Tu nombre + fecha cita</p>
           </div>
-          <p className="text-sm text-warm-700">
-            Una vez transferido, enviá el comprobante por WhatsApp al número del salón.
-          </p>
+
+          <VoucherUploader
+            tenantSlug={tenantSlug}
+            appointmentId={result.appointmentId}
+            expectedAmount={result.depositAmount}
+          />
         </Card>
       )}
 
@@ -346,6 +356,130 @@ function SuccessScreen({ result }: { result: PublicBookingResponse }) {
           </p>
         </Card>
       )}
+    </div>
+  )
+}
+
+/**
+ * UI compacto para que el cliente público suba su comprobante bancario
+ * apenas hace la transferencia. Form con: archivo (obligatorio) + monto
+ * + banco/referencia opcionales. Tras éxito muestra confirmación y se
+ * deshabilita para evitar duplicados.
+ */
+function VoucherUploader({
+  tenantSlug,
+  appointmentId,
+  expectedAmount,
+}: {
+  tenantSlug: string
+  appointmentId: string
+  expectedAmount: number
+}) {
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [amount, setAmount] = useState<number>(expectedAmount)
+  const [bank, setBank] = useState('')
+  const [reference, setReference] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+
+  const mut = useMutation({
+    mutationFn: () => {
+      if (!file) throw new Error('Falta el comprobante.')
+      return uploadPublicVoucher(tenantSlug, appointmentId, {
+        file,
+        reportedAmount: amount,
+        bank: bank.trim() || undefined,
+        referenceNumber: reference.trim() || undefined,
+      })
+    },
+    onSuccess: () => { setSent(true); setErr(null) },
+    onError: (e) => setErr(extractApiError(e, 'No se pudo subir el comprobante.')),
+  })
+
+  const handlePick = () => fileRef.current?.click()
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    if (f.size > 5 * 1024 * 1024) {
+      setErr('El archivo supera 5 MB.')
+      return
+    }
+    setFile(f)
+    setErr(null)
+  }
+
+  if (sent) {
+    return (
+      <div className="rounded-md bg-brand-50 border border-brand-200 p-3 text-sm text-brand-700">
+        ✓ ¡Comprobante recibido! El salón lo verificará y confirmará tu cita
+        en las próximas horas. Te avisamos por WhatsApp.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3 border-t border-gold-200 pt-3">
+      <p className="text-sm font-semibold text-warm-800">Subí tu comprobante</p>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+        onChange={handleFile}
+        className="hidden"
+      />
+      <button
+        type="button"
+        onClick={handlePick}
+        disabled={mut.isPending}
+        className="w-full px-3 py-3 rounded-md border-2 border-dashed border-gold-300 bg-white text-sm text-warm-700 hover:border-gold-400 transition"
+      >
+        {file ? `📎 ${file.name}` : '📎 Toca para subir foto/screenshot'}
+      </button>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-warm-600">
+          Monto transferido
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(Number(e.target.value) || 0)}
+            className="mt-1 w-full px-2 py-1.5 rounded border border-warm-200 text-sm"
+          />
+        </label>
+        <label className="text-xs text-warm-600">
+          Banco (opcional)
+          <input
+            value={bank}
+            onChange={(e) => setBank(e.target.value)}
+            placeholder="Bancolombia, Nequi..."
+            className="mt-1 w-full px-2 py-1.5 rounded border border-warm-200 text-sm"
+          />
+        </label>
+      </div>
+
+      <label className="block text-xs text-warm-600">
+        Referencia del comprobante (opcional)
+        <input
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder="Ej: 209384"
+          className="mt-1 w-full px-2 py-1.5 rounded border border-warm-200 text-sm"
+        />
+      </label>
+
+      {err && <p className="text-sm text-terra-700">{err}</p>}
+
+      <Button
+        fullWidth
+        onClick={() => mut.mutate()}
+        loading={mut.isPending}
+        disabled={!file || amount <= 0}
+      >
+        Enviar comprobante
+      </Button>
     </div>
   )
 }

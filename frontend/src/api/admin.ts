@@ -98,6 +98,22 @@ export async function updateTenantInfo(req: UpdateTenantInfoRequest): Promise<Te
 }
 
 /**
+ * Sube el logo del salón. Multipart con campo "file". El backend valida
+ * tipo (jpg/png/webp/heic) y tamaño (max 5MB), guarda el archivo,
+ * actualiza Tenant.LogoUrl y devuelve la URL final ("/uploads/logos/...").
+ */
+export async function uploadTenantLogo(file: File): Promise<{ logoUrl: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await api.post<{ logoUrl: string }>(
+    '/api/Admin/tenant/logo',
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  )
+  return data
+}
+
+/**
  * Horario completo del salón. days es un dict 0-6 (Lunes..Domingo)
  * donde la clave numérica viene como string en JSON ("0", "1", …).
  * El frontend normaliza al consumirlo.

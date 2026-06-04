@@ -42,6 +42,9 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        // Storage de archivos subidos (vouchers, logos). Local en dev/on-prem.
+        // Swap por S3FileStorage cuando se haga deploy a cloud.
+        services.AddScoped<IFileStorage, LocalFileStorage>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IEmailService, LoggingEmailService>();

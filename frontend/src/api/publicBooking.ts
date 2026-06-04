@@ -85,3 +85,46 @@ export async function getPublicStylists(tenantSlug: string): Promise<PublicStyli
   )
   return data
 }
+
+// ===== Subir voucher (comprobante de anticipo) =====
+
+export interface UploadVoucherRequest {
+  file: File
+  reportedAmount: number
+  bank?: string
+  referenceNumber?: string
+  senderName?: string
+  senderPhone?: string
+}
+
+export interface UploadVoucherResponse {
+  id: string
+  status: string
+  reportedAmount: number
+}
+
+/**
+ * POST /api/PublicBooking/{slug}/appointments/{id}/voucher
+ * Multipart: file + metadata. Anonymous (portal público).
+ * Devuelve el voucher creado en estado Pending.
+ */
+export async function uploadPublicVoucher(
+  tenantSlug: string,
+  appointmentId: string,
+  req: UploadVoucherRequest,
+): Promise<UploadVoucherResponse> {
+  const form = new FormData()
+  form.append('file', req.file)
+  form.append('reportedAmount', String(req.reportedAmount))
+  if (req.bank) form.append('bank', req.bank)
+  if (req.referenceNumber) form.append('referenceNumber', req.referenceNumber)
+  if (req.senderName) form.append('senderName', req.senderName)
+  if (req.senderPhone) form.append('senderPhone', req.senderPhone)
+
+  const { data } = await publicApi.post<UploadVoucherResponse>(
+    `/api/PublicBooking/${encodeURIComponent(tenantSlug)}/appointments/${appointmentId}/voucher`,
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  )
+  return data
+}
