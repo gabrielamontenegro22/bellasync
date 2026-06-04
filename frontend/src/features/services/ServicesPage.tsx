@@ -170,7 +170,7 @@ export function ServicesPage() {
           <div className="text-[11px] tracking-[0.18em] uppercase text-warm-400 font-medium mb-1.5">
             Configuración › Catálogo
           </div>
-          <h1 className="font-serif text-[40px] lg:text-[44px] leading-[1] tracking-tight text-warm-800">
+          <h1 className="font-serif text-[28px] sm:text-[40px] lg:text-[44px] leading-[1.05] tracking-tight text-warm-800">
             Catálogo de servicios
           </h1>
           {!servicesQ.isLoading && (

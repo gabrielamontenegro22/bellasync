@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Users } from 'lucide-react'
+import { cls } from '@/lib/cls'
 import type { CustomerResponse } from '@/api/customers'
 import { NewAppointmentModal } from '@/features/appointments/components/NewAppointmentModal'
 import { ClientList } from './components/ClientList'
@@ -28,7 +29,10 @@ export function CustomersPage() {
   const today = new Date().toISOString().slice(0, 10)
 
   return (
-    <div className="flex h-full min-h-0 bg-warm-50">
+    <div className="flex h-full min-h-0 bg-warm-50 relative">
+      {/* En mobile (<md) la lista oculta el detalle: tap en cliente abre el
+          detalle como página completa encima, con botón "volver" para regresar
+          a la lista. En md+ ambos se ven al mismo tiempo (split panel). */}
       <ClientList
         selectedId={selected?.id ?? null}
         onSelect={setSelected}
@@ -36,16 +40,26 @@ export function CustomersPage() {
       />
 
       {selected ? (
-        <ClientDetail
-          key={selected.id}
-          fallback={selected}
-          onEdit={() => setEditing(selected)}
-          onNewAppointment={() => setApptForCustomer(selected)}
-        />
+        <div
+          className={cls(
+            // Mobile/celular: overlay fullscreen sobre la lista
+            'absolute inset-0 z-30 bg-warm-50 flex flex-col min-h-0',
+            // md+: vuelve a flujo normal, comparte ancho con la lista
+            'md:static md:flex-1 md:min-w-0 md:z-auto',
+          )}
+        >
+          <ClientDetail
+            key={selected.id}
+            fallback={selected}
+            onEdit={() => setEditing(selected)}
+            onNewAppointment={() => setApptForCustomer(selected)}
+            onBack={() => setSelected(null)}
+          />
+        </div>
       ) : (
         // Empty state: visible desde md (768px+) para que iPad y desktop
-        // vean qué va a aparecer al elegir un cliente. En mobile (<md) el
-        // detalle vive en página aparte (futuro Sprint B).
+        // vean qué va a aparecer al elegir un cliente. En mobile (<md) la
+        // lista ocupa todo el ancho.
         <main className="hidden md:flex flex-1 min-w-0 flex-col items-center justify-center bg-warm-50 p-10 text-center">
           <div className="w-14 h-14 rounded-full bg-white border border-warm-200 flex items-center justify-center text-warm-400">
             <Users size={24} />

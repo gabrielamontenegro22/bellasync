@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Calendar, CheckCircle, Gift, MessageCircle, AtSign,
+  ArrowLeft, Calendar, CheckCircle, Gift, MessageCircle, AtSign,
   Plus, Pencil, Scissors, Wallet,
 } from 'lucide-react'
 import type { CustomerResponse } from '@/api/customers'
@@ -30,6 +30,10 @@ interface ClientDetailProps {
   fallback: CustomerResponse
   onEdit: () => void
   onNewAppointment?: () => void
+  /** Volver a la lista. En mobile (<md) el detalle es overlay full-screen y
+   *  hace falta una salida; en desktop el botón se oculta porque la lista
+   *  está al lado. */
+  onBack?: () => void
 }
 
 /**
@@ -47,7 +51,7 @@ interface ClientDetailProps {
  * o que pasen citas, el panel reflejé lo último. `fallback` evita el
  * flash de pantalla en blanco mientras la query carga la primera vez.
  */
-export function ClientDetail({ fallback, onEdit, onNewAppointment }: ClientDetailProps) {
+export function ClientDetail({ fallback, onEdit, onNewAppointment, onBack }: ClientDetailProps) {
   const [tab, setTab] = useState<TabId>('resumen')
   const navigate = useNavigate()
   const { data: fresh } = useCustomer(fallback.id)
@@ -63,6 +67,19 @@ export function ClientDetail({ fallback, onEdit, onNewAppointment }: ClientDetai
 
   return (
     <main className="flex-1 min-w-0 flex flex-col bg-warm-50 overflow-y-auto">
+      {/* Botón Volver — solo en mobile (<md), donde el detalle es overlay
+          fullscreen sobre la lista. En md+ la lista queda visible al lado
+          y no hace falta volver explícitamente. */}
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="md:hidden flex items-center gap-1.5 px-5 pt-4 pb-2 text-[12.5px] text-warm-500 hover:text-brand-700 bg-warm-50"
+        >
+          <ArrowLeft size={14} /> Volver a la lista
+        </button>
+      )}
+
       {/* HEAD */}
       <div className="bg-white border-b border-warm-150 px-6 lg:px-10 py-7">
         <div className="flex items-start gap-5">
@@ -116,6 +133,9 @@ export function ClientDetail({ fallback, onEdit, onNewAppointment }: ClientDetai
             </div>
           </div>
 
+          {/* Acciones en columna lateral — solo md+. En mobile las acciones
+              caen en una fila debajo del header (abajo) para no romper la
+              altura del avatar. */}
           <div className="hidden md:flex flex-col items-stretch gap-2 flex-shrink-0">
             <a
               href={wa}
@@ -142,6 +162,35 @@ export function ClientDetail({ fallback, onEdit, onNewAppointment }: ClientDetai
               <Pencil size={13} /> Editar
             </button>
           </div>
+        </div>
+
+        {/* Acciones mobile — fila debajo del header. Solo <md. */}
+        <div className="md:hidden flex gap-2 mt-4">
+          <a
+            href={wa}
+            target="_blank"
+            rel="noreferrer"
+            className="flex-1 px-3 py-2.5 rounded-lg bg-[#25D366] hover:brightness-110 text-white text-[12.5px] font-medium flex items-center justify-center gap-1.5 shadow-soft"
+          >
+            <MessageCircle size={13} /> WhatsApp
+          </a>
+          {onNewAppointment && client.isActive && (
+            <button
+              type="button"
+              onClick={onNewAppointment}
+              className="flex-1 px-3 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[12.5px] font-medium flex items-center justify-center gap-1.5"
+            >
+              <Plus size={13} /> Agendar
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label="Editar"
+            className="px-3 py-2.5 rounded-lg border border-warm-200 text-warm-600 hover:bg-warm-100 flex items-center justify-center"
+          >
+            <Pencil size={14} />
+          </button>
         </div>
 
         {/* TABS */}

@@ -146,7 +146,7 @@ export function StylistsPage() {
           <div className="text-[10.5px] tracking-[0.2em] uppercase text-gold-600 font-medium">
             Tu equipo
           </div>
-          <h1 className="font-serif text-[42px] lg:text-[52px] leading-[1.02] tracking-tight text-warm-800 mt-1">
+          <h1 className="font-serif text-[30px] sm:text-[42px] lg:text-[52px] leading-[1.02] tracking-tight text-warm-800 mt-1">
             Estilistas
           </h1>
           <p className="text-[14px] text-warm-500 mt-2 max-w-2xl">

@@ -92,7 +92,7 @@ function CommissionsBody({ tenantName }: { tenantName: string }) {
         <div className="text-[10.5px] tracking-[0.2em] uppercase text-gold-600 font-medium">
           Liquidación de equipo
         </div>
-        <h1 className="font-serif text-[42px] lg:text-[52px] leading-[1.02] tracking-tight text-warm-800 mt-1">
+        <h1 className="font-serif text-[30px] sm:text-[42px] lg:text-[52px] leading-[1.02] tracking-tight text-warm-800 mt-1">
           Comisiones
         </h1>
         <p className="text-[13.5px] text-warm-500 mt-1.5">
