@@ -581,6 +581,35 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
           Padding y spacing compactos para minimizar la probabilidad de
           necesitar scroll en monitores promedio. */}
       <div ref={bodyRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        {/* Banner de cancelación — solo si la cita está cancelada.
+            Muestra quién la canceló (si tenemos el dato) + motivo. Es lo
+            primero que vemos al abrir el detail para que sea obvio el estado. */}
+        {appointment.status === 'Cancelled' && (
+          <div className="rounded-lg border border-warm-200 bg-warm-50 px-4 py-3">
+            <div className="text-[11px] tracking-[0.14em] uppercase text-warm-500 font-medium mb-1">
+              Cancelada
+            </div>
+            <div className="text-[12.5px] text-warm-700">
+              {appointment.cancelledByUserName
+                ? <>Por <span className="font-medium text-warm-800">{appointment.cancelledByUserName}</span></>
+                : <span className="italic">Cancelación automática del sistema</span>}
+              {appointment.cancelledAt && (
+                <span className="text-warm-500">
+                  {' · '}
+                  {new Date(appointment.cancelledAt).toLocaleString('es-CO', {
+                    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+                  })}
+                </span>
+              )}
+            </div>
+            {appointment.cancellationReason && (
+              <div className="text-[12px] text-warm-600 mt-1.5 italic">
+                "{appointment.cancellationReason}"
+              </div>
+            )}
+          </div>
+        )}
+
         <Section title="Servicio">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
