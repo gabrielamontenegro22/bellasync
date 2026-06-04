@@ -48,32 +48,33 @@ export function PaymentMethodPicker({
   }
 
   return (
-    <div className="space-y-2.5">
-      {/* Top: 3 (o 4) chips */}
-      <div className={cls('grid gap-2', hideOther ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4')}>
+    <div className="space-y-3">
+      {/* Top: 3 (o 4) chips en grid 2×2 — garantiza que ningún label
+          se trunque incluso en modales angostos (max-w-md ≈ 448px). */}
+      <div className={cls('grid gap-2', hideOther ? 'grid-cols-3' : 'grid-cols-2')}>
         <MethodChip
           active={method === 'Cash'}
           onClick={() => handleMethod('Cash')}
-          icon={<Banknote size={15} strokeWidth={1.8} />}
+          icon={<Banknote size={16} strokeWidth={1.8} />}
           label="Efectivo"
         />
         <MethodChip
           active={method === 'Transfer'}
           onClick={() => handleMethod('Transfer')}
-          icon={<Smartphone size={15} strokeWidth={1.8} />}
+          icon={<Smartphone size={16} strokeWidth={1.8} />}
           label="Transferencia"
         />
         <MethodChip
           active={method === 'Card'}
           onClick={() => handleMethod('Card')}
-          icon={<CreditCard size={15} strokeWidth={1.8} />}
+          icon={<CreditCard size={16} strokeWidth={1.8} />}
           label="Tarjeta"
         />
         {!hideOther && (
           <MethodChip
             active={method === 'Other'}
             onClick={() => handleMethod('Other')}
-            icon={<span className="text-[14px] leading-none">•••</span>}
+            icon={<span className="text-[14px] leading-none tracking-tighter">•••</span>}
             label="Otro"
           />
         )}
@@ -122,15 +123,18 @@ function MethodChip({
       type="button"
       onClick={onClick}
       className={cls(
-        'flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg',
-        'text-[12.5px] font-medium border transition',
+        'flex items-center justify-center gap-2 px-3 py-3 rounded-xl',
+        'text-[13px] font-medium border transition',
         active
-          ? 'bg-warm-800 text-white border-warm-800'
-          : 'bg-white text-warm-600 border-warm-200 hover:border-warm-300',
+          // Estilo soft: tinte brand suave en vez de negro pleno.
+          // Combina con el resto del modal (TOTAL pill, botón principal)
+          // y deja el chip claro sin ser estridente.
+          ? 'bg-brand-50 text-brand-800 border-brand-300 ring-2 ring-offset-1 ring-brand-100'
+          : 'bg-white text-warm-700 border-warm-200 hover:border-warm-300 hover:bg-warm-50',
       )}
     >
-      <span className={active ? 'text-white' : 'text-warm-500'}>{icon}</span>
-      {label}
+      <span className={active ? 'text-brand-700' : 'text-warm-400'}>{icon}</span>
+      <span className="whitespace-nowrap">{label}</span>
     </button>
   )
 }
