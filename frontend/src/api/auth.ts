@@ -52,3 +52,45 @@ export async function resetPassword(payload: {
 }): Promise<void> {
   await api.post('/api/Auth/reset-password', payload)
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Mi cuenta — endpoints autenticados                                         */
+/* -------------------------------------------------------------------------- */
+
+/** Snapshot del propio user. Devuelto por GET /api/Auth/me. */
+export interface MyProfileResponse {
+  id: string
+  email: string
+  fullName: string
+  /** "SalonAdmin" | "Receptionist" | "Stylist" | "SuperAdmin" */
+  role: string
+  /** Null si es SuperAdmin (no pertenece a ningún salón). */
+  tenantName: string | null
+  createdAt: string
+  lastLoginAt: string | null
+}
+
+/** GET /api/Auth/me — devuelve el perfil del user logueado actual. */
+export async function getMyProfile(): Promise<MyProfileResponse> {
+  const { data } = await api.get<MyProfileResponse>('/api/Auth/me')
+  return data
+}
+
+/** PUT /api/Auth/me — actualiza el nombre completo. */
+export async function updateMyProfile(payload: { fullName: string }): Promise<MyProfileResponse> {
+  const { data } = await api.put<MyProfileResponse>('/api/Auth/me', payload)
+  return data
+}
+
+/**
+ * POST /api/Auth/change-password — cambia la contraseña del user logueado.
+ * Side effect: revoca los refresh tokens en otros dispositivos. La sesión
+ * actual sigue viva hasta que expire el access token (~15min) y el próximo
+ * /refresh falle → ahí la UI fuerza re-login con la pass nueva.
+ */
+export async function changeMyPassword(payload: {
+  currentPassword: string
+  newPassword: string
+}): Promise<void> {
+  await api.post('/api/Auth/change-password', payload)
+}

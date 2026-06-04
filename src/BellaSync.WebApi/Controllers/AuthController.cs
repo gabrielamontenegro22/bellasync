@@ -2,14 +2,17 @@ using BellaSync.Application.Auth;
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
+using BellaSync.Application.Features.Auth.ChangeMyPassword;
 using BellaSync.Application.Features.Auth.Dtos;
 using BellaSync.Application.Features.Auth.ForgotPassword;
 using BellaSync.Application.Features.Auth.Login;
+using BellaSync.Application.Features.Auth.MyProfile;
 using BellaSync.Application.Features.Auth.RefreshAccessToken;
 using BellaSync.Application.Features.Auth.RegisterSalon;
 using BellaSync.Application.Features.Auth.ResetPassword;
 using BellaSync.WebApi.Infrastructure;
 using FluentValidation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -207,6 +210,73 @@ public class AuthController : ControllerBase
 
         ClearRefreshCookie();
         return NoContent();
+    }
+
+    // ===== Mi cuenta (endpoints autenticados) =====
+
+    /// <summary>
+    /// Devuelve los datos del user logueado actual (nombre, email, rol,
+    /// nombre del salón). Lo consume la página /mi-cuenta del frontend.
+    /// </summary>
+    [HttpGet("me")]
+    [Authorize]
+    [ProducesResponseType(typeof(MyProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyProfile(
+        [FromServices] IQueryHandler<GetMyProfileQuery, MyProfileResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetMyProfileQuery(), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Actualiza el perfil del user logueado. Por ahora solo nombre.
+    /// Cambio de email queda fuera de scope (requiere flujo de verificación).
+    /// </summary>
+    [HttpPut("me")]
+    [Authorize]
+    [ProducesResponseType(typeof(MyProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateMyProfile(
+        [FromBody] UpdateMyProfileRequest request,
+        [FromServices] IValidator<UpdateMyProfileRequest> validator,
+        [FromServices] ICommandHandler<UpdateMyProfileCommand, MyProfileResponse> handler,
+        CancellationToken ct)
+    {
+        var validation = await validator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+            return ValidationProblem(BuildModelState(validation));
+
+        var result = await handler.HandleAsync(
+            new UpdateMyProfileCommand(request.FullName), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Cambia la contraseña del user logueado. Verifica la actual antes
+    /// de aceptar. Revoca refresh tokens en otros dispositivos.
+    /// La sesión actual sigue viva hasta que expire el access token.
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangeMyPassword(
+        [FromBody] ChangeMyPasswordRequest request,
+        [FromServices] IValidator<ChangeMyPasswordRequest> validator,
+        [FromServices] ICommandHandler<ChangeMyPasswordCommand> handler,
+        CancellationToken ct)
+    {
+        var validation = await validator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+            return ValidationProblem(BuildModelState(validation));
+
+        var result = await handler.HandleAsync(
+            new ChangeMyPasswordCommand(request.CurrentPassword, request.NewPassword), ct);
+        return result.ToActionResult();
     }
 
     // ===== Helpers privados de cookie =====

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Login } from '@/pages/Login'
 import { ResetPassword } from '@/pages/ResetPassword'
 import { Dashboard } from '@/pages/Dashboard'
+import { MyAccountPage } from '@/pages/MyAccount'
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
 import { ConfigLayout } from '@/pages/Settings/ConfigLayout'
 import { ServicesPage } from '@/features/services/ServicesPage'
@@ -185,6 +186,14 @@ export function AppRouter() {
             </RequireRole>
           </ProtectedRoute>
         }
+      />
+
+      {/* Mi cuenta — accesible para CUALQUIER user autenticado (todos los
+          roles). Sin RequireRole: hasta el SuperAdmin debería poder cambiar
+          su propio password. La page monta AppShell internamente. */}
+      <Route
+        path="/mi-cuenta"
+        element={<ProtectedRoute><MyAccountPage /></ProtectedRoute>}
       />
 
       {/* Defaults */}
