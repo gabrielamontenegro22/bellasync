@@ -30,6 +30,20 @@
 
   body { margin: 0; }
 
+  /* Cursor default = flecha. Sin esto, el browser muestra el I-beam
+     (cursor de texto) sobre cualquier texto plano, dando la impresión
+     de que es editable. La app de BellaSync es 90% lectura y botones
+     — el cursor de texto solo tiene sentido en inputs reales.
+     Los `cursor-pointer` de Tailwind (botones, links, cards
+     cliqueables) sobreescriben esto, y los inputs nativos recuperan
+     el text cursor con la regla de abajo. */
+  body { cursor: default; }
+  input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([readonly]):not([disabled]),
+  textarea:not([readonly]):not([disabled]),
+  [contenteditable="true"] {
+    cursor: text;
+  }
+
   /* Focus accesible y consistente con la marca */
   :focus-visible {
     outline: 2px solid theme('colors.brand.700');
