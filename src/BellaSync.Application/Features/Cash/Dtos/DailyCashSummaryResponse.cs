@@ -1,3 +1,4 @@
+using BellaSync.Application.Features.Expenses.Dtos;
 using BellaSync.Application.Features.Payments.Dtos;
 
 namespace BellaSync.Application.Features.Cash.Dtos;
@@ -30,6 +31,22 @@ public class DailyCashSummaryResponse
 
     /// <summary>Lista completa de pagos para drill-down.</summary>
     public List<PaymentResponse> Payments { get; set; } = new();
+
+    /// <summary>
+    /// Total de egresos del día (todos los métodos). Útil para el KPI
+    /// "Egresos del día".
+    /// </summary>
+    public decimal TotalExpenses { get; set; }
+
+    /// <summary>
+    /// Egresos pagados específicamente en efectivo. Estos son los que
+    /// el arqueo de la caja debe restar del esperado:
+    ///   expected_cash = base + cash_sales - cash_expenses
+    /// </summary>
+    public decimal CashExpenses { get; set; }
+
+    /// <summary>Lista completa de egresos del día.</summary>
+    public List<ExpenseResponse> Expenses { get; set; } = new();
 }
 
 public class MethodBreakdownItem
