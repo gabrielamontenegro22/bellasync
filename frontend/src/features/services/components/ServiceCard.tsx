@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Clock, Wallet, Pencil, Copy, Ban, CheckCircle } from 'lucide-react'
+import { Clock, Wallet, Pencil, Copy, Ban, CheckCircle, Percent } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import type { ServiceResponse } from '@/api/services'
 import { CATEGORY_BY_ID, fmtCOP } from '../types'
 import { serviceExtrasStorage } from '../storage'
+import { useCommissionsSetting } from '@/features/commissions/useCommissionsSetting'
 
 // requiresDeposit y depositPercentage ahora vienen del backend (service.requiresDeposit / service.depositPercentage)
 // Solo `assignedStylistIds` queda en localStorage hasta que hagamos F5 (Estilistas)
@@ -42,6 +43,11 @@ export function ServiceCard({
 }: ServiceCardProps) {
   const [extras] = useState(() => serviceExtrasStorage.get(service.id))
   const cat = CATEGORY_BY_ID[service.category]
+
+  // Solo mostramos el badge de comisión cuando el salón tiene activo
+  // el módulo. Si no, ensucia la card con info que no se usa.
+  const { data: commissionsSetting } = useCommissionsSetting()
+  const showCommission = (commissionsSetting?.enabled ?? false) && service.commissionPercentage > 0
 
   const assignedStylists = extras.assignedStylistIds
     .map((id) => stylists.find((s) => s.id === id))
@@ -113,9 +119,20 @@ export function ServiceCard({
           <div className="font-serif text-[24px] text-warm-800 tabular-nums leading-none">
             {fmtCOP(service.price)}
           </div>
-          <div className="text-[12px] text-warm-500 flex items-center gap-1">
-            <Clock size={11} />
-            {service.durationMinutes} min
+          <div className="flex items-center gap-2">
+            {showCommission && (
+              <span
+                title={`Comisión al estilista: ${service.commissionPercentage}%`}
+                className="inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded-md bg-brand-50 text-brand-700 tabular-nums"
+              >
+                <Percent size={10} strokeWidth={2.2} />
+                {service.commissionPercentage}
+              </span>
+            )}
+            <div className="text-[12px] text-warm-500 flex items-center gap-1">
+              <Clock size={11} />
+              {service.durationMinutes} min
+            </div>
           </div>
         </div>
 
