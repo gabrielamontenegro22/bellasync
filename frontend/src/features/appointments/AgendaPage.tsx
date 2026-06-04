@@ -100,7 +100,7 @@ export function AgendaPage() {
           <UrgentBanner
             count={urgentCount}
             onDismiss={() => setBannerDismissed(true)}
-            onGo={() => navigate('/configuracion/validacion')}
+            onGo={() => navigate('/validacion')}
           />
         )}
 

@@ -74,17 +74,54 @@ export function AppRouter() {
         }
       />
 
-      {/* Configuración (layout con outlet) */}
+      {/* Servicios — catálogo del salón (top-level: uso diario/semanal) */}
+      <Route
+        path="/servicios"
+        element={
+          <ProtectedRoute>
+            <AppShell><ServicesPage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Estilistas — equipo del salón (top-level) */}
+      <Route
+        path="/estilistas"
+        element={
+          <ProtectedRoute>
+            <AppShell><StylistsPage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Validación de pagos — cola operativa, uso diario */}
+      <Route
+        path="/validacion"
+        element={
+          <ProtectedRoute>
+            <AppShell><ValidationQueuePage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Redirects: URLs viejas /configuracion/{servicios,estilistas,validacion}
+          siguen funcionando (bookmarks, links viejos) pero apuntan a las
+          nuevas top-level. Las dejamos un par de versiones y después se
+          quitan. */}
+      <Route path="/configuracion/servicios"  element={<Navigate to="/servicios"  replace />} />
+      <Route path="/configuracion/estilistas" element={<Navigate to="/estilistas" replace />} />
+      <Route path="/configuracion/validacion" element={<Navigate to="/validacion" replace />} />
+
+      {/* Configuración — sólo lo que es ajuste real (info, horario,
+          política, plantillas, suscripción). Lo operativo vive arriba. */}
       <Route
         path="/configuracion"
         element={<ProtectedRoute><ConfigLayout /></ProtectedRoute>}
       >
-        {/* /configuracion → redirige a /configuracion/servicios */}
-        <Route index element={<Navigate to="servicios" replace />} />
-        <Route path="servicios"  element={<ServicesPage />} />
-        <Route path="estilistas" element={<StylistsPage />} />
-        <Route path="validacion" element={<ValidationQueuePage />} />
-        <Route path="pagos"      element={<PaymentPolicyPage />} />
+        {/* /configuracion → redirige a /configuracion/pagos (única sección
+            con pantalla real por ahora) */}
+        <Route index element={<Navigate to="pagos" replace />} />
+        <Route path="pagos" element={<PaymentPolicyPage />} />
         {/* Aquí se agregarán: general, horario, whatsapp, suscripcion */}
       </Route>
 
