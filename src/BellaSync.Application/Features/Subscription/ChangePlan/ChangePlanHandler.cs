@@ -139,12 +139,18 @@ public sealed class ChangePlanHandler
         // de reportar, la factura debe pasar al plan nuevo para que el
         // monto que reporte coincida con lo que va a cobrar.
         //
-        // Solo tocamos Pending; Reported ya bloqueamos arriba; Paid/
-        // Failed/Waived son inmutables a esta altura.
+        // Solo tocamos Pending del PRÓXIMO ciclo (PeriodStart >=
+        // CurrentPeriodEnd): NO tocamos facturas prorrateadas (que viven
+        // DENTRO del ciclo actual) — bug C3 del audit: antes pisábamos la
+        // factura prorrateada del upgrade que María recién hizo,
+        // convirtiéndola en "basic $50k" si después downgradeaba.
+        //
+        // Reported ya bloqueamos arriba; Paid/Failed/Waived son inmutables.
         var pendingInvoices = await _db.SubscriptionInvoices
             .Where(i => i.TenantId == _currentTenant.TenantId
                      && i.Status == SubscriptionInvoiceStatus.Pending
-                     && i.PlanCode != newPlan.Code)
+                     && i.PlanCode != newPlan.Code
+                     && i.PeriodStart >= sub.CurrentPeriodEnd)
             .ToListAsync(ct);
 
         foreach (var pending in pendingInvoices)

@@ -1,6 +1,7 @@
 using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Features.SaasAdmin.Subscriptions.Dtos;
 using BellaSync.Application.Features.SaasAdmin.Subscriptions.ListPendingValidations;
+using BellaSync.Application.Features.SaasAdmin.Subscriptions.MarkInvoicePaid;
 using BellaSync.Application.Features.SaasAdmin.Subscriptions.RejectPayment;
 using BellaSync.Application.Features.SaasAdmin.Subscriptions.ValidatePayment;
 using BellaSync.WebApi.Infrastructure;
@@ -49,6 +50,27 @@ public class SaasAdminController : ControllerBase
         return result.ToActionResult();
     }
 
+    /// <summary>
+    /// Marcar pago offline: el salón pagó por canal alterno (cheque,
+    /// efectivo, depósito directo) y el SuperAdmin lo registra sin
+    /// requerir que primero pase por "Reportar" en la UI del salón.
+    /// </summary>
+    [HttpPost("invoices/{id:guid}/mark-paid")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> MarkPaid(
+        Guid id,
+        [FromBody] MarkPaidRequest request,
+        [FromServices] ICommandHandler<MarkInvoicePaidCommand> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(
+            new MarkInvoicePaidCommand(id, request.PaymentMethod, request.Reference), ct);
+        return result.ToActionResult();
+    }
+
     [HttpPost("invoices/{id:guid}/reject")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -69,4 +91,11 @@ public class SaasAdminController : ControllerBase
 public sealed class RejectPaymentRequest
 {
     public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class MarkPaidRequest
+{
+    /// <summary>"Bancolombia", "Nequi", "Efectivo", "Cheque", etc.</summary>
+    public string PaymentMethod { get; set; } = string.Empty;
+    public string? Reference { get; set; }
 }

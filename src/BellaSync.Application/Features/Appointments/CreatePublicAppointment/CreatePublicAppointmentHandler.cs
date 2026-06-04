@@ -74,8 +74,13 @@ public sealed class CreatePublicAppointmentHandler
         }
         else if (!customer.IsActive)
         {
-            // Reactivamos el cliente archivado que vuelve a agendar.
-            customer.Reactivate();
+            // Cliente archivado por el salón. NO reactivamos automáticamente
+            // — archivar = "ya no quiero servirle". Si quiere volver, debe
+            // comunicarse directamente con el salón y la admin decide
+            // reactivarlo manualmente desde el CRM.
+            return ApplicationError.Validation(
+                "customer.archived",
+                "No podemos agendarte por este medio. Comunícate directamente con el salón.");
         }
 
         // 3. Validar slot — necesita IgnoreQueryFilters indirectamente,

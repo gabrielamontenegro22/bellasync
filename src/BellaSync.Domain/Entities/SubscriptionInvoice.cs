@@ -208,6 +208,11 @@ public class SubscriptionInvoice : BaseEntity, ITenantEntity
     /// la cobranza siga al plan vigente. Solo válido en Pending; si ya
     /// fue Reported/Paid/etc., el cambio de plan tiene que respetarla
     /// (la valida o rechaza el SuperAdmin antes que María pueda cambiar).
+    ///
+    /// También limpia los metadatos de Reporte/Rechazo previos: si la
+    /// factura venía de un Reject (Pending con Note/ReportedAt), la
+    /// actualización del plan implica un "reset" — la admin verá una
+    /// factura limpia para reportar con el plan/monto nuevo.
     /// </summary>
     public void UpdatePlanInfo(string newPlanCode, Money newAmount, DateTime utcNow)
     {
@@ -221,6 +226,17 @@ public class SubscriptionInvoice : BaseEntity, ITenantEntity
 
         PlanCode = newPlanCode.Trim().ToLowerInvariant();
         Amount = newAmount;
+
+        // Reset metadatos de reporte/rechazo previos para no confundir
+        // al salón (bug M14 del audit): una factura pisada con plan nuevo
+        // no debería mostrar la razón del rechazo anterior ni la
+        // referencia bancaria de un monto que ya no aplica.
+        Note = null;
+        ReportedAt = null;
+        ReportedMethod = null;
+        ReportedReference = null;
+        RejectedAt = null;
+
         UpdatedAt = utcNow;
     }
 

@@ -417,7 +417,14 @@ public sealed class GetReportsSummaryHandler
 
     private static double? ChangePct(decimal current, decimal previous)
     {
-        if (previous == 0m) return current == 0m ? 0.0 : (double?)null;
+        // Ambos cero: sin variación, mostramos 0%.
+        if (previous == 0m && current == 0m) return 0.0;
+        // Sólo el anterior cero (período anterior arrancó vacío): no podemos
+        // calcular % de cambio porque dividiríamos por cero. Devolvemos un
+        // sentinel grande (+1000%) que el frontend interpreta como "salto
+        // enorme" en vez de null (que pintaría "—" y daría sensación de
+        // bug). No usamos double.PositiveInfinity porque no es JSON-safe.
+        if (previous == 0m) return 1000.0;
         return (double)((current - previous) / previous) * 100.0;
     }
 

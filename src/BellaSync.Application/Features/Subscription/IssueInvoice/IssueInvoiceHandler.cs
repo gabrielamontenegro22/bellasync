@@ -111,15 +111,23 @@ public sealed class IssueInvoiceHandler
     private static (DateTime start, DateTime end) ComputePeriod(
         TenantSubscription sub, DateTime now) => sub.Status switch
     {
-        // Active: fact por el período en curso (ya empezó, termina en CurrentPeriodEnd)
+        // Active: fact por el período en curso (ya empezó, termina en CurrentPeriodEnd).
         SubscriptionStatus.Active =>
             (sub.CurrentPeriodEnd.AddMonths(-1), sub.CurrentPeriodEnd),
-        // Trial: factura para activar — período nuevo que arranca al pagar
+
+        // Trial: factura para activar — período nuevo que arranca al pagar.
         SubscriptionStatus.Trial =>
             (now, now.AddMonths(1)),
-        // PastDue: factura por el próximo ciclo (la anterior ya venció)
+
+        // PastDue: bug histórico M9 — usábamos (CurrentPeriodEnd, +1mes)
+        // que si la sub estuvo abandonada por meses daba un período viejo
+        // ya consumido. La admin pagaba creyendo cubrir el próximo mes
+        // y en realidad cubría el mes vencido → seguía PastDue después.
+        // Fix: arrancar el período NUEVO desde ahora, no desde la fecha
+        // del período viejo vencido.
         SubscriptionStatus.PastDue =>
-            (sub.CurrentPeriodEnd, sub.CurrentPeriodEnd.AddMonths(1)),
+            (now, now.AddMonths(1)),
+
         _ => (now, now.AddMonths(1)),
     };
 }

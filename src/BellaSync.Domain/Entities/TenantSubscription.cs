@@ -116,6 +116,41 @@ public class TenantSubscription : BaseEntity, ITenantEntity
     }
 
     /// <summary>
+    /// Variante de Activate que toma el período exacto de la factura
+    /// validada (en vez de calcular utcNow + 1mes). Mantiene en sincronía
+    /// el período cobrado con el período facturado — sin esto, podía
+    /// haber 1 día de desfase si validamos al día siguiente del reporte.
+    /// </summary>
+    public void ActivateFromInvoice(DateTime invoicePeriodEnd, DateTime utcNow)
+    {
+        if (Status == SubscriptionStatus.Active) return;
+        if (Status == SubscriptionStatus.Cancelled)
+            throw new DomainException("No se puede activar una suscripción cancelada.");
+
+        Status = SubscriptionStatus.Active;
+        CurrentPeriodEnd = invoicePeriodEnd;
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>
+    /// Variante de Renew que extiende usando el PeriodEnd de la factura
+    /// que se acaba de pagar — mantiene la consistencia entre lo que se
+    /// cobró y lo que cubre el período.
+    /// </summary>
+    public void RenewFromInvoice(DateTime invoicePeriodEnd, DateTime utcNow)
+    {
+        if (Status == SubscriptionStatus.Cancelled)
+            throw new DomainException("No se puede renovar una suscripción cancelada.");
+
+        Status = SubscriptionStatus.Active;
+        // Si la factura cubre más allá del CurrentPeriodEnd, extendemos
+        // al PeriodEnd nuevo. Si la factura es del período vencido (caso
+        // ramping de PastDue), preservamos al menos un mes desde now.
+        CurrentPeriodEnd = invoicePeriodEnd > utcNow ? invoicePeriodEnd : utcNow.AddMonths(1);
+        UpdatedAt = utcNow;
+    }
+
+    /// <summary>
     /// Marca como PastDue cuando se pasa el período sin pago. El acceso
     /// no se bloquea automáticamente — la admin del salón debería
     /// recibir notificación.
