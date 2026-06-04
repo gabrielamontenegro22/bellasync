@@ -26,6 +26,7 @@ public interface IApplicationDbContext
     DbSet<CashClosing> CashClosings { get; }
     DbSet<SalonWeeklyHours> SalonWeeklyHours { get; }
     DbSet<SalonClosedDate> SalonClosedDates { get; }
+    DbSet<StylistTimeOff> StylistTimeOffs { get; }
     DbSet<WhatsAppTemplate> WhatsAppTemplates { get; }
     DbSet<WhatsAppMessage> WhatsAppMessages { get; }
     DbSet<TenantSubscription> TenantSubscriptions { get; }

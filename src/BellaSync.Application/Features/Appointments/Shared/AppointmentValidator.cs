@@ -1,3 +1,4 @@
+using BellaSync.Application.Common;
 using BellaSync.Application.Common.Errors;
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
@@ -68,6 +69,21 @@ public sealed class AppointmentValidator
             return ApplicationError.Validation(
                 "appointment.stylist_cant_do_service",
                 $"El estilista {stylist.FullName} no realiza este servicio.");
+        }
+
+        // 3b. ¿Está la estilista de vacaciones / día libre ese día?
+        //     Comparamos contra la fecha en hora COLOMBIA (no UTC) — los
+        //     períodos de TimeOff se manejan en días calendario locales.
+        var slotDateCO = ColombiaTime.TodayFor(startAtUtc);
+        var onTimeOff = await _db.StylistTimeOffs
+            .AnyAsync(t => t.StylistId == stylistId
+                        && t.FromDate <= slotDateCO
+                        && t.ToDate >= slotDateCO, ct);
+        if (onTimeOff)
+        {
+            return ApplicationError.Validation(
+                "appointment.stylist_time_off",
+                $"{stylist.FullName} no está disponible ese día (vacaciones / día libre).");
         }
 
         // 4. Slot overlap: no puede haber otra cita NO cancelada/no-show

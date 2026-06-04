@@ -4,6 +4,11 @@ using BellaSync.Application.Features.Stylists.DeleteStylist;
 using BellaSync.Application.Features.Stylists.Dtos;
 using BellaSync.Application.Features.Stylists.GetStylist;
 using BellaSync.Application.Features.Stylists.ListStylists;
+using BellaSync.Application.Features.Stylists.TimeOff.AddStylistTimeOff;
+using BellaSync.Application.Features.Stylists.TimeOff.Dtos;
+using BellaSync.Application.Features.Stylists.TimeOff.GetAffectedAppointments;
+using BellaSync.Application.Features.Stylists.TimeOff.ListStylistTimeOffs;
+using BellaSync.Application.Features.Stylists.TimeOff.RemoveStylistTimeOff;
 using BellaSync.Application.Features.Stylists.UpdateStylist;
 using BellaSync.WebApi.Infrastructure;
 using FluentValidation;
@@ -119,6 +124,89 @@ public class StylistsController : ControllerBase
         return result.ToActionResult();
     }
 
+    // ============================================================
+    // Días libres / vacaciones de estilistas
+    // ============================================================
+
+    /// <summary>
+    /// GET /api/Stylists/{id}/time-off
+    /// Lista los períodos de vacaciones/días libres del estilista
+    /// (últimos 90 días + futuros).
+    /// </summary>
+    [HttpGet("{id:guid}/time-off")]
+    [ProducesResponseType(typeof(IReadOnlyList<StylistTimeOffResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListTimeOff(
+        Guid id,
+        [FromServices] IQueryHandler<ListStylistTimeOffsQuery, IReadOnlyList<StylistTimeOffResponse>> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new ListStylistTimeOffsQuery(id), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// POST /api/Stylists/{id}/time-off
+    /// Marca un período (rango de días) como no disponible. Solo SalonAdmin.
+    /// </summary>
+    [HttpPost("{id:guid}/time-off")]
+    [Authorize(Roles = "SalonAdmin")]
+    [ProducesResponseType(typeof(StylistTimeOffResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AddTimeOff(
+        Guid id,
+        [FromBody] AddTimeOffRequest request,
+        [FromServices] ICommandHandler<AddStylistTimeOffCommand, StylistTimeOffResponse> handler,
+        CancellationToken ct)
+    {
+        var command = new AddStylistTimeOffCommand(
+            id, request.FromDate, request.ToDate, request.Reason);
+        var result = await handler.HandleAsync(command, ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// DELETE /api/Stylists/time-off/{timeOffId}
+    /// Borra un período. Solo SalonAdmin. La cita ya agendada NO se
+    /// reagenda automáticamente — la admin tiene la lista en pantalla.
+    /// </summary>
+    [HttpDelete("time-off/{timeOffId:guid}")]
+    [Authorize(Roles = "SalonAdmin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTimeOff(
+        Guid timeOffId,
+        [FromServices] ICommandHandler<RemoveStylistTimeOffCommand> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new RemoveStylistTimeOffCommand(timeOffId), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// GET /api/Stylists/{id}/affected-appointments?from=YYYY-MM-DD&amp;to=YYYY-MM-DD
+    /// Preview de citas que requerirían reagendarse si se marca el rango.
+    /// Sirve tanto antes de confirmar (preview) como después (review).
+    /// </summary>
+    [HttpGet("{id:guid}/affected-appointments")]
+    [ProducesResponseType(typeof(IReadOnlyList<AffectedAppointmentRow>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetAffected(
+        Guid id,
+        [FromQuery] string from,
+        [FromQuery] string to,
+        [FromServices] IQueryHandler<GetAffectedAppointmentsQuery, IReadOnlyList<AffectedAppointmentRow>> handler,
+        CancellationToken ct)
+    {
+        if (!DateOnly.TryParseExact(from, "yyyy-MM-dd", out var fromDate)
+            || !DateOnly.TryParseExact(to, "yyyy-MM-dd", out var toDate))
+            return BadRequest(new { error = "Fechas inválidas (YYYY-MM-DD)." });
+
+        var result = await handler.HandleAsync(
+            new GetAffectedAppointmentsQuery(id, fromDate, toDate), ct);
+        return result.ToActionResult();
+    }
+
     private static Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary BuildModelState(
         FluentValidation.Results.ValidationResult result)
     {
@@ -127,4 +215,11 @@ public class StylistsController : ControllerBase
             modelState.AddModelError(error.PropertyName, error.ErrorMessage);
         return modelState;
     }
+}
+
+public sealed class AddTimeOffRequest
+{
+    public DateOnly FromDate { get; set; }
+    public DateOnly ToDate { get; set; }
+    public string? Reason { get; set; }
 }
