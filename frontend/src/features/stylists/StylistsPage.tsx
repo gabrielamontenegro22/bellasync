@@ -18,6 +18,7 @@ import {
 import type { StylistFormData } from './schemas'
 import type { StatusFilter } from './types'
 import { cls } from '@/lib/cls'
+import { useIsAdmin } from '@/features/auth/useAuth'
 
 /**
  * Vista principal del catálogo de Estilistas.
@@ -32,6 +33,7 @@ import { cls } from '@/lib/cls'
  *  - DELETE /api/Stylists/{id}
  */
 export function StylistsPage() {
+  const isAdmin = useIsAdmin()
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
@@ -157,13 +159,15 @@ export function StylistsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenNew}
-          className="px-3.5 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13px] font-medium flex items-center gap-1.5 shadow-soft hidden sm:flex"
-        >
-          <Plus size={15} /> Nuevo estilista
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={handleOpenNew}
+            className="px-3.5 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13px] font-medium flex items-center gap-1.5 shadow-soft hidden sm:flex"
+          >
+            <Plus size={15} /> Nuevo estilista
+          </button>
+        )}
       </div>
 
       {/* KPI strip */}
@@ -196,7 +200,7 @@ export function StylistsPage() {
             onFilterChange={setFilter}
             query={query}
             onQueryChange={setQuery}
-            onNew={handleOpenNew}
+            onNew={isAdmin ? handleOpenNew : undefined}
           />
         </div>
       )}
@@ -240,16 +244,20 @@ export function StylistsPage() {
             Aún no hay estilistas en tu equipo
           </div>
           <div className="text-[13px] text-warm-500 mt-2 max-w-sm mx-auto">
-            Suma a la primera estilista para que pueda tomar citas.
+            {isAdmin
+              ? 'Suma a la primera estilista para que pueda tomar citas.'
+              : 'Pedile a la administradora del salón que sume estilistas al equipo.'}
           </div>
-          <button
-            type="button"
-            onClick={handleOpenNew}
-            className="mt-6 px-5 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13.5px] font-medium inline-flex items-center gap-1.5 shadow-soft"
-          >
-            <Plus size={15} />
-            Agregar primera estilista
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleOpenNew}
+              className="mt-6 px-5 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13.5px] font-medium inline-flex items-center gap-1.5 shadow-soft"
+            >
+              <Plus size={15} />
+              Agregar primera estilista
+            </button>
+          )}
         </div>
       )}
 
@@ -277,13 +285,13 @@ export function StylistsPage() {
             <StylistCard
               key={s.id}
               stylist={s}
-              onEdit={handleOpenEdit}
-              onToggleStatus={handleToggleStatus}
-              onDelete={handleHardDelete}
-              onTimeOff={setTimeOffStylist}
+              onEdit={isAdmin ? handleOpenEdit : undefined}
+              onToggleStatus={isAdmin ? handleToggleStatus : undefined}
+              onDelete={isAdmin ? handleHardDelete : undefined}
+              onTimeOff={isAdmin ? setTimeOffStylist : undefined}
             />
           ))}
-          <AddCard onClick={handleOpenNew} />
+          {isAdmin && <AddCard onClick={handleOpenNew} />}
         </div>
       )}
 

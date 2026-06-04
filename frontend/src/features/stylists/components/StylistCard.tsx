@@ -7,10 +7,15 @@ import { StylistAvatar } from './StylistAvatar'
 
 interface StylistCardProps {
   stylist: StylistResponse
-  onEdit: (s: StylistResponse) => void
-  onToggleStatus: (s: StylistResponse) => void
-  onDelete: (s: StylistResponse) => void
-  onTimeOff: (s: StylistResponse) => void
+  /**
+   * Handlers de CRUD. Si NO se pasan (recepción / stylist viendo el
+   * catálogo), el menú "..." no se renderiza — la card queda en modo
+   * solo lectura. El backend igual rechaza POST/PUT/DELETE de no-admin.
+   */
+  onEdit?: (s: StylistResponse) => void
+  onToggleStatus?: (s: StylistResponse) => void
+  onDelete?: (s: StylistResponse) => void
+  onTimeOff?: (s: StylistResponse) => void
 }
 
 /**
@@ -24,6 +29,12 @@ interface StylistCardProps {
 export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete, onTimeOff }: StylistCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const status = STATUS_META[stylist.status]
+
+  // Modo solo-lectura cuando no hay handlers (recepción / stylist).
+  // Igual mostramos la card con la info de contacto, pero sin botones
+  // de edición ni el CTA "Sin datos de contacto · agregar".
+  const canEdit = Boolean(onEdit)
+  const canManage = canEdit || Boolean(onToggleStatus) || Boolean(onDelete) || Boolean(onTimeOff)
 
   // Stats placeholder — vendrán del módulo de Citas en el futuro
   const completed = 0
@@ -60,63 +71,63 @@ export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete, onTimeO
           </div>
         </div>
 
-        {/* Menú "..." */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setMenuOpen((o) => !o)}
-            className="w-7 h-7 rounded-md hover:bg-warm-100 text-warm-500 flex items-center justify-center transition"
-            aria-label="Más opciones"
-          >
-            <MoreVertical size={16} />
-          </button>
-          {menuOpen && (
-            <>
-              <button
-                type="button"
-                className="fixed inset-0 z-10 cursor-default"
-                onClick={() => setMenuOpen(false)}
-                aria-label="Cerrar menú"
-              />
-              <div className="absolute right-0 top-9 z-20 w-44 bg-white rounded-lg border border-warm-200 shadow-pop py-1 anim-fade">
-                <MenuItem
-                  icon={<Pencil size={13} />}
-                  label="Editar"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onEdit(stylist)
-                  }}
+        {/* Menú "..." — solo si el user puede gestionar (admin) */}
+        {canManage && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              className="w-7 h-7 rounded-md hover:bg-warm-100 text-warm-500 flex items-center justify-center transition"
+              aria-label="Más opciones"
+            >
+              <MoreVertical size={16} />
+            </button>
+            {menuOpen && (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setMenuOpen(false)}
+                  aria-label="Cerrar menú"
                 />
-                <MenuItem
-                  icon={<Palmtree size={13} />}
-                  label="Días libres"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onTimeOff(stylist)
-                  }}
-                />
-                <MenuItem
-                  icon={<ToggleIcon size={13} />}
-                  label={toggleLabel}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onToggleStatus(stylist)
-                  }}
-                />
-                <div className="h-px bg-warm-150 my-1" />
-                <MenuItem
-                  icon={<Trash2 size={13} />}
-                  label="Eliminar"
-                  danger
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onDelete(stylist)
-                  }}
-                />
-              </div>
-            </>
-          )}
-        </div>
+                <div className="absolute right-0 top-9 z-20 w-44 bg-white rounded-lg border border-warm-200 shadow-pop py-1 anim-fade">
+                  {onEdit && (
+                    <MenuItem
+                      icon={<Pencil size={13} />}
+                      label="Editar"
+                      onClick={() => { setMenuOpen(false); onEdit(stylist) }}
+                    />
+                  )}
+                  {onTimeOff && (
+                    <MenuItem
+                      icon={<Palmtree size={13} />}
+                      label="Días libres"
+                      onClick={() => { setMenuOpen(false); onTimeOff(stylist) }}
+                    />
+                  )}
+                  {onToggleStatus && (
+                    <MenuItem
+                      icon={<ToggleIcon size={13} />}
+                      label={toggleLabel}
+                      onClick={() => { setMenuOpen(false); onToggleStatus(stylist) }}
+                    />
+                  )}
+                  {onDelete && (
+                    <>
+                      <div className="h-px bg-warm-150 my-1" />
+                      <MenuItem
+                        icon={<Trash2 size={13} />}
+                        label="Eliminar"
+                        danger
+                        onClick={() => { setMenuOpen(false); onDelete(stylist) }}
+                      />
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Contact info. Si no hay ningún campo, mostramos un CTA discreto
@@ -147,13 +158,17 @@ export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete, onTimeO
           </div>
         )}
         {!stylist.email && !stylist.phone && !stylist.idNumber && !stylist.hireDate && (
-          <button
-            type="button"
-            onClick={() => onEdit(stylist)}
-            className="text-[11.5px] text-warm-400 italic hover:text-brand-700 transition"
-          >
-            Sin datos de contacto · agregar
-          </button>
+          canEdit ? (
+            <button
+              type="button"
+              onClick={() => onEdit!(stylist)}
+              className="text-[11.5px] text-warm-400 italic hover:text-brand-700 transition"
+            >
+              Sin datos de contacto · agregar
+            </button>
+          ) : (
+            <div className="text-[11.5px] text-warm-400 italic">Sin datos de contacto</div>
+          )
         )}
       </div>
 
