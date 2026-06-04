@@ -76,6 +76,22 @@ public sealed class ChangePlanHandler
                 "subscription.not_found",
                 "El salón no tiene una suscripción activa.");
 
+        // Guard: si hay una factura Reported (pago reportado esperando
+        // validación del SuperAdmin), bloqueamos el cambio. Sería confuso
+        // y peligroso permitir cambiar plan mientras un pago del plan
+        // viejo está en proceso bancario — la referencia que el salón
+        // reportó es por un monto del plan viejo, validar tras cambio
+        // dejaría inconsistencia (pagó X, le activamos Y).
+        var hasReported = await _db.SubscriptionInvoices
+            .AnyAsync(i => i.TenantId == _currentTenant.TenantId
+                        && i.Status == SubscriptionInvoiceStatus.Reported, ct);
+
+        if (hasReported)
+            return ApplicationError.Conflict(
+                "subscription.payment_in_validation",
+                "No puedes cambiar el plan mientras tu pago anterior está en validación. " +
+                "Espera la decisión de BellaSync (1–2 días hábiles).");
+
         var oldPlan = SubscriptionPlanCatalog.Get(sub.PlanCode);
         var now = _clock.UtcNow;
 
@@ -114,6 +130,40 @@ public sealed class ChangePlanHandler
                 _logger.LogInformation(
                     "Tenant {TenantId} upgrade {Old}→{New}: factura prorrateada ${Charge} ({Days:F1} días)",
                     _currentTenant.TenantId, oldPlan.Code, newPlan.Code, charge, daysRemaining);
+            }
+        }
+
+        // Actualizar Pending viejas: el dispatcher pudo haber emitido
+        // una factura del próximo período con el plan VIEJO (caso típico:
+        // 7 días antes del fin del ciclo). Si el salón cambia plan antes
+        // de reportar, la factura debe pasar al plan nuevo para que el
+        // monto que reporte coincida con lo que va a cobrar.
+        //
+        // Solo tocamos Pending; Reported ya bloqueamos arriba; Paid/
+        // Failed/Waived son inmutables a esta altura.
+        var pendingInvoices = await _db.SubscriptionInvoices
+            .Where(i => i.TenantId == _currentTenant.TenantId
+                     && i.Status == SubscriptionInvoiceStatus.Pending
+                     && i.PlanCode != newPlan.Code)
+            .ToListAsync(ct);
+
+        foreach (var pending in pendingInvoices)
+        {
+            try
+            {
+                pending.UpdatePlanInfo(newPlan.Code, Money.Create(newPlan.MonthlyPrice), now);
+                _logger.LogInformation(
+                    "Tenant {TenantId} factura {InvoiceId} actualizada: {OldPlan}→{NewPlan} (${Amount})",
+                    _currentTenant.TenantId, pending.Id, pending.PlanCode, newPlan.Code, newPlan.MonthlyPrice);
+            }
+            catch (DomainException ex)
+            {
+                // No debería pasar (filtramos por Pending) pero defensivo:
+                // logueamos y seguimos para no romper el cambio de plan
+                // por una factura corrupta.
+                _logger.LogWarning(ex,
+                    "No se pudo actualizar factura {InvoiceId} al cambiar plan",
+                    pending.Id);
             }
         }
 
