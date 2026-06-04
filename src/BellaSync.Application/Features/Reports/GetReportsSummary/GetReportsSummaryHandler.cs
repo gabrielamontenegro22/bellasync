@@ -80,14 +80,19 @@ public sealed class GetReportsSummaryHandler
         var appointmentsCount = await validAppointments.CountAsync(ct);
 
         // ===== Revenue total (pagos asociados a citas del período) =====
-        // Join in-memory porque Payment no tiene un FK a Tenant directo
-        // visible, pero está en el mismo contexto multi-tenant. Filtra
-        // por las citas del período.
+        // IMPORTANTE: EF no traduce la suma de dos Money VOs (Amount + Tip)
+        // a SQL — el value converter Money↔decimal no compone bien dentro
+        // de SELECT/GROUP BY/SUM. Mismo bug que tuvimos con anticipos.
+        // Workaround: materializar a memoria primero (un SELECT por pago,
+        // volumen razonable para reports) y agregar acá.
         var apptIds = await validAppointments.Select(a => a.Id).ToListAsync(ct);
 
-        var totalRevenue = await _db.Payments
+        var paymentRowsCurrent = await _db.Payments
             .Where(p => p.TenantId == tenantId && apptIds.Contains(p.AppointmentId))
-            .SumAsync(p => (decimal?)(p.Amount.Amount + p.Tip.Amount), ct) ?? 0m;
+            .Select(p => new { p.AppointmentId, p.Amount, p.Tip })
+            .ToListAsync(ct);
+
+        var totalRevenue = paymentRowsCurrent.Sum(p => p.Amount.Amount + p.Tip.Amount);
 
         // ===== Período anterior, para % de cambio =====
         var prevEndUtc = startUtc;
@@ -102,9 +107,11 @@ public sealed class GetReportsSummaryHandler
             .Select(a => a.Id)
             .ToListAsync(ct);
 
-        var prevRevenue = await _db.Payments
+        var prevPaymentRows = await _db.Payments
             .Where(p => p.TenantId == tenantId && prevApptIds.Contains(p.AppointmentId))
-            .SumAsync(p => (decimal?)(p.Amount.Amount + p.Tip.Amount), ct) ?? 0m;
+            .Select(p => new { p.Amount, p.Tip })
+            .ToListAsync(ct);
+        var prevRevenue = prevPaymentRows.Sum(p => p.Amount.Amount + p.Tip.Amount);
 
         double? revenueChangePct = prevRevenue > 0
             ? (double)((totalRevenue - prevRevenue) / prevRevenue) * 100.0
@@ -122,32 +129,53 @@ public sealed class GetReportsSummaryHandler
             ? totalRevenue / appointmentsCount
             : 0m;
 
-        // ===== Top 5 servicios por revenue =====
-        // Agrupa Payments por su Appointment.ServiceId, suma totales.
-        var servicePayments = await _db.Payments
-            .Where(p => p.TenantId == tenantId && apptIds.Contains(p.AppointmentId))
-            .Join(_db.Appointments,
-                p => p.AppointmentId,
-                a => a.Id,
-                (p, a) => new { a.ServiceId, Amount = p.Amount.Amount + p.Tip.Amount })
+        // ===== Top 5 servicios / estilistas / tendencia semanal =====
+        // Todo se computa en memoria sobre paymentRowsCurrent porque:
+        //   1) EF no traduce p.Amount.Amount + p.Tip.Amount en SQL (Money VO).
+        //   2) PG no agrupa fácil por "semana ISO local" en una sola query.
+        // Necesitamos appointmentId → {serviceId, stylistId, startAt} para
+        // joinear en memoria. Una sola query trae los datos auxiliares.
+        var apptMeta = await validAppointments
+            .Select(a => new { a.Id, a.ServiceId, a.StylistId, a.StartAt })
+            .ToDictionaryAsync(a => a.Id, ct);
+
+        // Enriquece cada pago con info de su cita.
+        var enriched = paymentRowsCurrent
+            .Where(p => apptMeta.ContainsKey(p.AppointmentId))
+            .Select(p =>
+            {
+                var meta = apptMeta[p.AppointmentId];
+                return new
+                {
+                    p.AppointmentId,
+                    meta.ServiceId,
+                    meta.StylistId,
+                    meta.StartAt,
+                    Total = p.Amount.Amount + p.Tip.Amount,
+                };
+            })
+            .ToList();
+
+        // Top servicios
+        var topServicesAgg = enriched
             .GroupBy(x => x.ServiceId)
             .Select(g => new
             {
                 ServiceId = g.Key,
-                Revenue = g.Sum(x => x.Amount),
+                Revenue = g.Sum(x => x.Total),
                 Cnt = g.Count(),
             })
             .OrderByDescending(x => x.Revenue)
             .Take(5)
-            .ToListAsync(ct);
+            .ToList();
 
-        var serviceIds = servicePayments.Select(s => s.ServiceId).ToList();
+        var serviceIds = topServicesAgg.Select(s => s.ServiceId).ToList();
         var serviceNames = await _db.Services
             .Where(s => serviceIds.Contains(s.Id))
             .Select(s => new { s.Id, s.Name })
             .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
 
-        var topServices = servicePayments
+        var topServices = topServicesAgg
             .Select(s => new TopServiceRow
             {
                 ServiceId = s.ServiceId,
@@ -157,31 +185,26 @@ public sealed class GetReportsSummaryHandler
             })
             .ToList();
 
-        // ===== Top 5 estilistas por revenue =====
-        var stylistPayments = await _db.Payments
-            .Where(p => p.TenantId == tenantId && apptIds.Contains(p.AppointmentId))
-            .Join(_db.Appointments,
-                p => p.AppointmentId,
-                a => a.Id,
-                (p, a) => new { a.StylistId, Amount = p.Amount.Amount + p.Tip.Amount })
+        // Top estilistas
+        var topStylistsAgg = enriched
             .GroupBy(x => x.StylistId)
             .Select(g => new
             {
                 StylistId = g.Key,
-                Revenue = g.Sum(x => x.Amount),
+                Revenue = g.Sum(x => x.Total),
                 Cnt = g.Count(),
             })
             .OrderByDescending(x => x.Revenue)
             .Take(5)
-            .ToListAsync(ct);
+            .ToList();
 
-        var stylistIds = stylistPayments.Select(s => s.StylistId).ToList();
+        var stylistIds = topStylistsAgg.Select(s => s.StylistId).ToList();
         var stylistInfo = await _db.Stylists
             .Where(s => stylistIds.Contains(s.Id))
             .Select(s => new { s.Id, s.FullName, s.Color })
             .ToDictionaryAsync(s => s.Id, ct);
 
-        var topStylists = stylistPayments
+        var topStylists = topStylistsAgg
             .Select(s => new TopStylistRow
             {
                 StylistId = s.StylistId,
@@ -192,24 +215,13 @@ public sealed class GetReportsSummaryHandler
             })
             .ToList();
 
-        // ===== Tendencia semanal de ingresos =====
-        // SQL no agrupa fácil por "semana ISO" cross-PG así que traemos
-        // los payments del período con su startAt y agrupamos en memoria.
-        // El volumen razonable (~cientos de pagos/mes) lo tolera.
-        var paymentRows = await _db.Payments
-            .Where(p => p.TenantId == tenantId && apptIds.Contains(p.AppointmentId))
-            .Join(_db.Appointments,
-                p => p.AppointmentId,
-                a => a.Id,
-                (p, a) => new { a.StartAt, Amount = p.Amount.Amount + p.Tip.Amount })
-            .ToListAsync(ct);
-
-        var weekly = paymentRows
+        // Tendencia semanal — agrupa enriched por semana ISO local.
+        var weekly = enriched
             .GroupBy(p => WeekStartUtc(p.StartAt))
             .Select(g => new WeeklyRevenuePoint
             {
                 WeekStart = DateOnly.FromDateTime((g.Key + ColombiaOffset).Date),
-                Revenue = g.Sum(x => x.Amount),
+                Revenue = g.Sum(x => x.Total),
             })
             .OrderBy(p => p.WeekStart)
             .ToList();
