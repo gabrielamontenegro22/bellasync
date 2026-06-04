@@ -368,6 +368,13 @@ function VoucherCard({
             </span>
             <span className="text-warm-400">{formatReceived(voucher.receivedAt)}</span>
           </div>
+          {/* Firma de la decisión — visible solo si el voucher ya fue decidido
+              y el backend conoce quién lo hizo (los viejos vienen con null) */}
+          {decided && voucher.decidedByUserName && (
+            <div className="mt-1 text-[10.5px] text-warm-400 italic truncate">
+              Decidido por {voucher.decidedByUserName}
+            </div>
+          )}
         </div>
       </div>
     </button>
