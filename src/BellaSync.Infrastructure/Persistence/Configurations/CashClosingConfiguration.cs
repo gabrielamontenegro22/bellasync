@@ -61,7 +61,9 @@ public class CashClosingConfiguration : IEntityTypeConfiguration<CashClosing>
             .HasForeignKey(cc => cc.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne<User>()
+        // Nav property ClosedByUser para Include en el historial de cierres
+        // — la admin necesita ver "Cerrado por X" en cada fila.
+        builder.HasOne(cc => cc.ClosedByUser)
             .WithMany()
             .HasForeignKey(cc => cc.ClosedByUserId)
             .OnDelete(DeleteBehavior.SetNull);

@@ -21,5 +21,7 @@ public class ExpenseResponse
     public string? Provider { get; set; }
 
     public Guid? RegisteredByUserId { get; set; }
+    /// <summary>Nombre del user que registró el egreso (para auditoría en /caja).</summary>
+    public string? RegisteredByUserName { get; set; }
     public DateTime RegisteredAt { get; set; }
 }

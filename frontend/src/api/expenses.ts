@@ -13,6 +13,8 @@ export interface ExpenseResponse {
   /** Banco/billetera/marca cuando aplica. */
   provider: string | null
   registeredByUserId: string | null
+  /** Nombre del user que registró el egreso (para auditoría en /caja). */
+  registeredByUserName: string | null
   registeredAt: string  // ISO
 }
 

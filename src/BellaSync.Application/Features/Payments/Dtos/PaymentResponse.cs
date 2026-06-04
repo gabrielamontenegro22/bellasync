@@ -24,6 +24,12 @@ public class PaymentResponse
 
     public string? Reference { get; set; }
     public Guid? RegisteredByUserId { get; set; }
+    /// <summary>
+    /// Nombre del user que cobró ("María González"). Null si fue automático
+    /// o si el user fue archivado y removido. Se muestra en la tabla de
+    /// /caja como "Por X" para auditoría.
+    /// </summary>
+    public string? RegisteredByUserName { get; set; }
     public DateTime RegisteredAt { get; set; }
 
     // Snapshot mínimo del contexto de la cita — útil para tablas/listas

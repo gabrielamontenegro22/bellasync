@@ -13,6 +13,7 @@ internal static class ExpenseMapper
         Method = e.Method.ToString(),
         Provider = e.Provider,
         RegisteredByUserId = e.RegisteredByUserId,
+        RegisteredByUserName = e.RegisteredByUser?.FullName,
         RegisteredAt = e.RegisteredAt,
     };
 }

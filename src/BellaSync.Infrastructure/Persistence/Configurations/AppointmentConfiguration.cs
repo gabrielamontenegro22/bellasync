@@ -57,6 +57,7 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
 
         builder.Property(a => a.CancelledAt);
         builder.Property(a => a.CancellationReason).HasMaxLength(500);
+        builder.Property(a => a.CancelledByUserId);  // nullable
 
         builder.Property(a => a.StartedAt);
         builder.Property(a => a.CompletedAt);
@@ -105,5 +106,13 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
             .WithMany()
             .HasForeignKey(a => a.ServiceId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // CancelledByUser: nav opcional al user que canceló la cita.
+        // SetNull en delete del user (no debería pasar — la app solo
+        // archiva users — pero por las dudas el row de la cita sobrevive).
+        builder.HasOne(a => a.CancelledByUser)
+            .WithMany()
+            .HasForeignKey(a => a.CancelledByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

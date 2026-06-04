@@ -26,6 +26,7 @@ public sealed class GetAgendaHandler : IQueryHandler<GetAgendaQuery, AgendaRespo
         var dbQuery = _db.Appointments
             .AsNoTracking()
             .Include(a => a.Customer).Include(a => a.Stylist).Include(a => a.Service)
+            .Include(a => a.CancelledByUser)
             .Where(a => a.StartAt >= dayStart && a.StartAt < dayEnd);
 
         if (query.StylistId is { } stylistId)

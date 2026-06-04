@@ -125,4 +125,7 @@ public class CashClosing : BaseEntity, ITenantEntity
 
     /// <summary>Quién firmó el cierre (admin/recepcionista).</summary>
     public Guid? ClosedByUserId { get; private set; }
+
+    /// <summary>Nav property al user que cerró (para mostrar nombre en historial).</summary>
+    public User? ClosedByUser { get; private set; }
 }

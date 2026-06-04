@@ -50,8 +50,9 @@ public class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
             .HasForeignKey(e => e.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // RegisteredByUserId queda como FK opcional sin navigation property.
-        builder.HasOne<User>()
+        // Nav property RegisteredByUser para Include en queries de caja
+        // (la sección de Egresos del día muestra "Por X" al lado de cada row).
+        builder.HasOne(e => e.RegisteredByUser)
             .WithMany()
             .HasForeignKey(e => e.RegisteredByUserId)
             .OnDelete(DeleteBehavior.SetNull);

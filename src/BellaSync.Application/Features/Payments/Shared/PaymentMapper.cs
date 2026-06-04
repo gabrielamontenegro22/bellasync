@@ -20,6 +20,7 @@ internal static class PaymentMapper
         Total = p.Amount.Amount + p.Tip.Amount,
         Reference = p.Reference,
         RegisteredByUserId = p.RegisteredByUserId,
+        RegisteredByUserName = p.RegisteredByUser?.FullName,
         RegisteredAt = p.RegisteredAt,
         CustomerName = p.Appointment?.Customer?.FullName ?? "—",
         ServiceName = p.Appointment?.Service?.Name ?? "—",

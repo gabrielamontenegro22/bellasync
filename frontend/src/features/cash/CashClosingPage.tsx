@@ -566,11 +566,12 @@ function ExpenseRow({ expense }: { expense: ExpenseResponse }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[13px] text-warm-800 truncate">{expense.concept}</div>
-        {expense.method !== 'Cash' && (
-          <div className="text-[11px] text-warm-500 truncate">
-            Pagado con {expense.method}
-          </div>
-        )}
+        <div className="text-[11px] text-warm-500 truncate">
+          {expense.method !== 'Cash' && <>Pagado con {expense.method} · </>}
+          {expense.registeredByUserName
+            ? <>Por {expense.registeredByUserName}</>
+            : <>Sin firma</>}
+        </div>
       </div>
       <div className="text-[13.5px] font-medium text-terra-500 tabular-nums">
         -{fmtCop(expense.amount)}
@@ -594,6 +595,9 @@ function TxnRow({ txn }: { txn: PaymentResponse }) {
         </div>
         <div className="text-[11.5px] text-warm-500 truncate">
           {txn.serviceName} · {txn.stylistName}
+          {txn.registeredByUserName && (
+            <> · Cobró <span className="text-warm-700">{txn.registeredByUserName}</span></>
+          )}
         </div>
       </div>
       <div
@@ -668,6 +672,11 @@ function TabHistorial() {
                 <tr key={cc.id} className="border-b border-warm-100 last:border-0 hover:bg-warm-50/40">
                   <td className="px-5 py-3.5 font-medium text-warm-800 tabular-nums">
                     {formatHumanDateShort(cc.closedDate)}
+                    {cc.closedByUserName && (
+                      <div className="text-[10.5px] font-normal text-warm-500 mt-0.5">
+                        Por {cc.closedByUserName}
+                      </div>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-right tabular-nums text-warm-800">
                     {fmtCop(cc.totalAmount)}

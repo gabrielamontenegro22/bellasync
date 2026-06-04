@@ -40,5 +40,7 @@ public class VoucherResponse
     public string Urgency { get; set; } = string.Empty;
 
     public DateTime? DecidedAt { get; set; }
+    /// <summary>Nombre del user que decidió (validó/rechazó). Para auditoría en cola.</summary>
+    public string? DecidedByUserName { get; set; }
     public string? DecisionNotes { get; set; }
 }

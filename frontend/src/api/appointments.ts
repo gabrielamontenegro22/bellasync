@@ -43,6 +43,8 @@ export interface AppointmentResponse {
   notes: string | null
   cancelledAt: string | null
   cancellationReason: string | null
+  /** Nombre del user que canceló. Null si fue automático (hold/voucher rechazo). */
+  cancelledByUserName: string | null
   startedAt: string | null
   completedAt: string | null
   createdAt: string

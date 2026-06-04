@@ -51,6 +51,13 @@ public class AppointmentResponse
 
     public DateTime? CancelledAt { get; set; }
     public string? CancellationReason { get; set; }
+    /// <summary>
+    /// Nombre del user que canceló ("María González" / "Sofía Pérez").
+    /// Null para cancelaciones automáticas (hold expirado, voucher rechazado
+    /// por backend job, etc.) o para citas viejas anteriores a este campo.
+    /// La UI lo muestra como "Cancelado por X" en el DetailPanel del agenda.
+    /// </summary>
+    public string? CancelledByUserName { get; set; }
 
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

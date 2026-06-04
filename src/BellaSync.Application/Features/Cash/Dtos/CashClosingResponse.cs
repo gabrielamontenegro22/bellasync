@@ -24,4 +24,6 @@ public class CashClosingResponse
     /// <summary>UTC del momento exacto del cierre.</summary>
     public DateTime ClosedAt { get; set; }
     public Guid? ClosedByUserId { get; set; }
+    /// <summary>Nombre del user que firmó el cierre (para historial).</summary>
+    public string? ClosedByUserName { get; set; }
 }

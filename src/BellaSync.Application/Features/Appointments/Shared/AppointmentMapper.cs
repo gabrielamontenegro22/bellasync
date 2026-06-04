@@ -42,6 +42,7 @@ internal static class AppointmentMapper
         Notes = a.Notes,
         CancelledAt = a.CancelledAt,
         CancellationReason = a.CancellationReason,
+        CancelledByUserName = a.CancelledByUser?.FullName,
         StartedAt = a.StartedAt,
         CompletedAt = a.CompletedAt,
         CreatedAt = a.CreatedAt,

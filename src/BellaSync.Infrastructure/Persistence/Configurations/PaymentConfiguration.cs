@@ -67,9 +67,11 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .HasForeignKey(p => p.AppointmentId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // RegisteredByUserId queda como FK opcional sin navigation property —
-        // no necesitamos cargar el User típicamente.
-        builder.HasOne<User>()
+        // Nav property RegisteredByUser para Include en queries de caja:
+        // queremos mostrar "Pagó X — Cobró María" en la tabla.
+        // SetNull en delete: si el user se archiva físicamente (no debería
+        // pero por las dudas), los rows de pago quedan sin firma.
+        builder.HasOne(p => p.RegisteredByUser)
             .WithMany()
             .HasForeignKey(p => p.RegisteredByUserId)
             .OnDelete(DeleteBehavior.SetNull);

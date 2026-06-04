@@ -17,17 +17,20 @@ public sealed class CancelAppointmentHandler
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
     private readonly WhatsAppEnqueuer _whatsApp;
+    private readonly ICurrentUserService _currentUser;
     private readonly ILogger<CancelAppointmentHandler> _logger;
 
     public CancelAppointmentHandler(
         IApplicationDbContext db,
         IClock clock,
         WhatsAppEnqueuer whatsApp,
+        ICurrentUserService currentUser,
         ILogger<CancelAppointmentHandler> logger)
     {
         _db = db;
         _clock = clock;
         _whatsApp = whatsApp;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -38,6 +41,7 @@ public sealed class CancelAppointmentHandler
             .Include(a => a.Customer)
             .Include(a => a.Stylist)
             .Include(a => a.Service)
+            .Include(a => a.CancelledByUser)
             .FirstOrDefaultAsync(a => a.Id == command.Id, ct);
 
         if (appointment is null)
@@ -51,7 +55,7 @@ public sealed class CancelAppointmentHandler
         // Solo notificamos cancelación de Confirmed (cita ya en firme).
         var wasConfirmed = appointment.Status == BellaSync.Domain.Entities.AppointmentStatus.Confirmed;
 
-        try { appointment.Cancel(_clock.UtcNow, command.Reason); }
+        try { appointment.Cancel(_clock.UtcNow, command.Reason, _currentUser.UserId); }
         catch (DomainException ex)
         {
             return ApplicationError.Validation("appointment.invalid_transition", ex.Message);
@@ -81,7 +85,18 @@ public sealed class CancelAppointmentHandler
             "Cita {AppointmentId} cancelada en tenant {TenantId}",
             appointment.Id, appointment.TenantId);
 
+        // Re-fetch para hidratar CancelledByUser (no auto-popula con solo
+        // setear el FK en memoria). Necesario para que el frontend pueda
+        // mostrar "Cancelado por X" inmediatamente.
+        var fresh = await _db.Appointments
+            .AsNoTracking()
+            .Include(a => a.Customer)
+            .Include(a => a.Stylist)
+            .Include(a => a.Service)
+            .Include(a => a.CancelledByUser)
+            .FirstAsync(a => a.Id == appointment.Id, ct);
+
         return Result<AppointmentResponse>.Success(
-            await AppointmentMapper.ToResponseAsync(appointment, _db, ct));
+            await AppointmentMapper.ToResponseAsync(fresh, _db, ct));
     }
 }

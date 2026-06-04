@@ -25,6 +25,8 @@ export interface VoucherResponse {
   status: VoucherStatus
   urgency: VoucherUrgency
   decidedAt: string | null
+  /** Nombre del user que validó/rechazó. Para mostrar "por X" en la cola. */
+  decidedByUserName: string | null
   decisionNotes: string | null
 }
 

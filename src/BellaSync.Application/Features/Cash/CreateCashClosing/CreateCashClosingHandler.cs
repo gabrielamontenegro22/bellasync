@@ -139,6 +139,13 @@ public sealed class CreateCashClosingHandler
             "Caja cerrada para {Date} — contado ${Counted}, esperado ${Expected}, diff ${Diff}",
             closedDate, closing.CountedCash.Amount, closing.ExpectedCash.Amount, closing.Diff);
 
-        return Result<CashClosingResponse>.Success(CashClosingMapper.ToResponse(closing));
+        // Re-leer con Include para devolver el nombre del user que cerró
+        // (lo necesita el historial inmediatamente después de crear).
+        var created = await _db.CashClosings
+            .AsNoTracking()
+            .Include(cc => cc.ClosedByUser)
+            .FirstAsync(cc => cc.Id == closing.Id, ct);
+
+        return Result<CashClosingResponse>.Success(CashClosingMapper.ToResponse(created));
     }
 }

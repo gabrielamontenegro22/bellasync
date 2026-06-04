@@ -36,6 +36,7 @@ public sealed class GetCustomerAppointmentsHandler
             .Include(a => a.Customer)
             .Include(a => a.Stylist)
             .Include(a => a.Service)
+            .Include(a => a.CancelledByUser)
             .Where(a => a.CustomerId == query.CustomerId)
             .OrderByDescending(a => a.StartAt)
             .ToListAsync(ct);
