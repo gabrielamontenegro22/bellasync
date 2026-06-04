@@ -30,6 +30,13 @@ interface NavItem {
   badge?: string | null
   /** Si está deshabilitada (módulo todavía no implementado), se muestra en gris y no navega */
   disabled?: boolean
+  /**
+   * Si true, el item solo aparece para SalonAdmin. Receptionists no lo
+   * ven en su sidebar — el backend igual filtra por [Authorize Roles=...],
+   * pero acá lo ocultamos para no mostrarle botones que tirarían 403.
+   * Default false = todos los roles del salón (admin + recepción) lo ven.
+   */
+  adminOnly?: boolean
 }
 
 /**
@@ -37,6 +44,14 @@ interface NavItem {
  * abajo dependiendo de Tenant.CommissionsEnabled — algunos salones no
  * usan comisiones (sueldo fijo / alquiler de silla) y no queremos
  * ensuciarles el sidebar.
+ *
+ * Matriz de permisos (espejo de los [Authorize Roles=...] del backend):
+ *   - Agenda/Clientes/Validación/Caja → ambos roles (operativo diario)
+ *   - Servicios/Estilistas → ambos pueden VER, solo admin puede editar
+ *     (la página igual sirve para que recepción consulte servicios al
+ *      crear cita; la app no oculta los botones de edición internos
+ *      pero el backend rechaza el POST/PUT/DELETE).
+ *   - Reportes/Comisiones/Configuración → solo admin (negocio + setup)
  */
 const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/agenda',                  label: 'Agenda',              icon: Calendar                 },
@@ -46,13 +61,13 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/inventario',              label: 'Inventario',          icon: Box,       disabled: true  },
   { to: '/validacion',              label: 'Validación de pagos', icon: Wallet                   },
   { to: '/caja',                    label: 'Cierre de caja',      icon: Banknote                 },
-  { to: '/reportes',                label: 'Reportes',            icon: BarChart3 },
-  { to: '/configuracion',           label: 'Configuración',       icon: Settings                 },
+  { to: '/reportes',                label: 'Reportes',            icon: BarChart3,                  adminOnly: true },
+  { to: '/configuracion',           label: 'Configuración',       icon: Settings,                   adminOnly: true },
 ]
 
-/** Item Comisiones — solo aparece si el módulo está activo. */
+/** Item Comisiones — solo aparece si el módulo está activo Y es admin. */
 const COMMISSIONS_ITEM: NavItem = {
-  to: '/comisiones', label: 'Comisiones', icon: Percent,
+  to: '/comisiones', label: 'Comisiones', icon: Percent, adminOnly: true,
 }
 
 /**
@@ -68,13 +83,14 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
   const navigate = useNavigate()
   const { data: commissionsSetting } = useCommissionsSetting()
 
-  // Inyectamos "Comisiones" entre Cierre de caja y Reportes solo
-  // cuando el módulo está activo. Sin esto, salones que pagan sueldo
-  // fijo ven un item que no usan.
+  // Pipeline:
+  //   1. SuperAdmin (dueño BellaSync) tiene su propio item dedicado
+  //   2. Para salones: arranca con BASE_NAV_ITEMS
+  //   3. Si el módulo Comisiones está activo, inyecta el item
+  //   4. Filtra items adminOnly cuando el user no es SalonAdmin
+  //      (Receptionist queda con sidebar reducido: Agenda, Clientes,
+  //       Validación, Caja, Servicios y Estilistas para consultar)
   const navItems = (() => {
-    // SuperAdmin (dueño de BellaSync, no de un salón) tiene su propia
-    // navegación reducida: solo el panel de validación SaaS. No usa
-    // agenda/clientes/etc. porque no tiene tenant asociado.
     if (user?.role === 'SuperAdmin') {
       return [
         {
@@ -85,13 +101,18 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
       ]
     }
 
-    if (!commissionsSetting?.enabled) return BASE_NAV_ITEMS
-    const idx = BASE_NAV_ITEMS.findIndex(i => i.to === '/reportes')
-    return [
-      ...BASE_NAV_ITEMS.slice(0, idx),
-      COMMISSIONS_ITEM,
-      ...BASE_NAV_ITEMS.slice(idx),
-    ]
+    let items: NavItem[] = BASE_NAV_ITEMS
+    if (commissionsSetting?.enabled) {
+      const idx = items.findIndex(i => i.to === '/reportes')
+      items = [...items.slice(0, idx), COMMISSIONS_ITEM, ...items.slice(idx)]
+    }
+
+    const isAdmin = user?.role === 'SalonAdmin'
+    if (!isAdmin) {
+      items = items.filter(i => !i.adminOnly)
+    }
+
+    return items
   })()
 
   const handleLogout = () => {
@@ -197,7 +218,7 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                 {user?.fullName || 'Usuario'}
               </div>
               <div className="text-[11.5px] text-warm-500 truncate">
-                {user?.role === 'SalonAdmin' ? 'Administradora' : user?.role}
+                {roleLabel(user?.role)}
                 {user?.tenantName ? ` · ${user.tenantName}` : ''}
               </div>
             </div>
@@ -214,4 +235,16 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
       </aside>
     </>
   )
+}
+
+/** Convierte el role del backend ('SalonAdmin' | 'Receptionist' | ...)
+ *  a la etiqueta que mostramos al user en español. */
+function roleLabel(role: string | undefined): string {
+  switch (role) {
+    case 'SalonAdmin':   return 'Administradora'
+    case 'Receptionist': return 'Recepción'
+    case 'Stylist':      return 'Estilista'
+    case 'SuperAdmin':   return 'SaaS Admin'
+    default:             return role ?? ''
+  }
 }
