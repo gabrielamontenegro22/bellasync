@@ -23,6 +23,7 @@ public interface IApplicationDbContext
     DbSet<Payment> Payments { get; }
     DbSet<Expense> Expenses { get; }
     DbSet<CommissionPayout> CommissionPayouts { get; }
+    DbSet<CashClosing> CashClosings { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
