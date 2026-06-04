@@ -14,6 +14,9 @@ import { CustomersPage } from '@/features/customers/CustomersPage'
 import { PaymentPolicyPage } from '@/features/settings/PaymentPolicyPage'
 import { CommissionsSettingPage } from '@/features/settings/CommissionsSettingPage'
 import { TenantInfoPage } from '@/features/settings/TenantInfoPage'
+import { HorarioPage } from '@/features/settings/HorarioPage'
+import { WhatsAppPage } from '@/features/settings/WhatsAppPage'
+import { SuscripcionPage } from '@/features/settings/SuscripcionPage'
 import { CommissionsPage } from '@/features/commissions/CommissionsPage'
 import { CashClosingPage } from '@/features/cash/CashClosingPage'
 import { AppShell } from '@/components/layout/AppShell'
@@ -124,10 +127,12 @@ export function AppRouter() {
         {/* /configuracion → redirige a /configuracion/pagos (única sección
             con pantalla real por ahora) */}
         <Route index element={<Navigate to="general" replace />} />
-        <Route path="general"    element={<TenantInfoPage />} />
-        <Route path="pagos"      element={<PaymentPolicyPage />} />
-        <Route path="comisiones" element={<CommissionsSettingPage />} />
-        {/* Aquí se agregarán: general, horario, whatsapp, suscripcion */}
+        <Route path="general"     element={<TenantInfoPage />} />
+        <Route path="horario"     element={<HorarioPage />} />
+        <Route path="pagos"       element={<PaymentPolicyPage />} />
+        <Route path="comisiones"  element={<CommissionsSettingPage />} />
+        <Route path="whatsapp"    element={<WhatsAppPage />} />
+        <Route path="suscripcion" element={<SuscripcionPage />} />
       </Route>
 
       {/* Comisiones de estilistas — opt-in. Si el tenant no la activó,
