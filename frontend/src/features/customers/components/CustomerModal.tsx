@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Button, Input, Modal, ModalFooter } from '@/components/ui'
+import { Button, DatePicker, Input, Modal, ModalFooter } from '@/components/ui'
 import type { CustomerResponse } from '@/api/customers'
 import { extractApiError } from '@/lib/extractApiError'
 import { useCreateCustomer, useUpdateCustomer } from '../hooks'
@@ -95,7 +95,17 @@ export function CustomerModal({ customer, onClose }: CustomerModalProps) {
         {/* En mobile (375px) dos columnas quedan demasiado apretadas para
             cumpleaños + cédula, así que apilamos hasta sm. */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <Input label="Cumpleaños" type="date" value={form.birthday} onChange={e => update_('birthday', e.target.value)} />
+          <div>
+            <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">
+              Cumpleaños
+            </label>
+            <DatePicker
+              value={form.birthday}
+              onChange={(v) => update_('birthday', v)}
+              placeholder="Sin fecha"
+              fullWidth
+            />
+          </div>
           <Input label="Cédula" value={form.documentNumber} onChange={e => update_('documentNumber', e.target.value)} />
         </div>
 

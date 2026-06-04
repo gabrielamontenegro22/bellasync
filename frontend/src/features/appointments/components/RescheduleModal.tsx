@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Modal, ModalFooter } from '@/components/ui'
+import { Button, DateTimePicker, Modal, ModalFooter } from '@/components/ui'
 import type { AppointmentResponse } from '@/api/appointments'
 import { extractApiError } from '@/lib/extractApiError'
 import { useAuth } from '@/features/auth/useAuth'
@@ -81,10 +81,12 @@ export function RescheduleModal({ appointment, onClose }: RescheduleModalProps) 
           <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">
             Nueva fecha y hora
           </label>
-          <Input
-            type="datetime-local"
+          <DateTimePicker
             value={newStartLocal}
-            onChange={e => setNewStartLocal(e.target.value)}
+            onChange={setNewStartLocal}
+            minHour={6}
+            maxHour={22}
+            fullWidth
           />
         </div>
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Card, DateTimePicker, Input } from '@/components/ui'
 import {
   getPublicServices,
   getPublicStylists,
@@ -239,11 +239,13 @@ function StylistAndTimeStep({
 
       <div>
         <p className="mb-2 text-xs uppercase tracking-wide text-warm-500">Fecha y hora</p>
-        <input
-          type="datetime-local"
-          className="w-full rounded-md border border-warm-200 p-2 text-sm"
-          value={startAtUtc.slice(0, 16)}
-          onChange={e => onChangeTime(e.target.value ? new Date(e.target.value).toISOString() : '')}
+        <DateTimePicker
+          value={isoUtcToLocalInput(startAtUtc)}
+          onChange={v => onChangeTime(v ? new Date(v).toISOString() : '')}
+          min="today"
+          minHour={6}
+          maxHour={22}
+          fullWidth
         />
         <p className="mt-1 text-xs text-warm-500">
           La cita debe agendarse con al menos 30 minutos de anticipación.
@@ -350,4 +352,25 @@ function SuccessScreen({ result }: { result: PublicBookingResponse }) {
 
 function formatMoney(amount: number): string {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(amount)
+}
+
+/**
+ * Convierte un ISO UTC ("2026-06-04T20:00:00.000Z") al formato local
+ * que entiende DateTimePicker ("YYYY-MM-DDTHH:mm"). El input nativo
+ * datetime-local interpreta su value como hora LOCAL, así que cuando
+ * mostramos una fecha guardada en UTC tenemos que rebajar el offset.
+ *
+ * Antes este componente hacía `.slice(0,16)` que mostraba la hora UTC
+ * (típicamente 5h adelante de Colombia) — un bug. Acá lo arreglamos.
+ */
+function isoUtcToLocalInput(isoUtc: string): string {
+  if (!isoUtc) return ''
+  const d = new Date(isoUtc)
+  if (Number.isNaN(d.getTime())) return ''
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mn = String(d.getMinutes()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}T${hh}:${mn}`
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { X, AlertCircle, Trash2, Check, Mail, Phone as PhoneIcon, IdCard, Calendar } from 'lucide-react'
+import { X, AlertCircle, Trash2, Check, Mail, Phone as PhoneIcon, IdCard } from 'lucide-react'
+import { DatePicker } from '@/components/ui'
 import { cls } from '@/lib/cls'
 import type { StylistResponse } from '@/api/stylists'
 import { stylistSchema, defaultStylistForm, type StylistFormData } from '../schemas'
@@ -238,13 +239,20 @@ export function StylistModal({ initial, onClose, onSave, onDelete }: StylistModa
               </InputWithIcon>
             </Field>
             <Field label="Fecha de ingreso" hint="Opcional" error={errors.hireDate?.message}>
-              <InputWithIcon icon={<Calendar size={14} />} error={!!errors.hireDate}>
-                <input
-                  type="date"
-                  className="bare-input"
-                  {...register('hireDate')}
-                />
-              </InputWithIcon>
+              {/* react-hook-form controla el value/onChange a través del Controller
+                  porque DatePicker es controlado (no nativo). */}
+              <Controller
+                control={control}
+                name="hireDate"
+                render={({ field }) => (
+                  <DatePicker
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    placeholder="Sin fecha"
+                    fullWidth
+                  />
+                )}
+              />
             </Field>
           </div>
 
