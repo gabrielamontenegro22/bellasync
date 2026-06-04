@@ -28,6 +28,8 @@ public interface IApplicationDbContext
     DbSet<SalonClosedDate> SalonClosedDates { get; }
     DbSet<WhatsAppTemplate> WhatsAppTemplates { get; }
     DbSet<WhatsAppMessage> WhatsAppMessages { get; }
+    DbSet<TenantSubscription> TenantSubscriptions { get; }
+    DbSet<SubscriptionInvoice> SubscriptionInvoices { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
