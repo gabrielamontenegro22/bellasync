@@ -1,4 +1,4 @@
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Heart } from 'lucide-react'
 import { cls } from '@/lib/cls'
 
 /**
@@ -116,50 +116,78 @@ export function SaveBar({
   onSave,
   onDiscard,
 }: {
-  /** true cuando hay cambios sin guardar */
   show: boolean
-  /** true cuando se acaba de guardar — muestra banner verde por unos segundos */
   saved: boolean
-  /** true mientras la mutation está pending */
   saving?: boolean
-  /** mensaje de error del último intento de guardar */
   error?: string | null
   onSave: () => void
   onDiscard: () => void
 }) {
-  // Estado verde: "Cambios guardados"
+  // Estado SAVED — pill blanco flotante con check brand + emoji.
   if (saved) {
     return (
-      <div className="sticky bottom-0 left-0 right-0 z-20 bg-brand-50 border-t border-brand-200 px-6 lg:px-10 py-3.5 flex items-center gap-2 anim-fade">
-        <CheckCircle size={16} className="text-brand-700" />
-        <span className="text-[13px] text-brand-800 font-medium">Cambios guardados</span>
+      <div className="sticky bottom-0 left-0 right-0 z-20 flex justify-center pointer-events-none pb-5">
+        <div className="pointer-events-auto flex items-center gap-2 bg-white rounded-full pl-3 pr-4 py-2.5 shadow-pop border border-brand-200 anim-fade">
+          <span className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center">
+            <CheckCircle size={16} />
+          </span>
+          <span className="text-[13px] text-warm-800 font-medium">
+            ¡Listo! Tus cambios quedaron guardados
+          </span>
+          <span className="text-[14px]" aria-hidden>💛</span>
+        </div>
       </div>
     )
   }
-  // Estado idle (nada que guardar): no renderiza.
+  // Estado idle: no renderiza.
   if (!show && !error) return null
+  // Estado DIRTY o ERROR — pill flotante blanco con dot pulsante gold +
+  // botones Descartar (ghost) y Guardar (brand sólido).
   return (
-    <div className="sticky bottom-0 left-0 right-0 z-20 bg-warm-800 px-6 lg:px-10 py-3 flex items-center gap-3 anim-fade">
-      <span className="text-[13px] text-warm-100 flex-1">
-        {error ? <span className="text-terra-300">{error}</span> : 'Tienes cambios sin guardar'}
+    <div className="sticky bottom-0 left-0 right-0 z-20 flex justify-center pointer-events-none pb-5">
+      <div className="pointer-events-auto flex items-center gap-3 bg-white/95 backdrop-blur rounded-full pl-5 pr-2 py-2 shadow-pop border border-warm-200 anim-fade">
+        <span className="flex items-center gap-2 text-[13px]">
+          <span className={cls(
+            'w-2 h-2 rounded-full',
+            error ? 'bg-terra-500' : 'bg-gold-400 animate-pulse',
+          )} />
+          <span className={error ? 'text-terra-500' : 'text-warm-700'}>
+            {error ?? 'Tienes cambios sin guardar'}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={onDiscard}
+          disabled={saving}
+          className="px-3 py-1.5 rounded-full text-[12.5px] font-medium text-warm-500 hover:text-warm-800 hover:bg-warm-100 transition disabled:opacity-50"
+        >
+          Descartar
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="px-4 py-2 rounded-full bg-brand-700 hover:bg-brand-600 text-white text-[12.5px] font-medium flex items-center gap-1.5 shadow-soft transition hover:scale-[1.03] active:scale-95 disabled:opacity-60"
+        >
+          <Heart size={13} />
+          {saving ? 'Guardando…' : 'Guardar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Banner discreto para pantallas que están como mockup visual sin
+ * backend persistido todavía. Va arriba del SettingsHeader.
+ */
+export function PreviewNotice({ message }: { message?: string }) {
+  return (
+    <div className="mb-5 rounded-lg bg-gold-50 border border-gold-200 px-3 py-2 text-[11.5px] text-gold-600 flex items-start gap-2">
+      <span className="text-[12px]">👀</span>
+      <span className="leading-relaxed">
+        {message ?? 'Vista previa del diseño · esta sección todavía no se persiste en la BD.'}
       </span>
-      <button
-        type="button"
-        onClick={onDiscard}
-        disabled={saving}
-        className="px-3.5 py-2 rounded-lg text-[12.5px] font-medium text-warm-200 hover:bg-white/10 disabled:opacity-50"
-      >
-        Descartar
-      </button>
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={saving}
-        className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12.5px] font-medium flex items-center gap-1.5 disabled:opacity-60"
-      >
-        <CheckCircle size={14} />
-        {saving ? 'Guardando…' : 'Guardar cambios'}
-      </button>
     </div>
   )
 }
