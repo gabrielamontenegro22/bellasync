@@ -110,7 +110,8 @@ export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete }: Styli
         </div>
       </div>
 
-      {/* Contact info */}
+      {/* Contact info. Si no hay ningún campo, mostramos un CTA discreto
+          en lugar de un hueco vacío que descuadra la grilla. */}
       <div className="px-5 pb-4 space-y-1.5 text-[12px] text-warm-600">
         {stylist.email && (
           <div className="flex items-center gap-2 truncate">
@@ -135,6 +136,15 @@ export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete }: Styli
             <Calendar size={13} className="text-warm-400 flex-shrink-0" />
             <span className="text-warm-500">Desde {fmtJoinedDate(stylist.hireDate)}</span>
           </div>
+        )}
+        {!stylist.email && !stylist.phone && !stylist.idNumber && !stylist.hireDate && (
+          <button
+            type="button"
+            onClick={() => onEdit(stylist)}
+            className="text-[11.5px] text-warm-400 italic hover:text-brand-700 transition"
+          >
+            Sin datos de contacto · agregar
+          </button>
         )}
       </div>
 
@@ -162,9 +172,9 @@ export function StylistCard({ stylist, onEdit, onToggleStatus, onDelete }: Styli
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mt-3.5">
+        <div className="grid grid-cols-3 gap-3 mt-3.5">
           <MiniStat icon={<Check size={11} strokeWidth={3} />} value={completed} label="Hechas" tone="brand" />
-          <MiniStat icon={<X size={11} strokeWidth={3} />} value={cancelled} label="Canceladas" tone="gold" />
+          <MiniStat icon={<X size={11} strokeWidth={3} />} value={cancelled} label="Cancel." tone="gold" />
           <MiniStat icon={<Ghost size={11} />} value={noshow} label="No-show" tone="warm" />
         </div>
 
@@ -225,8 +235,8 @@ function MiniStat({
     warm: 'text-warm-500',
   }
   return (
-    <div className="flex-1">
-      <div className="flex items-center gap-1 text-[10.5px] tracking-[0.12em] uppercase text-warm-500">
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center gap-1 text-[10px] tracking-[0.06em] uppercase text-warm-500 whitespace-nowrap">
         <span className={tones[tone]}>{icon}</span>
         {label}
       </div>
