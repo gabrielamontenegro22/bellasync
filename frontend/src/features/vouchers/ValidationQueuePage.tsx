@@ -152,9 +152,13 @@ export function ValidationQueuePage() {
         )}
 
         {/* SPLIT PANEL */}
-        <div className="flex-1 min-h-0 flex overflow-hidden">
-          {/* PANEL IZQ — LISTA (bg warm sutil como el mockup) */}
-          <aside className="w-full max-w-[420px] flex-shrink-0 border-r border-warm-150 bg-warm-50/60 flex flex-col min-h-0">
+        {/* relative para que el detalle pueda hacer overlay absoluto encima
+            en <lg sin escaparse de la página. */}
+        <div className="flex-1 min-h-0 flex overflow-hidden relative">
+          {/* PANEL IZQ — LISTA. En mobile/iPad ocupa el ancho completo
+              (max-w-none) y el detalle aparece como overlay encima.
+              En desktop (≥lg) la lista queda a 420px y el detalle al lado. */}
+          <aside className="w-full lg:max-w-[420px] flex-shrink-0 border-r border-warm-150 bg-warm-50/60 flex flex-col min-h-0">
             {/* Filter pills — flex-wrap para que "Esta semana" caiga abajo
                 en vez de cortarse, y gap-2 para más aire entre chips */}
             <div className="px-5 lg:px-6 pt-2 pb-3 flex items-center gap-2 flex-wrap flex-shrink-0">
@@ -198,21 +202,44 @@ export function ValidationQueuePage() {
             </div>
           </aside>
 
-          {/* PANEL DER — DETALLE */}
-          <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-warm-50">
-            {selected ? (
-              <Detail
-                voucher={selected}
-                decision={recentDecisions[selected.id]}
-                onDecide={decide}
-                isPending={validate.isPending}
+          {/* PANEL DER — DETALLE.
+              - Desktop (≥lg): flujo normal al lado de la lista
+              - Mobile/iPad (<lg): overlay absoluto encima de la lista
+                cuando hay voucher seleccionado. Sin selección, no se
+                monta en mobile (la lista ocupa todo).
+              El empty state solo se muestra en desktop porque en mobile
+              el detalle se abre on-tap. */}
+          {selected ? (
+            <>
+              {/* Backdrop para cerrar al tocar fuera en mobile */}
+              <div
+                onClick={() => setSelectedId(null)}
+                className="lg:hidden absolute inset-0 bg-warm-900/30 z-20"
+                aria-hidden="true"
               />
-            ) : (
+              <main
+                className={cls(
+                  'flex flex-col overflow-hidden bg-warm-50 animate-slide',
+                  'absolute inset-y-0 right-0 z-30 w-full sm:w-[460px] shadow-panel',
+                  'lg:static lg:flex-1 lg:min-w-0 lg:z-auto lg:shadow-none lg:w-auto',
+                )}
+              >
+                <Detail
+                  voucher={selected}
+                  decision={recentDecisions[selected.id]}
+                  onDecide={decide}
+                  isPending={validate.isPending}
+                  onClose={() => setSelectedId(null)}
+                />
+              </main>
+            </>
+          ) : (
+            <main className="hidden lg:flex flex-1 min-w-0 flex-col overflow-hidden bg-warm-50">
               <div className="flex-1 flex items-center justify-center">
                 <EmptyState />
               </div>
-            )}
-          </main>
+            </main>
+          )}
         </div>
       </div>
     </div>
@@ -333,12 +360,14 @@ function VoucherCard({
 // Detail (panel derecho)
 // ============================================================
 function Detail({
-  voucher, decision, onDecide, isPending,
+  voucher, decision, onDecide, isPending, onClose,
 }: {
   voucher: VoucherResponse
   decision?: VoucherDecision
   onDecide: (d: VoucherDecision, notes?: string) => void
   isPending: boolean
+  /** Cerrar el overlay — solo se usa en mobile/iPad donde Detail es overlay. */
+  onClose?: () => void
 }) {
   const { user } = useAuth()
   const u = URGENCY_LOOK[voucher.urgency]
@@ -380,12 +409,28 @@ function Detail({
                   <span className={cls('w-1.5 h-1.5 rounded-full', u.dot)} />
                   {u.label}
                 </span>
-                <span className="text-[12px] text-warm-500 tabular-nums">{voucher.customerPhone}</span>
+                {/* whitespace-nowrap previene que un número como "+57 318 552 3344"
+                    quiebre por columna cuando el panel está angosto (iPad
+                    overlay), donde antes se veía un dígito por línea. */}
+                <span className="text-[12px] text-warm-500 tabular-nums whitespace-nowrap">{voucher.customerPhone}</span>
               </div>
             </div>
           </div>
-          {/* Atajos teclado — discreto a la derecha */}
-          <div className="hidden md:flex items-center gap-2 text-[10.5px] text-warm-400">
+          {/* Cerrar (mobile/iPad): el panel es overlay, hace falta una salida
+              visible. En desktop se oculta porque al cerrar perdés el contexto
+              de qué estabas revisando y los atajos de teclado son más rápidos. */}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="lg:hidden p-1.5 -mr-1.5 text-warm-500 hover:text-warm-800 hover:bg-warm-100 rounded-md flex-shrink-0"
+              aria-label="Cerrar detalle"
+            >
+              <X size={18} strokeWidth={1.8} />
+            </button>
+          )}
+          {/* Atajos teclado — desktop only (>=lg). En mobile/tablet no hay teclado. */}
+          <div className="hidden lg:flex items-center gap-2 text-[10.5px] text-warm-400">
             <KbdHint k="C" label="Confirmar" />
             <KbdHint k="A" label="Aclaración" />
             <KbdHint k="R" label="Rechazar" />
