@@ -4,6 +4,7 @@ using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Appointments.Dtos;
 using BellaSync.Application.Features.Appointments.Shared;
+using BellaSync.Application.Features.WhatsApp;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +18,7 @@ public sealed class RescheduleAppointmentHandler
     private readonly AppointmentValidator _validator;
     private readonly SalonScheduleValidator _scheduleValidator;
     private readonly ITenantAppointmentSettings _settings;
+    private readonly WhatsAppEnqueuer _whatsApp;
     private readonly ILogger<RescheduleAppointmentHandler> _logger;
 
     public RescheduleAppointmentHandler(
@@ -25,6 +27,7 @@ public sealed class RescheduleAppointmentHandler
         AppointmentValidator validator,
         SalonScheduleValidator scheduleValidator,
         ITenantAppointmentSettings settings,
+        WhatsAppEnqueuer whatsApp,
         ILogger<RescheduleAppointmentHandler> logger)
     {
         _db = db;
@@ -32,6 +35,7 @@ public sealed class RescheduleAppointmentHandler
         _validator = validator;
         _scheduleValidator = scheduleValidator;
         _settings = settings;
+        _whatsApp = whatsApp;
         _logger = logger;
     }
 
@@ -89,6 +93,13 @@ public sealed class RescheduleAppointmentHandler
         {
             return ApplicationError.Validation("appointment.reschedule_invalid", ex.Message);
         }
+
+        // Cancelar mensajes Queued de la fecha vieja — el Reminder24h /
+        // Ready2h que el dispatcher armó tenían la hora anterior. El
+        // dispatcher re-encolará los nuevos cuando la fecha nueva entre
+        // en ventana. Idempotente: si no había Queued, no-op.
+        await _whatsApp.CancelQueuedForAppointmentAsync(
+            appointment.TenantId, appointment.Id, ct);
 
         await _db.SaveChangesAsync(ct);
 

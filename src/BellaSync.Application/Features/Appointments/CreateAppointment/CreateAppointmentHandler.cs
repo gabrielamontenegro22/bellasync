@@ -4,6 +4,7 @@ using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Appointments.Dtos;
 using BellaSync.Application.Features.Appointments.Shared;
+using BellaSync.Application.Features.WhatsApp;
 using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
     private readonly AppointmentValidator _validator;
     private readonly SalonScheduleValidator _scheduleValidator;
     private readonly ITenantAppointmentSettings _settings;
+    private readonly WhatsAppEnqueuer _whatsApp;
     private readonly ILogger<CreateAppointmentHandler> _logger;
 
     public CreateAppointmentHandler(
@@ -27,6 +29,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
         AppointmentValidator validator,
         SalonScheduleValidator scheduleValidator,
         ITenantAppointmentSettings settings,
+        WhatsAppEnqueuer whatsApp,
         ILogger<CreateAppointmentHandler> logger)
     {
         _db = db;
@@ -35,6 +38,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
         _validator = validator;
         _scheduleValidator = scheduleValidator;
         _settings = settings;
+        _whatsApp = whatsApp;
         _logger = logger;
     }
 
@@ -102,6 +106,19 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
             holdMinBeforeAppointment: TimeSpan.FromMinutes(holdMinBefore));
 
         _db.Appointments.Add(appointment);
+
+        // ConfirmCreated WhatsApp: encolar para que salga al instante en
+        // el próximo tick del dispatcher (~2min). Sin esto, el dispatcher
+        // solo arma Reminder24h/Ready2h por ventana de tiempo, y la
+        // confirmación de agendamiento se perdería para citas a >25h.
+        // Se hace en la misma transacción (SaveChangesAsync abajo persiste
+        // appointment + mensaje juntos).
+        await _whatsApp.EnqueueForAppointmentAsync(
+            tenantId: _currentTenant.TenantId,
+            appointment: appointment,
+            kind: WhatsAppTemplateKind.ConfirmCreated,
+            ct: ct);
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(

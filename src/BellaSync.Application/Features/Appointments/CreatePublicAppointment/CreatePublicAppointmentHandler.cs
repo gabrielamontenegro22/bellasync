@@ -4,6 +4,7 @@ using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Appointments.Dtos;
 using BellaSync.Application.Features.Appointments.Shared;
+using BellaSync.Application.Features.WhatsApp;
 using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -25,6 +26,7 @@ public sealed class CreatePublicAppointmentHandler
     private readonly IClock _clock;
     private readonly AppointmentValidator _validator;
     private readonly SalonScheduleValidator _scheduleValidator;
+    private readonly WhatsAppEnqueuer _whatsApp;
     private readonly ILogger<CreatePublicAppointmentHandler> _logger;
 
     public CreatePublicAppointmentHandler(
@@ -32,12 +34,14 @@ public sealed class CreatePublicAppointmentHandler
         IClock clock,
         AppointmentValidator validator,
         SalonScheduleValidator scheduleValidator,
+        WhatsAppEnqueuer whatsApp,
         ILogger<CreatePublicAppointmentHandler> logger)
     {
         _db = db;
         _clock = clock;
         _validator = validator;
         _scheduleValidator = scheduleValidator;
+        _whatsApp = whatsApp;
         _logger = logger;
     }
 
@@ -120,6 +124,17 @@ public sealed class CreatePublicAppointmentHandler
             holdMinBeforeAppointment: TimeSpan.FromMinutes(tenant.HoldMinBeforeAppointmentMinutes));
 
         _db.Appointments.Add(appointment);
+
+        // ConfirmCreated WhatsApp — el portal público tiene MÁS valor en
+        // enviar confirmación porque el cliente acaba de dar su número y
+        // espera respuesta. Idempotencia y enabled check los maneja el
+        // helper. Se persiste en la misma transacción que la cita.
+        await _whatsApp.EnqueueForAppointmentAsync(
+            tenantId: tenant.Id,
+            appointment: appointment,
+            kind: WhatsAppTemplateKind.ConfirmCreated,
+            ct: ct);
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(

@@ -35,11 +35,25 @@ public sealed class AppointmentTestContext : IDisposable
     /// </summary>
     public ITenantAppointmentSettings AppointmentSettings { get; }
 
+    /// <summary>
+    /// Helper de WhatsApp que los handlers usan para encolar mensajes
+    /// (ConfirmCreated, etc.) y cancelar Queued al cancelar/reagendar.
+    /// En los tests no chequeamos los mensajes — los tenants seedeados
+    /// no tienen templates persistidos, así que el helper se sale por
+    /// "template deshabilitado" (default OFF para Confirm/Birthday y los
+    /// otros por falta de row). Igualmente se inyecta para que el ctor
+    /// de los handlers no rompa.
+    /// </summary>
+    public BellaSync.Application.Features.WhatsApp.WhatsAppEnqueuer WhatsAppEnqueuer { get; }
+
     public AppointmentTestContext()
     {
         Base = new HandlerTestContext();
         Validator = new AppointmentValidator(Base.Db);
         ScheduleValidator = new BellaSync.Application.Features.Appointments.Shared.SalonScheduleValidator(Base.Db);
+        WhatsAppEnqueuer = new BellaSync.Application.Features.WhatsApp.WhatsAppEnqueuer(
+            Base.Db, Base.Clock,
+            new BellaSync.Application.Common.Services.WhatsAppTemplateRenderer());
 
         AppointmentSettings = Substitute.For<ITenantAppointmentSettings>();
         AppointmentSettings.GetHoldDurationHoursAsync(Arg.Any<CancellationToken>())

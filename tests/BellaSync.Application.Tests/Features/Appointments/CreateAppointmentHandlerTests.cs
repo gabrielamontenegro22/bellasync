@@ -16,6 +16,7 @@ public class CreateAppointmentHandlerTests
         var handler = new CreateAppointmentHandler(
             ctx.Base.Db, ctx.Base.CurrentTenant, ctx.Base.Clock,
             ctx.Validator, ctx.ScheduleValidator, ctx.AppointmentSettings,
+            ctx.WhatsAppEnqueuer,
             ctx.Base.Logger<CreateAppointmentHandler>());
         return (ctx, handler);
     }
