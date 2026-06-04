@@ -42,6 +42,13 @@ public sealed class RescheduleAppointmentHandler
     public async Task<Result<AppointmentResponse>> HandleAsync(
         RescheduleAppointmentCommand command, CancellationToken ct)
     {
+        // El filter global multi-tenant (default-cerrado, ver
+        // ApplicationDbContext.SetTenantFilter) hace que esta query
+        // solo devuelva citas del tenant del JWT actual. Si el ID
+        // pertenece a otro tenant, devuelve null → 404. Por eso NO
+        // hace falta validar explícitamente appointment.TenantId acá.
+        // Si en algún futuro se desactiva el filter, agregar guard
+        // explícito: `if (appointment.TenantId != _currentTenant.TenantId)`.
         var appointment = await _db.Appointments
             .FirstOrDefaultAsync(a => a.Id == command.Id, ct);
         if (appointment is null)

@@ -94,10 +94,16 @@ export function ValidationQueuePage() {
   }
 
   // Atajos de teclado — solo si no estamos escribiendo en un input/textarea
+  // y no hay un Modal/Dialog abierto encima (bug B7 del audit: antes
+  // disparaba `c/r/a` aunque la atención estaba en otro modal).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (document.activeElement as HTMLElement | null)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      // Si hay un Modal abierto en el DOM (usamos role="dialog"
+      // aria-modal="true" en el primitivo Modal), no procesar atajos
+      // — el modal toma prioridad y nuestras shortcuts no aplican.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
       const idx = filtered.findIndex(v => v.id === selectedId)
       if (e.key === 'ArrowDown') {
         e.preventDefault()
