@@ -41,6 +41,7 @@ public class Payment : BaseEntity, ITenantEntity
         Guid tenantId,
         Guid appointmentId,
         PaymentMethod method,
+        string? provider,
         Money amount,
         Money? tip,
         string? reference,
@@ -53,9 +54,20 @@ public class Payment : BaseEntity, ITenantEntity
             throw new DomainException("El monto del pago debe ser mayor a cero.");
         // tip ya está validado >= 0 por Money.Create — solo chequeamos null
 
+        var normalizedProvider = NormalizeOptional(provider);
+
+        // Reglas por método: Transfer requiere banco/billetera; Cash no
+        // admite provider (no tiene sentido); Card y Other lo permiten
+        // opcional.
+        if (method == PaymentMethod.Transfer && normalizedProvider is null)
+            throw new DomainException("Para Transferencia hay que indicar el banco o billetera.");
+        if (method == PaymentMethod.Cash && normalizedProvider is not null)
+            throw new DomainException("Efectivo no lleva proveedor.");
+
         var payment = new Payment { TenantId = tenantId };
         payment.AppointmentId = appointmentId;
         payment.Method = method;
+        payment.Provider = normalizedProvider;
         payment.Amount = amount;
         payment.Tip = tip ?? Money.Zero;
         payment.Reference = NormalizeOptional(reference);
@@ -70,8 +82,19 @@ public class Payment : BaseEntity, ITenantEntity
     public Guid AppointmentId { get; private set; }
     public Appointment? Appointment { get; private set; }
 
-    /// <summary>Método de pago (efectivo, Nequi, tarjeta, etc.).</summary>
+    /// <summary>Método de pago (Efectivo, Transferencia, Tarjeta, Otro).</summary>
     public PaymentMethod Method { get; private set; }
+
+    /// <summary>
+    /// Proveedor específico dentro del método:
+    ///   - Transfer → "Bancolombia", "Nequi", "Daviplata", "Davivienda", "BBVA"…
+    ///   - Card     → "Visa", "Mastercard", "AmEx", "Diners" (opcional)
+    ///   - Cash     → null siempre
+    ///   - Other    → descripción libre (opcional)
+    /// Permite cruzar contra el extracto del banco correspondiente al
+    /// final del día sin tener que parsear `Reference`.
+    /// </summary>
+    public string? Provider { get; private set; }
 
     /// <summary>
     /// Monto principal del pago (sin contar la propina). Money es el VO

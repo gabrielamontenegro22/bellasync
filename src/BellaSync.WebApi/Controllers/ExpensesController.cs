@@ -42,6 +42,7 @@ public class ExpensesController : ControllerBase
             Concept: request.Concept,
             Amount: request.Amount,
             Method: request.Method,
+            Provider: request.Provider,
             RegisteredByUserId: userId);
 
         var result = await handler.HandleAsync(command, ct);
@@ -82,4 +83,8 @@ public class RegisterExpenseRequest
     public decimal Amount { get; set; }
     /// <summary>Default Cash si no viene en el JSON (caso típico del UI).</summary>
     public PaymentMethod Method { get; set; } = PaymentMethod.Cash;
+    /// <summary>
+    /// Banco/billetera/marca cuando aplica. Obligatorio si Method=Transfer.
+    /// </summary>
+    public string? Provider { get; set; }
 }

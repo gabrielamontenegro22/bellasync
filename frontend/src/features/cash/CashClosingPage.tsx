@@ -2,15 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowDownRight, ArrowUpRight,
-  Banknote, ChevronRight, Clock, CreditCard,
+  Banknote, Clock, CreditCard,
   Download, Lock, Plus, Smartphone, CheckCircle2, X,
 } from 'lucide-react'
+import { PROVIDER_COLORS, PROVIDER_FALLBACK_COLOR } from '@/features/payments/paymentCatalog'
 import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
 import { fmtCop } from '@/features/customers/lib/customerLook'
 import { getDailyCashSummary, type DailyCashSummary } from '@/api/cash'
 import type { ExpenseResponse } from '@/api/expenses'
 import type { PaymentResponse } from '@/api/payments'
+import { getPaymentBadge } from '@/features/payments/paymentBadge'
 import { RegisterExpenseModal } from './components/RegisterExpenseModal'
 
 /**
@@ -395,7 +397,7 @@ function TabHoy({
               Sin movimientos aún.
             </div>
           ) : (
-            <div className="space-y-3.5">
+            <div className="space-y-4">
               {breakdown.map((b) => {
                 const m = METHOD_LOOK[b.method] ?? METHOD_LOOK.Other
                 const pct = totalAmount > 0 ? (b.total / totalAmount) * 100 : 0
@@ -423,6 +425,31 @@ function TabHoy({
                         style={{ width: pct + '%' }}
                       />
                     </div>
+
+                    {/* Sub-líneas por proveedor (banco/marca). Solo si
+                        hay más de uno — si todo el Transfer del día fue
+                        Bancolombia, no aporta repetir la cifra. */}
+                    {b.byProvider.length > 1 && (
+                      <div className="mt-2 ml-8 space-y-1">
+                        {b.byProvider.map((p) => {
+                          const color = p.provider
+                            ? (PROVIDER_COLORS[p.provider] ?? PROVIDER_FALLBACK_COLOR)
+                            : PROVIDER_FALLBACK_COLOR
+                          return (
+                            <div
+                              key={p.provider ?? '__none__'}
+                              className="flex items-center justify-between text-[11.5px] text-warm-600"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className={cls('w-1.5 h-1.5 rounded-full', color.dot)} />
+                                <span>{p.provider ?? 'Sin especificar'}</span>
+                              </div>
+                              <span className="tabular-nums">{fmtCop(p.total)}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -524,7 +551,9 @@ function ExpenseRow({ expense }: { expense: ExpenseResponse }) {
 }
 
 function TxnRow({ txn }: { txn: PaymentResponse }) {
-  const m = METHOD_LOOK[txn.method] ?? METHOD_LOOK.Other
+  // Badge muestra el provider si lo hay (Bancolombia con colores propios),
+  // o el genérico de la categoría si no.
+  const badge = getPaymentBadge(txn.method, txn.provider)
   return (
     <div className="px-5 py-3 flex items-center gap-3 hover:bg-warm-50/50 transition">
       <div className="text-[11.5px] tabular-nums text-warm-400 w-10">
@@ -541,10 +570,10 @@ function TxnRow({ txn }: { txn: PaymentResponse }) {
       <div
         className={cls(
           'text-[10.5px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1',
-          m.tone,
+          badge.className,
         )}
       >
-        {m.label}
+        {badge.label}
       </div>
       <div className="text-[13.5px] font-medium text-warm-800 tabular-nums w-24 text-right">
         {fmtCop(txn.total)}
@@ -880,39 +909,21 @@ const METHOD_LOOK: Record<string, MethodLook> = {
     tone: 'text-brand-700 bg-brand-50',
     dot: 'bg-brand-500',
   },
-  Bancolombia: {
-    label: 'Bancolombia',
-    icon: <CreditCard size={14} strokeWidth={1.7} />,
-    tone: 'text-[#7a5e2d] bg-[#f6ecd0]',
-    dot: 'bg-[#d4a72b]',
-  },
-  Nequi: {
-    label: 'Nequi',
+  Transfer: {
+    label: 'Transferencia',
     icon: <Smartphone size={14} strokeWidth={1.7} />,
-    tone: 'text-[#7a2d6b] bg-[#f3dcee]',
-    dot: 'bg-[#c026a8]',
+    tone: 'text-warm-700 bg-warm-100',
+    dot: 'bg-warm-500',
   },
-  Daviplata: {
-    label: 'Daviplata',
-    icon: <Smartphone size={14} strokeWidth={1.7} />,
-    tone: 'text-[#9a2828] bg-[#f6dede]',
-    dot: 'bg-[#d33333]',
-  },
-  CreditCard: {
-    label: 'Datáfono',
+  Card: {
+    label: 'Tarjeta',
     icon: <CreditCard size={14} strokeWidth={1.7} />,
-    tone: 'text-[#3d5664] bg-[#dde7ec]',
-    dot: 'bg-[#5d7a8a]',
-  },
-  DebitCard: {
-    label: 'Datáfono',
-    icon: <CreditCard size={14} strokeWidth={1.7} />,
-    tone: 'text-[#3d5664] bg-[#dde7ec]',
-    dot: 'bg-[#5d7a8a]',
+    tone: 'text-warm-700 bg-warm-100',
+    dot: 'bg-warm-500',
   },
   Other: {
     label: 'Otro',
-    icon: <ChevronRight size={14} strokeWidth={1.7} />,
+    icon: <span className="text-[10px] leading-none">•••</span>,
     tone: 'text-warm-600 bg-warm-100',
     dot: 'bg-warm-400',
   },

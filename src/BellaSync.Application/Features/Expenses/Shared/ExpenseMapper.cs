@@ -11,6 +11,7 @@ internal static class ExpenseMapper
         Concept = e.Concept,
         Amount = e.Amount.Amount,
         Method = e.Method.ToString(),
+        Provider = e.Provider,
         RegisteredByUserId = e.RegisteredByUserId,
         RegisteredAt = e.RegisteredAt,
     };

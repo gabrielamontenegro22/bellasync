@@ -39,6 +39,7 @@ public class Expense : BaseEntity, ITenantEntity
         string concept,
         Money amount,
         PaymentMethod method,
+        string? provider,
         Guid? registeredByUserId,
         DateTime utcNow)
     {
@@ -49,12 +50,20 @@ public class Expense : BaseEntity, ITenantEntity
         if (amount.Amount <= 0m)
             throw new DomainException("El monto del egreso debe ser mayor a cero.");
 
+        var normalizedProvider = string.IsNullOrWhiteSpace(provider) ? null : provider.Trim();
+
+        if (method == PaymentMethod.Transfer && normalizedProvider is null)
+            throw new DomainException("Para Transferencia hay que indicar el banco o billetera.");
+        if (method == PaymentMethod.Cash && normalizedProvider is not null)
+            throw new DomainException("Efectivo no lleva proveedor.");
+
         return new Expense
         {
             TenantId = tenantId,
             Concept = concept.Trim(),
             Amount = amount,
             Method = method,
+            Provider = normalizedProvider,
             RegisteredByUserId = registeredByUserId,
             RegisteredAt = utcNow,
         };
@@ -79,6 +88,12 @@ public class Expense : BaseEntity, ITenantEntity
     /// queda registrado para reportes.
     /// </summary>
     public PaymentMethod Method { get; private set; }
+
+    /// <summary>
+    /// Banco o billetera (cuando Method=Transfer) o marca de tarjeta
+    /// (cuando Method=Card). null si Cash.
+    /// </summary>
+    public string? Provider { get; private set; }
 
     /// <summary>
     /// Quién registró el egreso. null si fue un proceso automático.

@@ -9,8 +9,14 @@ public class PaymentResponse
     public Guid Id { get; set; }
     public Guid AppointmentId { get; set; }
 
-    /// <summary>"Cash" / "Bancolombia" / "Nequi" / "Daviplata" / "CreditCard" / "DebitCard" / "Other"</summary>
+    /// <summary>"Cash" / "Transfer" / "Card" / "Other"</summary>
     public string Method { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Banco/billetera ("Bancolombia", "Nequi") cuando Method=Transfer,
+    /// o marca ("Visa") cuando Method=Card. Null para Cash.
+    /// </summary>
+    public string? Provider { get; set; }
 
     public decimal Amount { get; set; }
     public decimal Tip { get; set; }

@@ -51,8 +51,24 @@ public class DailyCashSummaryResponse
 
 public class MethodBreakdownItem
 {
-    /// <summary>"Cash" / "Bancolombia" / "Nequi" / etc.</summary>
+    /// <summary>"Cash" / "Transfer" / "Card" / "Other"</summary>
     public string Method { get; set; } = string.Empty;
+    public int Count { get; set; }
+    public decimal Total { get; set; }
+
+    /// <summary>
+    /// Sub-desglose por proveedor dentro de este método. Lista vacía
+    /// para Cash (no aplica). Para Transfer/Card permite ver
+    /// "$120k Transferencia = $80k Bancolombia + $40k Nequi" y cruzar
+    /// contra cada extracto bancario por separado.
+    /// </summary>
+    public List<ProviderBreakdownItem> ByProvider { get; set; } = new();
+}
+
+public class ProviderBreakdownItem
+{
+    /// <summary>"Bancolombia" / "Nequi" / "Visa" / etc. Puede ser null si el cobro no llevó proveedor.</summary>
+    public string? Provider { get; set; }
     public int Count { get; set; }
     public decimal Total { get; set; }
 }

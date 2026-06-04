@@ -10,6 +10,8 @@ export interface ExpenseResponse {
   concept: string
   amount: number
   method: PaymentMethod | string
+  /** Banco/billetera/marca cuando aplica. */
+  provider: string | null
   registeredByUserId: string | null
   registeredAt: string  // ISO
 }
@@ -19,6 +21,8 @@ export interface RegisterExpenseRequest {
   amount: number
   /** Default 'Cash' si no se manda (caso típico). */
   method?: PaymentMethod
+  /** Banco/billetera/marca. Obligatorio si method=Transfer. */
+  provider?: string | null
 }
 
 /**

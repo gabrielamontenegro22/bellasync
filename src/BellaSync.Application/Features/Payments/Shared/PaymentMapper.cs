@@ -14,6 +14,7 @@ internal static class PaymentMapper
         Id = p.Id,
         AppointmentId = p.AppointmentId,
         Method = p.Method.ToString(),
+        Provider = p.Provider,
         Amount = p.Amount.Amount,
         Tip = p.Tip.Amount,
         Total = p.Amount.Amount + p.Tip.Amount,

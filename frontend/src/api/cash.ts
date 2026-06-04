@@ -2,11 +2,20 @@ import { api } from './axios'
 import type { ExpenseResponse } from './expenses'
 import type { PaymentResponse, PaymentMethod } from './payments'
 
+export interface ProviderBreakdownItem {
+  /** "Bancolombia" / "Nequi" / "Visa" / null si no se especificó. */
+  provider: string | null
+  count: number
+  total: number
+}
+
 export interface MethodBreakdownItem {
-  /** Viene como string del backend (PaymentMethod.ToString()). */
+  /** "Cash" / "Transfer" / "Card" / "Other". */
   method: PaymentMethod | string
   count: number
   total: number
+  /** Sub-desglose para cruzar con cada extracto bancario por separado. */
+  byProvider: ProviderBreakdownItem[]
 }
 
 export interface DailyCashSummary {
