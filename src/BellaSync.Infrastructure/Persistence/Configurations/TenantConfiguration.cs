@@ -37,6 +37,14 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         // explícitamente desde Configuración.
         builder.Property(t => t.CommissionsEnabled).IsRequired().HasDefaultValue(false);
 
+        // Info general del salón — todos opcionales.
+        builder.Property(t => t.Address).HasMaxLength(200);
+        builder.Property(t => t.Phone).HasMaxLength(30);
+        builder.Property(t => t.ContactEmail).HasMaxLength(150);
+        builder.Property(t => t.LogoUrl).HasMaxLength(500);
+        builder.Property(t => t.InstagramHandle).HasMaxLength(50);
+        builder.Property(t => t.Description).HasMaxLength(500);
+
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.UpdatedAt);
 

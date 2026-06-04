@@ -64,3 +64,35 @@ export async function updateCommissionsSetting(enabled: boolean): Promise<Commis
   const { data } = await api.put<CommissionsSetting>('/api/Admin/commissions-setting', { enabled })
   return data
 }
+
+/** Info pública/contacto del salón (espejo TenantInfoResponse). */
+export interface TenantInfo {
+  name: string
+  slug: string
+  address: string | null
+  phone: string | null
+  contactEmail: string | null
+  logoUrl: string | null
+  instagramHandle: string | null
+  description: string | null
+}
+
+export interface UpdateTenantInfoRequest {
+  name: string
+  address?: string | null
+  phone?: string | null
+  contactEmail?: string | null
+  logoUrl?: string | null
+  instagramHandle?: string | null
+  description?: string | null
+}
+
+export async function getTenantInfo(): Promise<TenantInfo> {
+  const { data } = await api.get<TenantInfo>('/api/Admin/tenant-info')
+  return data
+}
+
+export async function updateTenantInfo(req: UpdateTenantInfoRequest): Promise<TenantInfo> {
+  const { data } = await api.put<TenantInfo>('/api/Admin/tenant-info', req)
+  return data
+}

@@ -13,6 +13,7 @@ import { BookingPage } from '@/features/booking/BookingPage'
 import { CustomersPage } from '@/features/customers/CustomersPage'
 import { PaymentPolicyPage } from '@/features/settings/PaymentPolicyPage'
 import { CommissionsSettingPage } from '@/features/settings/CommissionsSettingPage'
+import { TenantInfoPage } from '@/features/settings/TenantInfoPage'
 import { CommissionsPage } from '@/features/commissions/CommissionsPage'
 import { CashClosingPage } from '@/features/cash/CashClosingPage'
 import { AppShell } from '@/components/layout/AppShell'
@@ -122,7 +123,8 @@ export function AppRouter() {
       >
         {/* /configuracion → redirige a /configuracion/pagos (única sección
             con pantalla real por ahora) */}
-        <Route index element={<Navigate to="pagos" replace />} />
+        <Route index element={<Navigate to="general" replace />} />
+        <Route path="general"    element={<TenantInfoPage />} />
         <Route path="pagos"      element={<PaymentPolicyPage />} />
         <Route path="comisiones" element={<CommissionsSettingPage />} />
         {/* Aquí se agregarán: general, horario, whatsapp, suscripcion */}
