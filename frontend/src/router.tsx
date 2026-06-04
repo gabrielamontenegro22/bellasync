@@ -19,6 +19,7 @@ import { WhatsAppPage } from '@/features/settings/WhatsAppPage'
 import { SuscripcionPage } from '@/features/settings/SuscripcionPage'
 import { CommissionsPage } from '@/features/commissions/CommissionsPage'
 import { CashClosingPage } from '@/features/cash/CashClosingPage'
+import { ReportsPage } from '@/features/reports/ReportsPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { useAuth } from '@/features/auth/useAuth'
@@ -143,6 +144,17 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <AppShell><CommissionsPage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Reportes — dashboard de KPIs (solo SalonAdmin lo ve útil, pero
+          el endpoint también lo restringe). */}
+      <Route
+        path="/reportes"
+        element={
+          <ProtectedRoute>
+            <AppShell><ReportsPage /></AppShell>
           </ProtectedRoute>
         }
       />

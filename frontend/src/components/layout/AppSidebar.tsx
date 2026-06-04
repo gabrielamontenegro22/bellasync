@@ -45,7 +45,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/inventario',              label: 'Inventario',          icon: Box,       disabled: true  },
   { to: '/validacion',              label: 'Validación de pagos', icon: Wallet                   },
   { to: '/caja',                    label: 'Cierre de caja',      icon: Banknote                 },
-  { to: '/reportes',                label: 'Reportes',            icon: BarChart3, disabled: true  },
+  { to: '/reportes',                label: 'Reportes',            icon: BarChart3 },
   { to: '/configuracion',           label: 'Configuración',       icon: Settings                 },
 ]
 
