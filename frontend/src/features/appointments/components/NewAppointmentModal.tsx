@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Card, Input, SearchablePicker } from '@/components/ui'
 import { listServices, type ServiceResponse } from '@/api/services'
 import { listStylists, type StylistResponse } from '@/api/stylists'
 import { createCustomer, listCustomers, type CustomerResponse } from '@/api/customers'
@@ -86,35 +86,33 @@ export function NewAppointmentModal({
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">Servicio</label>
-          <select
+          <SearchablePicker
             value={serviceId}
-            onChange={e => setServiceId(e.target.value)}
-            className="w-full rounded-md border border-warm-200 p-2 text-sm"
-          >
-            <option value="">— Elegir servicio —</option>
-            {servicesQ.data?.map((s: ServiceResponse) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.durationMinutes}min · {formatMoney(s.price)})
-              </option>
-            ))}
-          </select>
+            onChange={setServiceId}
+            placeholder="Elegir servicio…"
+            searchPlaceholder="Buscar servicio…"
+            options={(servicesQ.data ?? []).map((s: ServiceResponse) => ({
+              value: s.id,
+              label: s.name,
+              sublabel: `${s.durationMinutes}min · ${formatMoney(s.price)}`,
+            }))}
+          />
         </div>
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">Estilista</label>
-          <select
+          <SearchablePicker
             value={stylistId}
-            onChange={e => setStylistId(e.target.value)}
-            className="w-full rounded-md border border-warm-200 p-2 text-sm"
+            onChange={setStylistId}
             disabled={!serviceId}
-          >
-            <option value="">— Elegir estilista —</option>
-            {availableStylists.map((st: StylistResponse) => (
-              <option key={st.id} value={st.id}>
-                {st.fullName}{st.status === 'Vacation' ? ' (vacaciones)' : ''}
-              </option>
-            ))}
-          </select>
+            placeholder={serviceId ? 'Elegir estilista…' : 'Elegí servicio primero'}
+            searchPlaceholder="Buscar estilista…"
+            options={availableStylists.map((st: StylistResponse) => ({
+              value: st.id,
+              label: st.fullName,
+              sublabel: st.status === 'Vacation' ? 'En vacaciones' : undefined,
+            }))}
+          />
           {serviceId && availableStylists.length === 0 && (
             <p className="mt-1 text-xs text-terra-700">Ningún estilista activo hace este servicio.</p>
           )}

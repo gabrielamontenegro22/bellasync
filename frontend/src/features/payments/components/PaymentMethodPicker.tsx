@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Banknote, ChevronDown, CreditCard, Search, Smartphone } from 'lucide-react'
+import { Banknote, CreditCard, Smartphone } from 'lucide-react'
 import { cls } from '@/lib/cls'
+import { SearchablePicker } from '@/components/ui'
 import type { PaymentMethod } from '@/api/payments'
 import { CARD_BRANDS, TRANSFER_PROVIDERS } from '../paymentCatalog'
 
@@ -160,6 +160,9 @@ function ProviderPicker({
   searchableThreshold: number
   searchPlaceholder: string
 }) {
+  // Hasta el threshold mostramos chips visibles (≤6 = mejor que dropdown).
+  // Por encima delegamos al SearchablePicker compartido — mismo look del
+  // resto de los selects de la app.
   if (options.length <= searchableThreshold) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
@@ -186,106 +189,15 @@ function ProviderPicker({
   }
 
   return (
-    <SearchableProviderPicker
-      options={options}
-      value={value}
-      onChange={onChange}
+    <SearchablePicker
+      value={value ?? ''}
+      onChange={(v) => onChange(v || null)}
       placeholder={placeholder}
       searchPlaceholder={searchPlaceholder}
+      emptyMessage="Sin coincidencias"
+      // Threshold bajo para que apenas haya algo se vea el buscador.
+      searchableThreshold={searchableThreshold - 1}
+      options={options.map((p) => ({ value: p, label: p }))}
     />
-  )
-}
-
-function SearchableProviderPicker({
-  options, value, onChange, placeholder, searchPlaceholder,
-}: {
-  options: string[]
-  value: string | null
-  onChange: (p: string | null) => void
-  placeholder: string
-  searchPlaceholder: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const rootRef = useRef<HTMLDivElement>(null)
-
-  // Cerrar al click fuera.
-  useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    if (open) {
-      document.addEventListener('mousedown', onDocClick)
-      return () => document.removeEventListener('mousedown', onDocClick)
-    }
-  }, [open])
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return options
-    return options.filter((o) => o.toLowerCase().includes(q))
-  }, [options, query])
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cls(
-          'w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg',
-          'bg-white border text-[13px] transition',
-          value
-            ? 'border-brand-300 text-warm-800'
-            : 'border-warm-200 text-warm-500 hover:border-warm-300',
-        )}
-      >
-        <span className="truncate">{value ?? placeholder}</span>
-        <ChevronDown
-          size={15}
-          strokeWidth={1.8}
-          className={cls('text-warm-400 transition', open && 'rotate-180')}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute z-10 mt-1.5 w-full rounded-lg bg-white border border-warm-200 shadow-pop max-h-[280px] overflow-hidden flex flex-col">
-          <div className="px-2.5 py-2 border-b border-warm-150 flex items-center gap-2">
-            <Search size={14} strokeWidth={1.8} className="text-warm-400" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="flex-1 bg-transparent text-[13px] text-warm-800 placeholder:text-warm-400 outline-none"
-            />
-          </div>
-          <div className="overflow-y-auto">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-4 text-[12.5px] text-warm-500 text-center">
-                Sin coincidencias para "{query}"
-              </div>
-            ) : (
-              filtered.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => {
-                    onChange(p)
-                    setQuery('')
-                    setOpen(false)
-                  }}
-                  className={cls(
-                    'w-full px-3 py-2 text-left text-[13px] hover:bg-warm-50 transition',
-                    value === p ? 'bg-brand-50 text-brand-800 font-medium' : 'text-warm-700',
-                  )}
-                >
-                  {p}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
   )
 }
