@@ -13,6 +13,7 @@ import { Modal, ModalFooter } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { extractApiError } from '@/lib/extractApiError'
 import {
+  cancelSubscription,
   changePlan,
   getSubscription,
   reportPayment,
@@ -132,6 +133,8 @@ export function SuscripcionPage() {
 
       <PaymentHistory invoices={data.invoices} />
 
+      <DangerZone sub={data} onCancelled={onSubscriptionChange} />
+
       {planModalOpen && (
         <ChangePlanModal
           sub={data}
@@ -154,6 +157,132 @@ export function SuscripcionPage() {
         />
       )}
     </div>
+  )
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Zona peligrosa: cancelar suscripción
+// ───────────────────────────────────────────────────────────────────────
+
+function DangerZone({
+  sub, onCancelled,
+}: {
+  sub: Subscription
+  onCancelled: (next: Subscription) => void
+}) {
+  const [modalOpen, setModalOpen] = useState(false)
+  if (sub.status === 'Cancelled') return null
+
+  return (
+    <>
+      <div className="mt-10 pt-6 border-t border-warm-150">
+        <div className="text-[11px] tracking-[0.2em] uppercase text-warm-500 font-medium mb-2">
+          Zona peligrosa
+        </div>
+        <div className="rounded-xl border border-warm-200 bg-white p-4 flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <div className="text-[13.5px] font-medium text-warm-800">
+              Cancelar suscripción
+            </div>
+            <div className="text-[12px] text-warm-500 mt-1 leading-relaxed">
+              Tu cuenta queda inactiva. Los datos del salón (clientes, citas,
+              historial) se conservan por si querés reactivar más adelante.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="px-3.5 py-2 rounded-lg border border-terra-200 bg-white text-[12.5px] font-medium text-terra-700 hover:bg-terra-100/60 transition flex-shrink-0"
+          >
+            Cancelar suscripción
+          </button>
+        </div>
+      </div>
+
+      {modalOpen && (
+        <CancelModal
+          onClose={() => setModalOpen(false)}
+          onCancelled={(next) => { setModalOpen(false); onCancelled(next) }}
+        />
+      )}
+    </>
+  )
+}
+
+const CANCEL_REASONS = [
+  'Cerré el salón',
+  'Cambié a otro sistema',
+  'Es muy caro',
+  'Le faltan funciones',
+  'Tuvimos un problema',
+]
+
+function CancelModal({
+  onClose, onCancelled,
+}: {
+  onClose: () => void
+  onCancelled: (next: Subscription) => void
+}) {
+  const [reason, setReason] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  const mut = useMutation({
+    mutationFn: () => cancelSubscription(reason.trim() || undefined),
+    onSuccess: (next) => onCancelled(next),
+    onError: (e) => setErr(extractApiError(e)),
+  })
+
+  return (
+    <Modal title="Cancelar tu suscripción" onClose={onClose} size="md">
+      <div className="rounded-xl bg-terra-100/40 border border-terra-200 p-3 mb-4 text-[12.5px] text-terra-700">
+        Al cancelar, no perdés tus datos pero no podrás acceder a las
+        features avanzadas. Podés reactivar cuando quieras escribiéndonos.
+      </div>
+
+      <div>
+        <label className="text-[12.5px] font-medium text-warm-700 mb-1.5 block">
+          ¿Por qué te vas? <span className="text-warm-400">(opcional, nos ayuda mucho)</span>
+        </label>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {CANCEL_REASONS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setReason(r)}
+              className={cls(
+                'text-[11.5px] px-2.5 py-1 rounded-full border transition',
+                reason === r
+                  ? 'border-brand-700 bg-brand-50 text-brand-800'
+                  : 'border-warm-200 text-warm-600 hover:border-warm-300',
+              )}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={3}
+          placeholder="Contanos más si querés…"
+          className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-warm-200 text-[14px] text-warm-800 placeholder:text-warm-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none transition resize-none"
+        />
+      </div>
+
+      <ModalFooter error={err}>
+        <Button variant="secondary" onClick={onClose} fullWidth disabled={mut.isPending}>
+          Volver
+        </Button>
+        <Button
+          variant="danger"
+          onClick={() => { setErr(null); mut.mutate() }}
+          fullWidth
+          loading={mut.isPending}
+        >
+          Sí, cancelar
+        </Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 

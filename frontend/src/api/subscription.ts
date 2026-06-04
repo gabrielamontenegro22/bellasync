@@ -106,3 +106,12 @@ export async function reportPayment(req: ReportPaymentRequest): Promise<Subscrip
   )
   return data
 }
+
+/**
+ * La admin cancela su suscripción. El backend rechaza si hay un pago
+ * Reported pendiente (esperar la decisión del SuperAdmin primero).
+ */
+export async function cancelSubscription(reason?: string): Promise<Subscription> {
+  const { data } = await api.post<Subscription>('/api/Subscription/cancel', { reason })
+  return data
+}
