@@ -101,6 +101,16 @@ public sealed class RescheduleAppointmentHandler
         await _whatsApp.CancelQueuedForAppointmentAsync(
             appointment.TenantId, appointment.Id, ct);
 
+        // Encolar AppointmentRescheduled con la nueva fecha/hora. Es un
+        // Kind separado de ConfirmCreated así no choca con la idempotencia
+        // (si la cita ya tenía un ConfirmCreated enviado, igualmente este
+        // mensaje sale porque es otro Kind).
+        await _whatsApp.EnqueueForAppointmentAsync(
+            tenantId: appointment.TenantId,
+            appointment: appointment,
+            kind: BellaSync.Domain.Entities.WhatsAppTemplateKind.AppointmentRescheduled,
+            ct: ct);
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(

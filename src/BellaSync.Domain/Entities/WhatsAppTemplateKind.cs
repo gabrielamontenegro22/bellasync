@@ -30,4 +30,12 @@ public enum WhatsAppTemplateKind
     /// admin haya configurado.
     /// </summary>
     AppointmentCancelled = 5,
+
+    /// <summary>
+    /// Notificación al cliente cuando una cita se reagenda. Se dispara
+    /// desde RescheduleAppointmentHandler con la nueva fecha y hora.
+    /// Es un Kind separado de ConfirmCreated para que la idempotencia
+    /// (no encolar duplicados) no impida el envío después de reagendar.
+    /// </summary>
+    AppointmentRescheduled = 6,
 }
