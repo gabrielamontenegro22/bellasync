@@ -624,7 +624,8 @@ function TabHistorial() {
   return (
     <div className="px-6 lg:px-8 py-6">
       <div className="bg-white rounded-2xl border border-warm-150 shadow-soft overflow-hidden">
-        <table className="w-full text-[13px]">
+        <div className="overflow-x-auto">
+        <table className="w-full text-[13px] min-w-[480px]">
           <thead>
             <tr className="bg-warm-50 border-b border-warm-150 text-[10.5px] tracking-[0.14em] uppercase text-warm-500">
               <th className="text-left font-medium px-5 py-3">Fecha</th>
@@ -688,6 +689,7 @@ function TabHistorial() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )
@@ -743,16 +745,18 @@ function CloseModal({
   const hasDiff = hasCount && diff !== 0
 
   return (
+    // Sheet en mobile, centrado en desktop. max-h + scroll interno para
+    // que la sección "Diferencia" no se corte en pantallas chicas.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:justify-center sm:p-4"
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-warm-900/40 backdrop-blur-sm anim-fade" />
       <div
-        className="relative w-full max-w-md bg-white rounded-2xl shadow-pop overflow-hidden anim-fade"
+        className="relative w-full sm:max-w-md max-h-[92vh] sm:max-h-[88vh] bg-white rounded-t-2xl sm:rounded-2xl shadow-pop overflow-hidden anim-fade flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pt-6 pb-4 border-b border-warm-150 flex items-start justify-between">
+        <div className="px-6 pt-6 pb-4 border-b border-warm-150 flex items-start justify-between flex-shrink-0">
           <div>
             <div className="text-[10.5px] tracking-[0.18em] uppercase text-gold-600 font-medium">
               Arqueo de efectivo
@@ -771,7 +775,7 @@ function CloseModal({
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
           <div className="rounded-xl bg-warm-50 border border-warm-150 p-4 space-y-2">
             <Row k="Base inicial" v={fmtCop(BASE_INICIAL)} />
             <Row k="+ Ventas en efectivo" v={fmtCop(cashSales)} />
@@ -885,7 +889,7 @@ function CloseModal({
           </div>
         )}
 
-        <div className="px-6 py-4 bg-warm-50 border-t border-warm-150 flex items-center justify-end gap-2">
+        <div className="px-6 py-4 bg-warm-50 border-t border-warm-150 flex items-center justify-end gap-2 flex-shrink-0">
           <button
             type="button"
             onClick={onClose}

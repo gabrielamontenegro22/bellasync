@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Input, Modal, ModalFooter } from '@/components/ui'
 import type { AppointmentResponse } from '@/api/appointments'
 import { extractApiError } from '@/lib/extractApiError'
 import { useAuth } from '@/features/auth/useAuth'
@@ -63,23 +63,8 @@ export function RescheduleModal({ appointment, onClose }: RescheduleModalProps) 
   const noChange = newIsoLocal === originalLocal
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-      onClick={onClose}
-    >
-      <Card className="w-full max-w-md space-y-4 p-5" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl text-brand-700">Reagendar cita</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-warm-400 hover:text-warm-600"
-            aria-label="Cerrar"
-          >
-            ✕
-          </button>
-        </div>
-
+    <Modal title="Reagendar cita" onClose={onClose} size="sm">
+      <div className="space-y-4">
         {/* Resumen no editable — para que la recepcionista confirme que está
             moviendo la cita correcta. */}
         <div className="rounded-lg bg-warm-50 border border-warm-150 p-3 text-sm">
@@ -121,11 +106,7 @@ export function RescheduleModal({ appointment, onClose }: RescheduleModalProps) 
           </label>
         )}
 
-        {submitError && (
-          <p className="rounded-md bg-terra-100 p-2 text-sm text-terra-500">{submitError}</p>
-        )}
-
-        <div className="flex gap-2 pt-2">
+        <ModalFooter error={submitError}>
           <Button variant="secondary" onClick={onClose} fullWidth>
             Cancelar
           </Button>
@@ -137,8 +118,8 @@ export function RescheduleModal({ appointment, onClose }: RescheduleModalProps) 
           >
             {noChange ? 'Sin cambios' : 'Reagendar'}
           </Button>
-        </div>
-      </Card>
-    </div>
+        </ModalFooter>
+      </div>
+    </Modal>
   )
 }

@@ -86,16 +86,19 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   }
 
   return (
+    // Mobile: bottom sheet (items-end + sin padding lateral + rounded-t).
+    // Desktop (≥sm): centrado con padding y rounded completo.
+    // El panel scrollea internamente para que el footer siempre quede visible.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:justify-center sm:p-4"
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-warm-900/40 backdrop-blur-sm anim-fade" />
       <div
-        className="relative w-full max-w-md bg-white rounded-2xl shadow-pop overflow-hidden anim-fade"
+        className="relative w-full sm:max-w-md max-h-[92vh] sm:max-h-[88vh] bg-white rounded-t-2xl sm:rounded-2xl shadow-pop overflow-hidden anim-fade flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pt-6 pb-4 border-b border-warm-150 flex items-start justify-between">
+        <div className="px-6 pt-6 pb-4 border-b border-warm-150 flex items-start justify-between flex-shrink-0">
           <div>
             <div className="text-[10.5px] tracking-[0.18em] uppercase text-gold-600 font-medium">
               Salida de caja
@@ -114,7 +117,7 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
           {/* Concepto */}
           <div>
             <label className="text-[12.5px] font-medium text-warm-700 block mb-1.5">
@@ -193,7 +196,7 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
           )}
         </div>
 
-        <div className="px-6 py-4 bg-warm-50 border-t border-warm-150 flex items-center justify-end gap-2">
+        <div className="px-6 py-4 bg-warm-50 border-t border-warm-150 flex items-center justify-end gap-2 flex-shrink-0">
           <button
             type="button"
             onClick={onClose}

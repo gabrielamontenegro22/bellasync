@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { CheckCircle } from 'lucide-react'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Input, Modal, ModalFooter } from '@/components/ui'
 import type { AppointmentResponse } from '@/api/appointments'
 import type { PaymentMethod } from '@/api/payments'
 import { extractApiError } from '@/lib/extractApiError'
@@ -109,12 +109,11 @@ export function RegisterPaymentModal({
   // unos segundos si queremos). Esto soluciona el problema de "no sé si
   // se guardó → vuelvo a apretar → pago doble".
   if (success !== null) {
+    // Confirmación de éxito — modal corto, centrado en mobile (no sheet)
+    // porque visualmente queda raro un sheet con solo 3 líneas de contenido.
     return (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-        onClick={onClose}
-      >
-        <Card className="w-full max-w-md space-y-4 p-6 text-center" onClick={e => e.stopPropagation()}>
+      <Modal title={null} onClose={onClose} size="sm" centeredOnMobile>
+        <div className="space-y-4 text-center pt-2 pb-2">
           <div className="w-14 h-14 mx-auto rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-700">
             <CheckCircle size={28} />
           </div>
@@ -127,29 +126,14 @@ export function RegisterPaymentModal({
             </div>
           </div>
           <Button onClick={onClose} fullWidth>Listo</Button>
-        </Card>
-      </div>
+        </div>
+      </Modal>
     )
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-      onClick={onClose}
-    >
-      <Card className="w-full max-w-lg space-y-4 p-5" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl text-brand-700">Registrar pago</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-warm-400 hover:text-warm-600"
-            aria-label="Cerrar"
-          >
-            ✕
-          </button>
-        </div>
-
+    <Modal title="Registrar pago" onClose={onClose} size="md">
+      <div className="space-y-4">
         {/* Resumen de la cita — confirma identidad de la cita +
             breakdown del saldo cuando hay anticipo previo. */}
         <div className="rounded-lg bg-warm-50 border border-warm-150 p-3 text-sm">
@@ -205,7 +189,9 @@ export function RegisterPaymentModal({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        {/* Monto + Propina: dos columnas en ≥sm, apilados en <sm.
+            "Monto (máx $X)" se desborda con max chico en mobile. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
             <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">
               Monto
@@ -272,11 +258,7 @@ export function RegisterPaymentModal({
           </span>
         </div>
 
-        {submitError && (
-          <p className="rounded-md bg-terra-100 p-2 text-sm text-terra-500">{submitError}</p>
-        )}
-
-        <div className="flex gap-2 pt-1">
+        <ModalFooter error={submitError}>
           <Button variant="secondary" onClick={onClose} fullWidth>
             Cancelar
           </Button>
@@ -288,9 +270,9 @@ export function RegisterPaymentModal({
           >
             Registrar pago
           </Button>
-        </div>
-      </Card>
-    </div>
+        </ModalFooter>
+      </div>
+    </Modal>
   )
 }
 
