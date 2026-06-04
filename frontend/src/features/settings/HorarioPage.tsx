@@ -5,7 +5,6 @@ import {
 import { cls } from '@/lib/cls'
 import {
   SettingsHeader, SettingsBlock, SaveBar, PreviewNotice, ToggleRow, Toggle,
-  inputCls,
 } from './_primitives'
 
 /**
@@ -304,19 +303,24 @@ export function HorarioPage() {
               )}
             </div>
             <div className="flex gap-2">
-              <input
-                type="date"
-                value={newDate}
-                min={todayISO()}
-                onChange={(e) => setNewDate(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    addClosedDate()
-                  }
-                }}
-                className={cls(inputCls, 'py-2 text-[13px] flex-1')}
-              />
+              <div className="flex-1 flex items-center rounded-lg border border-warm-200 bg-white overflow-hidden focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+                <span className="pl-3 pr-2 text-warm-400 flex-shrink-0">
+                  <Calendar size={14} strokeWidth={1.8} />
+                </span>
+                <input
+                  type="date"
+                  value={newDate}
+                  min={todayISO()}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addClosedDate()
+                    }
+                  }}
+                  className="flex-1 py-2 pr-3 text-[13px] text-warm-800 tabular-nums outline-none bg-transparent"
+                />
+              </div>
               <button
                 type="button"
                 onClick={addClosedDate}
