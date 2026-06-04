@@ -84,19 +84,23 @@ export function AgendaTimeline({ appointments, date, selectedId, onSelect }: Age
   // visible. Sin esto, el rango fijo 8am-9pm queda con todas las citas tarde
   // fuera del viewport (el usuario ve 8am cuando llega a las 3pm).
   //
-  // Prioridad:
-  //   1. Si es hoy → scroll a la hora actual menos 1h de margen
-  //   2. Si hay citas → scroll a la primera cita cronológica menos 1h
-  //   3. Si no → no scroll (se queda en 8am)
+  // Prioridad (fix 2026-06: antes priorizaba "ahora" para hoy, lo que
+  // dejaba a la admin que abría a las 9pm pegada al fondo del timeline
+  // sin ver las citas de la mañana):
+  //   1. Si hay citas → siempre la primera cita cronológica del día.
+  //      Esto matchea el mental model "mostrame el día desde el inicio".
+  //   2. Si no hay citas y es hoy → la hora actual (como fallback útil
+  //      para "este es el momento en que estamos parados").
+  //   3. Si no hay citas y no es hoy → no scroll (queda en 8am).
   const wrapperRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!wrapperRef.current) return
 
     let targetMin: number | null = null
-    if (isToday) {
-      targetMin = nowMin
-    } else if (appointments.length > 0) {
+    if (appointments.length > 0) {
       targetMin = Math.min(...appointments.map(a => isoToLocalMinutes(a.startAt)))
+    } else if (isToday) {
+      targetMin = nowMin
     }
     if (targetMin === null) return
 
