@@ -184,8 +184,20 @@ public sealed class PaymentMethodRow
 {
     /// <summary>"Cash" | "Transfer" | "Card" | "Other" — string del enum.</summary>
     public string Method { get; init; } = string.Empty;
-    /// <summary>Label en español para mostrar ("Efectivo", "Transferencia"…).</summary>
+
+    /// <summary>
+    /// Banco/billetera/marca cuando Method=Transfer o Card (Bancolombia,
+    /// Nequi, Daviplata, Visa, etc.). null para Cash.
+    /// </summary>
+    public string? Provider { get; init; }
+
+    /// <summary>
+    /// Label de UI: "Efectivo" / "Bancolombia" / "Nequi" / "Visa" / …
+    /// Si hay Provider, usa el Provider como label (Bancolombia, Nequi);
+    /// si no hay, usa el label genérico del método (Efectivo, Otro).
+    /// </summary>
     public string Label { get; init; } = string.Empty;
+
     public decimal Revenue { get; init; }
     public double Percentage { get; init; }
 }
