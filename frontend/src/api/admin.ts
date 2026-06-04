@@ -47,3 +47,20 @@ export async function updatePaymentPolicy(req: PaymentPolicy): Promise<PaymentPo
   const { data } = await api.put<PaymentPolicy>('/api/Admin/payment-policy', req)
   return data
 }
+
+/** Espejo de CommissionsSettingResponse. */
+export interface CommissionsSetting {
+  enabled: boolean
+}
+
+/** GET /api/Admin/commissions-setting */
+export async function getCommissionsSetting(): Promise<CommissionsSetting> {
+  const { data } = await api.get<CommissionsSetting>('/api/Admin/commissions-setting')
+  return data
+}
+
+/** PUT /api/Admin/commissions-setting */
+export async function updateCommissionsSetting(enabled: boolean): Promise<CommissionsSetting> {
+  const { data } = await api.put<CommissionsSetting>('/api/Admin/commissions-setting', { enabled })
+  return data
+}

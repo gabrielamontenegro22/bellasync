@@ -22,6 +22,7 @@ public interface IApplicationDbContext
     DbSet<PaymentVoucher> PaymentVouchers { get; }
     DbSet<Payment> Payments { get; }
     DbSet<Expense> Expenses { get; }
+    DbSet<CommissionPayout> CommissionPayouts { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

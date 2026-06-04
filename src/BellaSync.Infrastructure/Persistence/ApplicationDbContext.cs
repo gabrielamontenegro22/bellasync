@@ -35,6 +35,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<PaymentVoucher> PaymentVouchers => Set<PaymentVoucher>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<CommissionPayout> CommissionPayouts => Set<CommissionPayout>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

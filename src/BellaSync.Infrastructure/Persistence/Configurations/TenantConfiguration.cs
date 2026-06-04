@@ -32,6 +32,11 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.HoldMinBeforeAppointmentMinutes).IsRequired().HasDefaultValue(30);
         builder.Property(t => t.MinAdvanceMinutes).IsRequired().HasDefaultValue(30);
 
+        // Comisiones opt-in. Default false → salones existentes quedan
+        // sin el módulo activo (no rompe nada). La admin lo activa
+        // explícitamente desde Configuración.
+        builder.Property(t => t.CommissionsEnabled).IsRequired().HasDefaultValue(false);
+
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.UpdatedAt);
 
