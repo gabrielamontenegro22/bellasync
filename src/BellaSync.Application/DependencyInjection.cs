@@ -41,6 +41,11 @@ public static class DependencyInjection
         // IsHolidaysClosed=true).
         services.AddScoped<BellaSync.Application.Features.Appointments.Shared.SalonScheduleValidator>();
 
+        // WhatsApp: el renderer es stateless así que Singleton ahorraría
+        // una alloc por scope, pero como otros services del proyecto
+        // siguen scoped, lo dejamos coherente.
+        services.AddScoped<BellaSync.Application.Common.Services.WhatsAppTemplateRenderer>();
+
         return services;
     }
 
