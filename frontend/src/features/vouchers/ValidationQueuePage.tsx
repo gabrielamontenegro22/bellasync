@@ -38,12 +38,24 @@ export function ValidationQueuePage() {
   // desaparezca de la cola (la mutation invalida y refetcha).
   const [recentDecisions, setRecentDecisions] = useState<Record<string, VoucherDecision>>({})
 
-  // Auto-seleccionar el primero cuando carga
+  // Auto-seleccionar el primero cuando carga — solo en desktop (≥lg, 1024px).
+  // En mobile/iPad el detalle se monta como overlay encima de la lista, así
+  // que auto-seleccionar al entrar bloquea el acceso a los otros vouchers
+  // (justo lo que el usuario reportó: "solo me aparece esto al entrar").
+  // En desktop sí auto-seleccionamos porque el detalle vive al lado de la
+  // lista y los atajos de teclado (C/A/R) necesitan algo seleccionado.
   useEffect(() => {
-    if (vouchers.length > 0 && !selectedId) setSelectedId(vouchers[0].id)
+    const isDesktop = typeof window !== 'undefined'
+      && window.matchMedia('(min-width: 1024px)').matches
+
+    if (vouchers.length > 0 && !selectedId && isDesktop) {
+      setSelectedId(vouchers[0].id)
+    }
     if (selectedId && !vouchers.find(v => v.id === selectedId)) {
-      // el seleccionado ya no existe (fue decidido) — pasamos al siguiente
-      setSelectedId(vouchers[0]?.id ?? null)
+      // El seleccionado ya no existe (fue decidido). En desktop pasamos al
+      // siguiente automáticamente; en mobile lo deseleccionamos (el overlay
+      // se cierra y volvés a la lista).
+      setSelectedId(isDesktop ? vouchers[0]?.id ?? null : null)
     }
   }, [vouchers, selectedId])
 
