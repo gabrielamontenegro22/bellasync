@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Input, Modal, ModalFooter } from '@/components/ui'
 import type { CustomerResponse } from '@/api/customers'
 import { extractApiError } from '@/lib/extractApiError'
 import { useCreateCustomer, useUpdateCustomer } from '../hooks'
@@ -86,20 +86,15 @@ export function CustomerModal({ customer, onClose }: CustomerModalProps) {
   const canSubmit = form.fullName.trim().length >= 3 && form.phone.trim().length > 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <Card className="w-full max-w-lg max-h-[90vh] overflow-auto space-y-3 p-5" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl text-brand-700">
-            {isEdit ? 'Editar cliente' : 'Nuevo cliente'}
-          </h2>
-          <button onClick={onClose} className="text-warm-400 hover:text-warm-600" aria-label="Cerrar">✕</button>
-        </div>
-
+    <Modal title={isEdit ? 'Editar cliente' : 'Nuevo cliente'} onClose={onClose} size="md">
+      <div className="space-y-3">
         <Input label="Nombre completo *" value={form.fullName} onChange={e => update_('fullName', e.target.value)} />
         <Input label="Teléfono *" value={form.phone} onChange={e => update_('phone', e.target.value)} />
         <Input label="Email" type="email" value={form.email} onChange={e => update_('email', e.target.value)} />
 
-        <div className="grid grid-cols-2 gap-2">
+        {/* En mobile (375px) dos columnas quedan demasiado apretadas para
+            cumpleaños + cédula, así que apilamos hasta sm. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Input label="Cumpleaños" type="date" value={form.birthday} onChange={e => update_('birthday', e.target.value)} />
           <Input label="Cédula" value={form.documentNumber} onChange={e => update_('documentNumber', e.target.value)} />
         </div>
@@ -139,15 +134,13 @@ export function CustomerModal({ customer, onClose }: CustomerModalProps) {
           </label>
         )}
 
-        {error && <p className="rounded-md bg-terra-100 p-2 text-sm text-terra-700">{error}</p>}
-
-        <div className="flex gap-2 pt-2">
+        <ModalFooter error={error}>
           <Button variant="secondary" onClick={onClose} fullWidth>Cancelar</Button>
           <Button fullWidth onClick={submit} loading={submitting} disabled={!canSubmit}>
             {isEdit ? 'Guardar cambios' : 'Crear cliente'}
           </Button>
-        </div>
-      </Card>
-    </div>
+        </ModalFooter>
+      </div>
+    </Modal>
   )
 }

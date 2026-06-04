@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Button, Card, Input, SearchablePicker } from '@/components/ui'
+import { Button, Input, Modal, ModalFooter, SearchablePicker } from '@/components/ui'
 import { listServices, type ServiceResponse } from '@/api/services'
 import { listStylists, type StylistResponse } from '@/api/stylists'
 import { createCustomer, listCustomers, type CustomerResponse } from '@/api/customers'
@@ -75,13 +75,8 @@ export function NewAppointmentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <Card className="w-full max-w-lg space-y-4 p-5" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl text-brand-700">Nueva cita</h2>
-          <button onClick={onClose} className="text-warm-400 hover:text-warm-600" aria-label="Cerrar">✕</button>
-        </div>
-
+    <Modal title="Nueva cita" onClose={onClose} size="md">
+      <div className="space-y-4">
         <CustomerAutocomplete selected={customer} onSelect={setCustomer} />
 
         <div>
@@ -145,9 +140,7 @@ export function NewAppointmentModal({
 
         <Input label="Notas (opcional)" value={notes} onChange={e => setNotes(e.target.value)} />
 
-        {submitError && <p className="rounded-md bg-terra-100 p-2 text-sm text-terra-700">{submitError}</p>}
-
-        <div className="flex gap-2">
+        <ModalFooter error={submitError}>
           <Button variant="secondary" onClick={onClose} fullWidth>Cancelar</Button>
           <Button
             fullWidth
@@ -157,9 +150,9 @@ export function NewAppointmentModal({
           >
             Agendar
           </Button>
-        </div>
-      </Card>
-    </div>
+        </ModalFooter>
+      </div>
+    </Modal>
   )
 }
 
