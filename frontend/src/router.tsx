@@ -20,6 +20,7 @@ import { SuscripcionPage } from '@/features/settings/SuscripcionPage'
 import { CommissionsPage } from '@/features/commissions/CommissionsPage'
 import { CashClosingPage } from '@/features/cash/CashClosingPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
+import { SaasAdminSubscriptionsPage } from '@/features/saasAdmin/SaasAdminSubscriptionsPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { useAuth } from '@/features/auth/useAuth'
@@ -155,6 +156,19 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <AppShell><ReportsPage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Panel SaaS Admin — solo accesible si el user tiene role SuperAdmin.
+          El endpoint del backend ya lo restringe; acá no pongo guard de
+          rol explícito porque cualquier otro user verá un 403 desde la
+          API y la pantalla mostrará el error. */}
+      <Route
+        path="/saas-admin/subscriptions"
+        element={
+          <ProtectedRoute>
+            <AppShell><SaasAdminSubscriptionsPage /></AppShell>
           </ProtectedRoute>
         }
       />

@@ -30,6 +30,12 @@ export interface Subscription {
   availablePlans: PlanOption[]
   invoices: InvoiceRow[]
   nextDueInvoice: InvoiceRow | null
+
+  /** Factura reportada esperando validación del SuperAdmin. null si no hay. */
+  pendingValidationInvoice: InvoiceRow | null
+
+  /** Razón del último rechazo del SuperAdmin (si la última acción fue rechazo). */
+  lastRejectionReason: string | null
 }
 
 export interface PlanOption {
@@ -51,12 +57,18 @@ export interface InvoiceRow {
   periodEnd: string
   dueDate: string
   issuedAt: string
-  /** "Pending" | "Paid" | "Failed" | "Waived". */
+  /** "Pending" | "Reported" | "Paid" | "Failed" | "Waived". */
   status: string
   paidAt: string | null
   paymentMethod: string | null
   reference: string | null
   note: string | null
+
+  // Reporte (paso intermedio antes de validación)
+  reportedAt: string | null
+  reportedMethod: string | null
+  reportedReference: string | null
+  rejectedAt: string | null
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -76,32 +88,21 @@ export async function changePlan(planCode: string): Promise<Subscription> {
   return data
 }
 
-export interface PayInvoiceRequest {
+export interface ReportPaymentRequest {
   paymentMethod: string
   reference?: string | null
 }
 
-export async function payInvoice(
-  invoiceId: string,
-  req: PayInvoiceRequest,
-): Promise<Subscription> {
+/**
+ * La admin del salón reporta una transferencia que dice haber hecho.
+ * El backend emite la factura si no existe + la pone en estado
+ * Reported. La suscripción NO se activa hasta que el SuperAdmin
+ * de BellaSync valide contra el extracto bancario.
+ */
+export async function reportPayment(req: ReportPaymentRequest): Promise<Subscription> {
   const { data } = await api.post<Subscription>(
-    `/api/Subscription/invoices/${invoiceId}/pay`,
+    '/api/Subscription/report-payment',
     req,
   )
-  return data
-}
-
-/**
- * "Pagar suscripción ahora" inteligente:
- *   - Si hay una factura Pending, la paga.
- *   - Si no hay, emite una para el período actual y la paga atómicamente.
- *
- * El frontend siempre llama a este endpoint sin preocuparse por el estado
- * actual — funciona para Trial (primera activación), Active (renovación),
- * PastDue (regularización).
- */
-export async function paySubscription(req: PayInvoiceRequest): Promise<Subscription> {
-  const { data } = await api.post<Subscription>('/api/Subscription/pay', req)
   return data
 }

@@ -42,10 +42,22 @@ public class SubscriptionInvoiceConfiguration : IEntityTypeConfiguration<Subscri
         builder.Property(i => i.Reference).HasMaxLength(120);
         builder.Property(i => i.Note).HasMaxLength(500);
 
+        // Reporte (paso intermedio anti-pasarela).
+        builder.Property(i => i.ReportedAt);
+        builder.Property(i => i.ReportedMethod).HasMaxLength(40);
+        builder.Property(i => i.ReportedReference).HasMaxLength(120);
+
+        // Validación SuperAdmin.
+        builder.Property(i => i.ValidatedByUserId);
+        builder.Property(i => i.ValidatedAt);
+        builder.Property(i => i.RejectedAt);
+
         builder.Property(i => i.CreatedAt).IsRequired();
         builder.Property(i => i.UpdatedAt);
 
         builder.HasIndex(i => new { i.TenantId, i.IssuedAt });
+        // Acelera la query de la cola de validación.
+        builder.HasIndex(i => i.Status);
 
         builder.HasOne<Tenant>()
             .WithMany()

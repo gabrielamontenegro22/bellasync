@@ -88,6 +88,10 @@ public sealed class GetSubscriptionHandler
                 i.PaymentMethod,
                 i.Reference,
                 i.Note,
+                i.ReportedAt,
+                i.ReportedMethod,
+                i.ReportedReference,
+                i.RejectedAt,
             })
             .ToListAsync(ct);
 
@@ -107,12 +111,28 @@ public sealed class GetSubscriptionHandler
                 PaymentMethod = i.PaymentMethod,
                 Reference = i.Reference,
                 Note = i.Note,
+                ReportedAt = i.ReportedAt,
+                ReportedMethod = i.ReportedMethod,
+                ReportedReference = i.ReportedReference,
+                RejectedAt = i.RejectedAt,
             })
             .ToList();
 
         var nextDue = invoiceRows
             .Where(i => i.Status == nameof(SubscriptionInvoiceStatus.Pending))
             .OrderBy(i => i.DueDate)
+            .FirstOrDefault();
+
+        var pendingValidation = invoiceRows
+            .Where(i => i.Status == nameof(SubscriptionInvoiceStatus.Reported))
+            .OrderByDescending(i => i.ReportedAt)
+            .FirstOrDefault();
+
+        // Rechazo más reciente: la primera factura Pending cuyo
+        // RejectedAt > ReportedAt o que tenga Note y RejectedAt.
+        var lastRejected = invoiceRows
+            .Where(i => i.RejectedAt.HasValue && !string.IsNullOrEmpty(i.Note))
+            .OrderByDescending(i => i.RejectedAt)
             .FirstOrDefault();
 
         // Ceiling: si faltan 5d 23h, mejor mostrar "6 días" que "5".
@@ -151,6 +171,8 @@ public sealed class GetSubscriptionHandler
             AvailablePlans = availablePlans,
             Invoices = invoiceRows,
             NextDueInvoice = nextDue,
+            PendingValidationInvoice = pendingValidation,
+            LastRejectionReason = lastRejected?.Note,
         };
 
         return Result<SubscriptionResponse>.Success(response);

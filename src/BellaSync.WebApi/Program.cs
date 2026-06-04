@@ -50,6 +50,10 @@ try
     // se quedan "Active" eternamente sin facturar.
     builder.Services.AddHostedService<BellaSync.WebApi.HostedServices.SubscriptionDispatcherService>();
 
+    // Bootstrap del SuperAdmin (dueño de BellaSync) — crea el user en DB
+    // si no existe. Lee email/password de appsettings "SuperAdmin".
+    builder.Services.AddHostedService<BellaSync.WebApi.HostedServices.SuperAdminBootstrap>();
+
     // Política de citas (hold, anticipación mínima, etc.)
     builder.Services.Configure<BellaSync.Application.Auth.AppointmentSettings>(
         builder.Configuration.GetSection(BellaSync.Application.Auth.AppointmentSettings.SectionName));
