@@ -44,6 +44,13 @@ public sealed class CancelAppointmentHandler
             return ApplicationError.NotFound("appointment.not_found",
                 $"No existe una cita con id {command.Id}.");
 
+        // Snapshot del status anterior — necesario para decidir si enviar
+        // la notificación de cancelación. Una cita Pending que nunca se
+        // confirmó no amerita un "lamentamos cancelar tu cita" porque la
+        // cliente probablemente nunca terminó el proceso de agendamiento.
+        // Solo notificamos cancelación de Confirmed (cita ya en firme).
+        var wasConfirmed = appointment.Status == BellaSync.Domain.Entities.AppointmentStatus.Confirmed;
+
         try { appointment.Cancel(_clock.UtcNow, command.Reason); }
         catch (DomainException ex)
         {
@@ -56,6 +63,17 @@ public sealed class CancelAppointmentHandler
         // una cliente que canceló). Idempotente: si no hay Queued, no-op.
         await _whatsApp.CancelQueuedForAppointmentAsync(
             appointment.TenantId, appointment.Id, ct);
+
+        // Encolar AppointmentCancelled solo si era Confirmed (cita en firme).
+        // El helper respeta el toggle isEnabled del template y la idempotencia.
+        if (wasConfirmed)
+        {
+            await _whatsApp.EnqueueForAppointmentAsync(
+                tenantId: appointment.TenantId,
+                appointment: appointment,
+                kind: BellaSync.Domain.Entities.WhatsAppTemplateKind.AppointmentCancelled,
+                ct: ct);
+        }
 
         await _db.SaveChangesAsync(ct);
 
