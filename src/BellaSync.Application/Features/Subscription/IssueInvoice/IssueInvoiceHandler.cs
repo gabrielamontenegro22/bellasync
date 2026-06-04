@@ -111,9 +111,14 @@ public sealed class IssueInvoiceHandler
     private static (DateTime start, DateTime end) ComputePeriod(
         TenantSubscription sub, DateTime now) => sub.Status switch
     {
-        // Active: fact por el período en curso (ya empezó, termina en CurrentPeriodEnd).
+        // Active: factura del PRÓXIMO período. El actual ya está pago
+        // (por eso es Active). Bug histórico B3 del audit: antes
+        // devolvíamos (CurrentPeriodEnd-1mes, CurrentPeriodEnd) que era
+        // el período actual ya cobrado — confundía el snapshot.
+        // El dispatcher emite 7d antes del fin del ciclo y esta factura
+        // representa la renovación, no el período en curso.
         SubscriptionStatus.Active =>
-            (sub.CurrentPeriodEnd.AddMonths(-1), sub.CurrentPeriodEnd),
+            (sub.CurrentPeriodEnd, sub.CurrentPeriodEnd.AddMonths(1)),
 
         // Trial: factura para activar — período nuevo que arranca al pagar.
         SubscriptionStatus.Trial =>
