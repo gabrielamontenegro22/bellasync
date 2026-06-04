@@ -87,15 +87,24 @@ function ConfigSidebar({ tenantName }: { tenantName: string }) {
                 type="button"
                 disabled
                 title="Próximamente"
-                className="w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg cursor-not-allowed opacity-60"
+                className="w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg cursor-not-allowed"
               >
-                <section.icon size={17} strokeWidth={1.75} className="mt-0.5 flex-shrink-0 text-warm-400" />
+                <section.icon
+                  size={17}
+                  strokeWidth={1.75}
+                  className="mt-0.5 flex-shrink-0 text-warm-300"
+                />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13.5px] leading-tight text-warm-500 font-medium">
-                    {section.label}
+                  <div className="flex items-center gap-2">
+                    <div className="text-[13.5px] leading-tight text-warm-500 font-medium">
+                      {section.label}
+                    </div>
+                    <span className="text-[8.5px] tracking-[0.12em] uppercase font-semibold text-gold-600 bg-gold-50 border border-gold-200 px-1 py-0.5 rounded">
+                      Pronto
+                    </span>
                   </div>
                   <div className="text-[11.5px] text-warm-400 mt-0.5 truncate">
-                    {section.hint} · pronto
+                    {section.hint}
                   </div>
                 </div>
               </button>
