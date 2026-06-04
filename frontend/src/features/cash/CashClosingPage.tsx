@@ -9,7 +9,9 @@ import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
 import { fmtCop } from '@/features/customers/lib/customerLook'
 import { getDailyCashSummary, type DailyCashSummary } from '@/api/cash'
+import type { ExpenseResponse } from '@/api/expenses'
 import type { PaymentResponse } from '@/api/payments'
+import { RegisterExpenseModal } from './components/RegisterExpenseModal'
 
 /**
  * `/caja` — réplica fiel del mockup Caja.html/caja.jsx.
@@ -34,6 +36,7 @@ export function CashClosingPage() {
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy')
   const [filterMethod, setFilterMethod] = useState<string>('all')
   const [closeOpen, setCloseOpen] = useState(false)
+  const [expenseOpen, setExpenseOpen] = useState(false)
   const [closed, setClosed] = useState<{
     counted: number
     diff: number
@@ -151,14 +154,14 @@ export function CashClosingPage() {
           </div>
           <Kpi
             label="Egresos del día"
-            value={fmtCop(0)}
-            sub="próximamente"
+            value={fmtCop(data?.totalExpenses ?? 0)}
+            sub={`${data?.expenses.length ?? 0} salidas`}
             accent="terra"
             icon={<ArrowDownRight size={14} strokeWidth={1.8} />}
           />
           <Kpi
             label="Neto en caja"
-            value={fmtCop(data?.totalAmount ?? 0)}
+            value={fmtCop((data?.totalAmount ?? 0) - (data?.totalExpenses ?? 0))}
             sub="ventas − egresos"
             accent="brand"
             icon={<ArrowUpRight size={14} strokeWidth={1.8} />}
@@ -210,6 +213,7 @@ export function CashClosingPage() {
           filterMethod={filterMethod}
           onFilterChange={setFilterMethod}
           onOpenClose={() => setCloseOpen(true)}
+          onOpenExpense={() => setExpenseOpen(true)}
           closed={!!closed}
         />
       ) : (
@@ -221,10 +225,16 @@ export function CashClosingPage() {
         onClose={() => setCloseOpen(false)}
         expected={expectedCashFor(data)}
         cashSales={cashSalesFor(data)}
+        cashExpenses={cashExpensesFor(data)}
         onConfirm={(counted, diff, note) => {
           setClosed({ counted, diff, note })
           setCloseOpen(false)
         }}
+      />
+
+      <RegisterExpenseModal
+        open={expenseOpen}
+        onClose={() => setExpenseOpen(false)}
       />
     </div>
   )
@@ -241,6 +251,7 @@ function TabHoy({
   filterMethod,
   onFilterChange,
   onOpenClose,
+  onOpenExpense,
   closed,
 }: {
   data: DailyCashSummary | undefined
@@ -249,6 +260,7 @@ function TabHoy({
   filterMethod: string
   onFilterChange: (m: string) => void
   onOpenClose: () => void
+  onOpenExpense: () => void
   closed: boolean
 }) {
   const txns = data?.payments ?? []
@@ -353,17 +365,23 @@ function TabHoy({
             <h3 className="font-serif text-[18px] text-warm-800">Egresos del día</h3>
             <button
               type="button"
-              disabled
-              title="Próximamente"
-              className="text-[12px] text-warm-400 font-medium flex items-center gap-1 cursor-not-allowed"
+              onClick={onOpenExpense}
+              className="text-[12px] text-brand-700 font-medium flex items-center gap-1 hover:underline"
             >
               <Plus size={14} strokeWidth={2.2} /> Registrar egreso
             </button>
           </div>
-          <div className="px-5 py-8 text-center text-[12.5px] text-warm-500">
-            Los egresos en efectivo del día —compras a proveedores, propinas,
-            domicilios— vivirán acá pronto.
-          </div>
+          {(data?.expenses.length ?? 0) === 0 ? (
+            <div className="px-5 py-8 text-center text-[12.5px] text-warm-500">
+              Aún no hay egresos registrados hoy.
+            </div>
+          ) : (
+            <div className="divide-y divide-warm-100">
+              {data!.expenses.map((e) => (
+                <ExpenseRow key={e.id} expense={e} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -452,7 +470,7 @@ function TabHoy({
             </div>
             <div className="flex justify-between">
               <span className="text-warm-300">− Egresos efectivo</span>
-              <span className="tabular-nums">-{fmtCop(0)}</span>
+              <span className="tabular-nums">-{fmtCop(cashExpensesFor(data))}</span>
             </div>
             <div className="pt-2 mt-1 border-t border-white/15 flex justify-between items-center">
               <span className="font-medium">Esperado en caja</span>
@@ -476,6 +494,30 @@ function TabHoy({
             </button>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ExpenseRow({ expense }: { expense: ExpenseResponse }) {
+  return (
+    <div className="px-5 py-3 flex items-center gap-3">
+      <div className="text-[11.5px] tabular-nums text-warm-400 w-10">
+        {formatHHmm(expense.registeredAt)}
+      </div>
+      <div className="w-7 h-7 rounded-lg bg-terra-100/60 text-terra-500 flex items-center justify-center flex-shrink-0">
+        <ArrowDownRight size={14} strokeWidth={1.8} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] text-warm-800 truncate">{expense.concept}</div>
+        {expense.method !== 'Cash' && (
+          <div className="text-[11px] text-warm-500 truncate">
+            Pagado con {expense.method}
+          </div>
+        )}
+      </div>
+      <div className="text-[13.5px] font-medium text-terra-500 tabular-nums">
+        -{fmtCop(expense.amount)}
       </div>
     </div>
   )
@@ -557,12 +599,14 @@ function CloseModal({
   onClose,
   expected,
   cashSales,
+  cashExpenses,
   onConfirm,
 }: {
   open: boolean
   onClose: () => void
   expected: number
   cashSales: number
+  cashExpenses: number
   onConfirm: (counted: number, diff: number, note: string) => void
 }) {
   const [counted, setCounted] = useState('')
@@ -613,7 +657,7 @@ function CloseModal({
           <div className="rounded-xl bg-warm-50 border border-warm-150 p-4 space-y-2">
             <Row k="Base inicial" v={fmtCop(BASE_INICIAL)} />
             <Row k="+ Ventas en efectivo" v={fmtCop(cashSales)} />
-            <Row k="− Egresos en efectivo" v={'-' + fmtCop(0)} />
+            <Row k="− Egresos en efectivo" v={'-' + fmtCop(cashExpenses)} />
             <div className="pt-2 border-t border-warm-200 flex items-center justify-between">
               <span className="text-[13px] font-medium text-warm-800">
                 Efectivo esperado en caja
@@ -886,9 +930,13 @@ function cashSalesFor(data?: DailyCashSummary): number {
   return data.byMethod.find((b) => b.method === 'Cash')?.total ?? 0
 }
 
+function cashExpensesFor(data?: DailyCashSummary): number {
+  return data?.cashExpenses ?? 0
+}
+
 function expectedCashFor(data?: DailyCashSummary): number {
-  // expected = base + ventas efectivo − egresos efectivo (hoy 0)
-  return BASE_INICIAL + cashSalesFor(data)
+  // expected = base + ventas efectivo − egresos efectivo
+  return BASE_INICIAL + cashSalesFor(data) - cashExpensesFor(data)
 }
 
 /** "2026-06-03" en zona local — coincide con lo que el backend espera. */

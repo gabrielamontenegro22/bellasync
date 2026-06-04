@@ -1,4 +1,5 @@
 import { api } from './axios'
+import type { ExpenseResponse } from './expenses'
 import type { PaymentResponse, PaymentMethod } from './payments'
 
 export interface MethodBreakdownItem {
@@ -15,6 +16,9 @@ export interface DailyCashSummary {
   paymentCount: number
   byMethod: MethodBreakdownItem[]
   payments: PaymentResponse[]
+  totalExpenses: number
+  cashExpenses: number
+  expenses: ExpenseResponse[]
 }
 
 /**

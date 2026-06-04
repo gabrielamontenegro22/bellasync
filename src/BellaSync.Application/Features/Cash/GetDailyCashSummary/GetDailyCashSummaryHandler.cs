@@ -2,7 +2,9 @@ using BellaSync.Application.Common.Handlers;
 using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Cash.Dtos;
+using BellaSync.Application.Features.Expenses.Shared;
 using BellaSync.Application.Features.Payments.Shared;
+using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace BellaSync.Application.Features.Cash.GetDailyCashSummary;
@@ -63,6 +65,19 @@ public sealed class GetDailyCashSummaryHandler
             .OrderByDescending(b => b.Total)
             .ToList();
 
+        // Egresos del día — mismo rango UTC.
+        var expenses = await _db.Expenses
+            .AsNoTracking()
+            .Where(e => e.RegisteredAt >= dayStartUtc && e.RegisteredAt < dayEndUtc)
+            .OrderBy(e => e.RegisteredAt)
+            .ToListAsync(ct);
+
+        var totalExpenses = expenses.Sum(e => e.Amount.Amount);
+        // Solo los egresos en efectivo afectan el arqueo de caja.
+        var cashExpenses = expenses
+            .Where(e => e.Method == PaymentMethod.Cash)
+            .Sum(e => e.Amount.Amount);
+
         var response = new DailyCashSummaryResponse
         {
             Date = date.ToString("yyyy-MM-dd"),
@@ -71,6 +86,9 @@ public sealed class GetDailyCashSummaryHandler
             PaymentCount = payments.Count,
             ByMethod = byMethod,
             Payments = payments.Select(PaymentMapper.ToResponse).ToList(),
+            TotalExpenses = totalExpenses,
+            CashExpenses = cashExpenses,
+            Expenses = expenses.Select(ExpenseMapper.ToResponse).ToList(),
         };
 
         return Result<DailyCashSummaryResponse>.Success(response);
