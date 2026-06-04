@@ -55,13 +55,42 @@ type FormShape = {
   closedDates: string[]
 }
 
+/**
+ * closedDates se almacena en ISO YYYY-MM-DD para:
+ *  - Sortear cronológicamente sin parsear strings ambiguos.
+ *  - Comparar duplicados con string equality directo.
+ *  - Cuando hagamos backend, el formato ya es el correcto para
+ *    DateOnly de C#.
+ * Se renderiza al usuario con Intl.DateTimeFormat en español.
+ */
 const INITIAL: FormShape = {
   preset: 'lunsab',
   days: PRESETS.lunsab.days,
   lunchOn: true,
   lunch: [13, 14],
   holidaysOff: true,
-  closedDates: ['24 dic 2026', '25 dic 2026'],
+  closedDates: ['2026-12-24', '2026-12-25'],
+}
+
+/** Hoy en formato YYYY-MM-DD local (para min del date picker). */
+function todayISO(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** "Vie 25 dic 2026" — para mostrar las fechas en chips. */
+function formatHumanDate(iso: string): string {
+  // Parseamos manualmente para evitar el problema de zona horaria con
+  // new Date(iso) que en algunos browsers asume UTC y muestra un día menos.
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  const date = new Date(y, m - 1, d)
+  return new Intl.DateTimeFormat('es-CO', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(date).replace(/\.$/, '')
 }
 
 export function HorarioPage() {
@@ -113,9 +142,21 @@ export function HorarioPage() {
   const addClosedDate = () => {
     const v = newDate.trim()
     if (!v) return
-    set('closedDates', [...form.closedDates, v])
+    // Evitar duplicados — si la admin hace click dos veces sin querer.
+    if (form.closedDates.includes(v)) {
+      setNewDate('')
+      return
+    }
+    // Ordenar cronológicamente para que los chips se vean en orden real.
+    const next = [...form.closedDates, v].sort()
+    set('closedDates', next)
     setNewDate('')
   }
+
+  const sortedClosedDates = useMemo(
+    () => [...form.closedDates].sort(),
+    [form.closedDates],
+  )
 
   return (
     <div className="flex flex-col min-h-full">
@@ -237,22 +278,24 @@ export function HorarioPage() {
               Días cerrados puntuales
             </div>
             <div className="flex flex-wrap gap-2 mb-2.5">
-              {form.closedDates.length === 0 ? (
-                <span className="text-[11.5px] text-warm-400 italic">Ninguno aún.</span>
+              {sortedClosedDates.length === 0 ? (
+                <span className="text-[11.5px] text-warm-400 italic">
+                  Ninguno aún — elegí una fecha abajo.
+                </span>
               ) : (
-                form.closedDates.map(d => (
+                sortedClosedDates.map(d => (
                   <span
                     key={d}
-                    className="inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-full bg-warm-100 text-warm-700"
+                    className="inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-full bg-warm-100 text-warm-700 capitalize"
                   >
-                    {d}
+                    {formatHumanDate(d)}
                     <button
                       type="button"
                       onClick={() =>
                         set('closedDates', form.closedDates.filter(x => x !== d))
                       }
                       className="text-warm-400 hover:text-terra-500"
-                      aria-label={`Quitar ${d}`}
+                      aria-label={`Quitar ${formatHumanDate(d)}`}
                     >
                       <X size={12} />
                     </button>
@@ -262,7 +305,9 @@ export function HorarioPage() {
             </div>
             <div className="flex gap-2">
               <input
+                type="date"
                 value={newDate}
+                min={todayISO()}
                 onChange={(e) => setNewDate(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -270,17 +315,26 @@ export function HorarioPage() {
                     addClosedDate()
                   }
                 }}
-                placeholder="Ej. 1 ene 2027"
                 className={cls(inputCls, 'py-2 text-[13px] flex-1')}
               />
               <button
                 type="button"
                 onClick={addClosedDate}
-                className="px-3.5 py-2 rounded-lg bg-warm-100 hover:bg-warm-150 text-warm-700 text-[12.5px] font-medium flex items-center gap-1.5"
+                disabled={!newDate}
+                className={cls(
+                  'px-3.5 py-2 rounded-lg text-[12.5px] font-medium flex items-center gap-1.5 transition',
+                  newDate
+                    ? 'bg-brand-700 hover:bg-brand-800 text-white'
+                    : 'bg-warm-100 text-warm-400 cursor-not-allowed',
+                )}
               >
                 <Plus size={13} /> Agregar
               </button>
             </div>
+            <p className="text-[11px] text-warm-400 italic mt-2">
+              Click en el calendario para elegir el día. No se pueden agregar fechas
+              pasadas.
+            </p>
           </div>
         </SettingsBlock>
       </div>
