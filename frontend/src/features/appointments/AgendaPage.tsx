@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -54,8 +54,30 @@ export function AgendaPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  /**
+   * Filtro activo en las cards de stats. 'all' = mostrar todas;
+   * los otros corresponden 1:1 a las cards. Click sobre una card
+   * activa la deselecciona (vuelve a 'all'). El default es 'all'
+   * — ninguna card resaltada al abrir la pantalla.
+   */
+  const [activeFilter, setActiveFilter] = useState<AgendaFilter>('all')
   const navigate = useNavigate()
   const { data, isLoading, error } = useAgenda(date)
+
+  // Filtramos en frontend: las agendas tienen typicamente <30 citas/día,
+  // ir al backend por cada cambio de filtro sería overkill.
+  const filteredAppointments = useMemo(
+    () => (data ? filterAppointments(data.appointments, activeFilter) : []),
+    [data, activeFilter],
+  )
+
+  // Si la cita seleccionada queda fuera del filtro, la deseleccionamos
+  // (sino se rompe el panel detalle que apunta a una cita no visible).
+  useEffect(() => {
+    if (selectedId && !filteredAppointments.some(a => a.id === selectedId)) {
+      setSelectedId(null)
+    }
+  }, [selectedId, filteredAppointments])
 
   const selected = data?.appointments.find(a => a.id === selectedId) ?? null
   const urgentCount = data?.metrics.pendingValidation ?? 0
@@ -82,7 +104,11 @@ export function AgendaPage() {
           />
         )}
 
-        <Metrics metrics={data?.metrics} />
+        <Metrics
+          metrics={data?.metrics}
+          activeFilter={activeFilter}
+          onFilterChange={(f) => setActiveFilter(f === activeFilter ? 'all' : f)}
+        />
 
         {/* Única región scrollable de la columna principal */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 lg:px-8 pb-10">
@@ -98,12 +124,35 @@ export function AgendaPage() {
           )}
 
           {data && !isLoading && (
-            <AgendaTimeline
-              appointments={data.appointments}
-              date={date}
-              selectedId={selectedId}
-              onSelect={a => setSelectedId(a.id)}
-            />
+            <>
+              {/* Indicador del filtro activo: pill arriba del timeline con
+                  el conteo y un X para limpiarlo rápido. Solo aparece
+                  cuando hay filtro distinto de 'all'. */}
+              {activeFilter !== 'all' && (
+                <div className="mb-3 flex items-center gap-2 text-[12px]">
+                  <span className="text-warm-500">Mostrando</span>
+                  <span className="px-2 py-0.5 rounded-md bg-warm-800 text-white font-medium">
+                    {FILTER_LABELS[activeFilter]}
+                    <span className="opacity-70 ml-1.5 tabular-nums">
+                      {filteredAppointments.length}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveFilter('all')}
+                    className="text-warm-500 hover:text-warm-800 underline underline-offset-2"
+                  >
+                    limpiar
+                  </button>
+                </div>
+              )}
+              <AgendaTimeline
+                appointments={filteredAppointments}
+                date={date}
+                selectedId={selectedId}
+                onSelect={a => setSelectedId(a.id)}
+              />
+            </>
           )}
         </div>
       </div>
@@ -302,37 +351,102 @@ function UrgentBanner({
 
 // ===== METRICS =====
 
+/**
+ * Filtros que las cards pueden activar. 'all' = sin filtro (estado
+ * default). Las otras 3 corresponden 1:1 con los criterios visuales
+ * de las cards Esperan/Confirmadas/No-show.
+ */
+export type AgendaFilter = 'all' | 'pending' | 'confirmed' | 'noShow'
+
+export const FILTER_LABELS: Record<AgendaFilter, string> = {
+  all:        'Todas',
+  pending:    'Esperan comprobante',
+  confirmed:  'Confirmadas',
+  noShow:     'No-show',
+}
+
+/**
+ * Aplica el filtro al array de citas. Definiciones:
+ *  - pending   = Pending con depositStatus=AwaitingPayment (la cliente
+ *                reservó pero no llegó comprobante validado todavía).
+ *  - confirmed = Confirmed | InProgress | Completed (la cita "avanzó":
+ *                pagó anticipo o no requería, ya está en curso o
+ *                terminó). Hacemos esta agrupación generosa porque la
+ *                card "confirmadas" es lo que la admin lee como "todo
+ *                lo que funcionó bien".
+ *  - noShow    = NoShow.
+ */
+export function filterAppointments(
+  appointments: AppointmentResponse[],
+  filter: AgendaFilter,
+): AppointmentResponse[] {
+  switch (filter) {
+    case 'all':
+      return appointments
+    case 'pending':
+      return appointments.filter(
+        a => a.status === 'Pending' && a.depositStatus === 'AwaitingPayment',
+      )
+    case 'confirmed':
+      return appointments.filter(
+        a => a.status === 'Confirmed' || a.status === 'InProgress' || a.status === 'Completed',
+      )
+    case 'noShow':
+      return appointments.filter(a => a.status === 'NoShow')
+  }
+}
+
 function Metrics({
-  metrics,
+  metrics, activeFilter, onFilterChange,
 }: {
   metrics: { total: number; pendingValidation: number; confirmed: number; noShow: number } | undefined
+  activeFilter: AgendaFilter
+  onFilterChange: (f: AgendaFilter) => void
 }) {
   const m = metrics ?? { total: 0, pendingValidation: 0, confirmed: 0, noShow: 0 }
-  const cards = [
-    { label: `${m.total} citas hoy`,              hint: 'Programadas',         icon: Calendar,    accent: 'bg-brand-50 text-brand-700 border-brand-100' },
-    { label: `${m.pendingValidation} pendientes`, hint: 'Esperan comprobante', icon: Clock,       accent: 'bg-gold-50 text-gold-600 border-gold-200' },
-    { label: `${m.confirmed} confirmadas`,        hint: 'Pagadas o en curso',  icon: CheckCircle, accent: 'bg-brand-50 text-brand-700 border-brand-100' },
-    { label: `${m.noShow} no-show`,               hint: 'Cliente no asistió',  icon: AlertCircle, accent: 'bg-terra-100 text-terra-500 border-terra-300' },
+  const cards: Array<{
+    key: AgendaFilter
+    label: string
+    hint: string
+    icon: typeof Calendar
+    accent: string
+    /** Ring usado cuando la card está activa — color sutil que combina con el icon accent. */
+    ringActive: string
+  }> = [
+    { key: 'all',       label: `${m.total} citas hoy`,              hint: 'Programadas',         icon: Calendar,    accent: 'bg-brand-50 text-brand-700 border-brand-100',  ringActive: 'ring-brand-300' },
+    { key: 'pending',   label: `${m.pendingValidation} pendientes`, hint: 'Esperan comprobante', icon: Clock,       accent: 'bg-gold-50 text-gold-600 border-gold-200',     ringActive: 'ring-gold-300' },
+    { key: 'confirmed', label: `${m.confirmed} confirmadas`,        hint: 'Pagadas o en curso',  icon: CheckCircle, accent: 'bg-brand-50 text-brand-700 border-brand-100',  ringActive: 'ring-brand-300' },
+    { key: 'noShow',    label: `${m.noShow} no-show`,               hint: 'Cliente no asistió',  icon: AlertCircle, accent: 'bg-terra-100 text-terra-500 border-terra-300', ringActive: 'ring-terra-300' },
   ]
   return (
     <div className="px-5 lg:px-8 grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-      {cards.map(c => (
-        <div
-          key={c.label}
-          className="bg-white border border-warm-150 rounded-xl px-4 py-3.5 flex items-center gap-3 shadow-softer"
-        >
-          <div className={cls(
-            'w-9 h-9 rounded-lg flex items-center justify-center border',
-            c.accent,
-          )}>
-            <c.icon size={18} />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[15px] font-semibold text-warm-800 leading-tight">{c.label}</div>
-            <div className="text-[11.5px] text-warm-500 mt-0.5 leading-tight">{c.hint}</div>
-          </div>
-        </div>
-      ))}
+      {cards.map(c => {
+        const active = activeFilter === c.key
+        return (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => onFilterChange(c.key)}
+            title={active ? 'Quitar filtro' : `Filtrar por ${c.hint.toLowerCase()}`}
+            className={cls(
+              'bg-white border border-warm-150 rounded-xl px-4 py-3.5 flex items-center gap-3',
+              'shadow-softer transition hover:border-warm-300 hover:shadow-soft text-left',
+              active && cls('ring-2 ring-offset-1', c.ringActive),
+            )}
+          >
+            <div className={cls(
+              'w-9 h-9 rounded-lg flex items-center justify-center border',
+              c.accent,
+            )}>
+              <c.icon size={18} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[15px] font-semibold text-warm-800 leading-tight">{c.label}</div>
+              <div className="text-[11.5px] text-warm-500 mt-0.5 leading-tight">{c.hint}</div>
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 }
