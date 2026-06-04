@@ -13,7 +13,7 @@ import { extractApiError } from '@/lib/extractApiError'
 import {
   changePlan,
   getSubscription,
-  payInvoice,
+  paySubscription,
   type InvoiceRow,
   type PlanOption,
   type Subscription,
@@ -46,15 +46,16 @@ const fmtMonth = (iso: string) => {
 
 export function SuscripcionPage() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['subscription'],
     queryFn: getSubscription,
+    retry: 1,
   })
 
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [payModalOpen, setPayModalOpen] = useState(false)
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="px-6 lg:px-10 py-8 max-w-3xl">
         <SettingsHeader
@@ -64,6 +65,38 @@ export function SuscripcionPage() {
         />
         <div className="rounded-2xl bg-warm-100 h-44 animate-pulse" />
         <div className="mt-7 rounded-xl bg-warm-100 h-64 animate-pulse" />
+      </div>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <div className="px-6 lg:px-10 py-8 max-w-3xl">
+        <SettingsHeader
+          eyebrow="Ajustes del salón"
+          title="Suscripción y facturación"
+          desc="Tu plan actual de BellaSync, el próximo cobro y el historial de pagos."
+        />
+        <div className="rounded-xl bg-terra-100 border border-terra-200 px-4 py-4 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-terra-700 mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] text-terra-700 font-medium">
+              No pudimos cargar tu suscripción
+            </div>
+            <div className="text-[12px] text-terra-700/80 mt-1">
+              {error ? extractApiError(error) : 'Respuesta vacía del servidor.'}
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-3"
+              onClick={() => refetch()}
+              loading={isRefetching}
+            >
+              Reintentar
+            </Button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -103,9 +136,9 @@ export function SuscripcionPage() {
         />
       )}
 
-      {payModalOpen && data.nextDueInvoice && (
+      {payModalOpen && (
         <PayInvoiceModal
-          invoice={data.nextDueInvoice}
+          sub={data}
           onClose={() => setPayModalOpen(false)}
           onPaid={(next) => {
             onSubscriptionChange(next)
@@ -163,7 +196,18 @@ function PlanCard({
   onChangePlanClick: () => void
   onPayClick: () => void
 }) {
-  const canPay = !!sub.nextDueInvoice
+  // Label inteligente del botón principal según el estado:
+  //   Trial      → "Activar plan ahora"
+  //   PastDue    → "Regularizar pago"
+  //   Active     → "Pagar ahora" (si hay factura) | "Renovar suscripción"
+  //   Cancelled  → null
+  const payAction = (() => {
+    if (sub.status === 'Cancelled') return null
+    if (sub.status === 'Trial') return 'Activar plan ahora'
+    if (sub.status === 'PastDue') return 'Regularizar pago'
+    return sub.nextDueInvoice ? 'Pagar ahora' : 'Renovar suscripción'
+  })()
+
   return (
     <div className="rounded-2xl bg-warm-800 text-white p-6 relative overflow-hidden">
       <div className="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-brand-700/30 blur-2xl" />
@@ -204,15 +248,15 @@ function PlanCard({
           >
             Cambiar plan
           </button>
-          <button
-            type="button"
-            onClick={onPayClick}
-            disabled={!canPay}
-            className="px-3.5 py-2 rounded-lg bg-gold-300 hover:bg-gold-200 text-warm-800 text-[12.5px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            title={!canPay ? 'No hay factura pendiente' : undefined}
-          >
-            Pagar ahora
-          </button>
+          {payAction && (
+            <button
+              type="button"
+              onClick={onPayClick}
+              className="px-3.5 py-2 rounded-lg bg-gold-300 hover:bg-gold-200 text-warm-800 text-[12.5px] font-medium"
+            >
+              {payAction}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -452,11 +496,11 @@ function PlanRow({
 const PAY_METHODS = ['Bancolombia', 'Nequi', 'Daviplata', 'Davivienda', 'BBVA', 'Otro']
 
 function PayInvoiceModal({
-  invoice,
+  sub,
   onClose,
   onPaid,
 }: {
-  invoice: InvoiceRow
+  sub: Subscription
   onClose: () => void
   onPaid: (next: Subscription) => void
 }) {
@@ -464,9 +508,18 @@ function PayInvoiceModal({
   const [reference, setReference] = useState('')
   const [err, setErr] = useState<string | null>(null)
 
+  // Si hay factura pendiente, usamos su monto/plan. Si no, el monto será
+  // el del plan vigente (cuando el backend la emita en el momento).
+  const invoice = sub.nextDueInvoice
+  const planName = invoice?.planName ?? sub.planName
+  const amount = invoice?.amount ?? sub.monthlyPrice
+  const periodLabel = invoice
+    ? `${fmtMonth(invoice.periodStart)} – ${fmtMonth(invoice.periodEnd)}`
+    : 'Próximo mes (se emite al confirmar)'
+
   const mut = useMutation({
     mutationFn: () =>
-      payInvoice(invoice.id, {
+      paySubscription({
         paymentMethod: method,
         reference: reference.trim() || null,
       }),
@@ -483,18 +536,16 @@ function PayInvoiceModal({
       <div className="rounded-xl bg-warm-50 border border-warm-150 p-4 mb-4">
         <div className="flex items-center justify-between text-[12.5px]">
           <span className="text-warm-500">Plan</span>
-          <span className="text-warm-800 font-medium">{invoice.planName}</span>
+          <span className="text-warm-800 font-medium">{planName}</span>
         </div>
         <div className="flex items-center justify-between text-[12.5px] mt-1.5">
           <span className="text-warm-500">Período</span>
-          <span className="text-warm-700">
-            {fmtMonth(invoice.periodStart)} – {fmtMonth(invoice.periodEnd)}
-          </span>
+          <span className="text-warm-700">{periodLabel}</span>
         </div>
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-warm-150">
           <span className="text-[13px] text-warm-800 font-medium">Monto a pagar</span>
           <span className="font-serif text-[22px] tabular-nums text-warm-800">
-            {fmt(invoice.amount)}
+            {fmt(amount)}
           </span>
         </div>
       </div>

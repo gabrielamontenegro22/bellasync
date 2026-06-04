@@ -5,15 +5,28 @@ using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Subscription.Dtos;
 using BellaSync.Application.Features.Subscription.GetSubscription;
 using BellaSync.Domain.Common;
+using BellaSync.Domain.Entities;
+using BellaSync.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace BellaSync.Application.Features.Subscription.ChangePlan;
 
 /// <summary>
-/// Aplica el cambio de plan. Valida que el plan exista en el catálogo y
-/// delega a TenantSubscription.ChangePlan (que rechaza la transición si
-/// la suscripción está cancelada).
+/// Aplica el cambio de plan + emite factura prorrateada si es UPGRADE.
+///
+/// Reglas:
+///   - El cambio del PlanCode es inmediato (no espera al próximo ciclo).
+///   - Si el plan nuevo es más caro Y la sub está Active con días
+///     restantes en el período, emite una factura Pending por el
+///     prorrateo (diff × días-restantes / 30). El admin debe pagar
+///     esa factura para no quedar PastDue.
+///   - Downgrade: no se emite nada ni se reembolsa. La diferencia
+///     simplemente aplica al próximo ciclo.
+///   - Trial: no se emite factura prorrateada — el trial sigue siendo
+///     gratis con el plan nuevo hasta que termine.
+///   - PastDue: no se emite factura adicional — ya tiene una pendiente.
+///   - Cancelled: rechazado por la entidad.
 /// </summary>
 public sealed class ChangePlanHandler
     : ICommandHandler<ChangePlanCommand, SubscriptionResponse>
@@ -49,8 +62,8 @@ public sealed class ChangePlanHandler
             return ApplicationError.Validation(
                 "subscription.plan_required", "El plan es obligatorio.");
 
-        var plan = SubscriptionPlanCatalog.Get(command.PlanCode);
-        if (plan is null)
+        var newPlan = SubscriptionPlanCatalog.Get(command.PlanCode);
+        if (newPlan is null)
             return ApplicationError.Validation(
                 "subscription.plan_unknown",
                 $"El plan '{command.PlanCode}' no existe.");
@@ -63,23 +76,53 @@ public sealed class ChangePlanHandler
                 "subscription.not_found",
                 "El salón no tiene una suscripción activa.");
 
+        var oldPlan = SubscriptionPlanCatalog.Get(sub.PlanCode);
+        var now = _clock.UtcNow;
+
         try
         {
-            sub.ChangePlan(plan.Code, _clock.UtcNow);
+            sub.ChangePlan(newPlan.Code, now);
         }
         catch (DomainException ex)
         {
             return ApplicationError.Conflict("subscription.change_rejected", ex.Message);
         }
 
+        // Prorrateo: solo en upgrade real de Active. Trial / PastDue /
+        // Cancelled no aplican (los dos primeros no facturan extra ahora;
+        // el último ya está bloqueado por la entidad).
+        if (sub.Status == SubscriptionStatus.Active
+            && oldPlan is not null
+            && newPlan.MonthlyPrice > oldPlan.MonthlyPrice)
+        {
+            var daysRemaining = (sub.CurrentPeriodEnd - now).TotalDays;
+            var charge = SubscriptionPlanCatalog.ComputeProratedUpgradeCharge(
+                oldPlan.MonthlyPrice, newPlan.MonthlyPrice, daysRemaining);
+
+            if (charge > 0)
+            {
+                var invoice = SubscriptionInvoice.Issue(
+                    tenantId: _currentTenant.TenantId,
+                    planCode: newPlan.Code,
+                    amount: Money.Create(charge),
+                    periodStart: now,
+                    periodEnd: sub.CurrentPeriodEnd,
+                    dueDate: now.AddDays(7),
+                    utcNow: now);
+                _db.SubscriptionInvoices.Add(invoice);
+
+                _logger.LogInformation(
+                    "Tenant {TenantId} upgrade {Old}→{New}: factura prorrateada ${Charge} ({Days:F1} días)",
+                    _currentTenant.TenantId, oldPlan.Code, newPlan.Code, charge, daysRemaining);
+            }
+        }
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Tenant {TenantId} cambió plan a {PlanCode}",
-            _currentTenant.TenantId, plan.Code);
+            _currentTenant.TenantId, newPlan.Code);
 
-        // Reusa el handler de GetSubscription para devolver el snapshot
-        // completo — evita duplicar la lógica de armado del response.
         return await _getSub.HandleAsync(new GetSubscriptionQuery(), ct);
     }
 }

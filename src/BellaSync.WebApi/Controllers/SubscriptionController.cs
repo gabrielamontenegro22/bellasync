@@ -3,6 +3,7 @@ using BellaSync.Application.Features.Subscription.ChangePlan;
 using BellaSync.Application.Features.Subscription.Dtos;
 using BellaSync.Application.Features.Subscription.GetSubscription;
 using BellaSync.Application.Features.Subscription.MarkInvoicePaid;
+using BellaSync.Application.Features.Subscription.PayCurrentPeriod;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +45,20 @@ public class SubscriptionController : ControllerBase
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(new ChangePlanCommand(request.PlanCode), ct);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("pay")]
+    [ProducesResponseType(typeof(SubscriptionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Pay(
+        [FromBody] PayInvoiceRequest request,
+        [FromServices] ICommandHandler<PayCurrentPeriodCommand, SubscriptionResponse> handler,
+        CancellationToken ct)
+    {
+        var cmd = new PayCurrentPeriodCommand(request.PaymentMethod, request.Reference);
+        var result = await handler.HandleAsync(cmd, ct);
         return result.ToActionResult();
     }
 

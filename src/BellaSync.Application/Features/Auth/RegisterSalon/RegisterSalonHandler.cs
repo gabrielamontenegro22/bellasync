@@ -4,6 +4,7 @@ using BellaSync.Application.Common.Interfaces;
 using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Auth.Dtos;
 using BellaSync.Application.Features.Auth.Shared;
+using BellaSync.Application.Features.Subscription;
 using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -15,17 +16,20 @@ public sealed class RegisterSalonHandler : ICommandHandler<RegisterSalonCommand,
     private readonly IApplicationDbContext _db;
     private readonly IPasswordHasher _passwordHasher;
     private readonly AuthTokenIssuer _tokenIssuer;
+    private readonly IClock _clock;
     private readonly ILogger<RegisterSalonHandler> _logger;
 
     public RegisterSalonHandler(
         IApplicationDbContext db,
         IPasswordHasher passwordHasher,
         AuthTokenIssuer tokenIssuer,
+        IClock clock,
         ILogger<RegisterSalonHandler> logger)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _tokenIssuer = tokenIssuer;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -64,8 +68,18 @@ public sealed class RegisterSalonHandler : ICommandHandler<RegisterSalonCommand,
             fullName: command.AdminFullName,
             role: UserRole.SalonAdmin);
 
+        // Suscripción inicial: arranca en trial profesional. Esto evita
+        // que el GetSubscriptionHandler tenga que crear la sub on-demand
+        // (anti-patrón: query mutando estado).
+        var subscription = TenantSubscription.StartTrial(
+            tenantId: tenant.Id,
+            planCode: SubscriptionPlanCatalog.DefaultPlanCode,
+            trialDays: SubscriptionPlanCatalog.DefaultTrialDays,
+            utcNow: _clock.UtcNow);
+
         _db.Tenants.Add(tenant);
         _db.Users.Add(adminUser);
+        _db.TenantSubscriptions.Add(subscription);
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(

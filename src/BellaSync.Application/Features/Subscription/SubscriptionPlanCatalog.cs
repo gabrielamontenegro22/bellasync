@@ -77,4 +77,30 @@ public static class SubscriptionPlanCatalog
 
     /// <summary>Días de trial al onboarding.</summary>
     public const int DefaultTrialDays = 14;
+
+    /// <summary>Días estándar usados como base del prorrateo.</summary>
+    public const int ProratingDaysInMonth = 30;
+
+    /// <summary>
+    /// Cargo prorrateado por upgrade mid-cycle. Si el plan nuevo cuesta
+    /// menos o igual, devuelve 0 (no hay reembolso por downgrade —
+    /// anti-pasarela, simple).
+    ///
+    /// Fórmula: (priceNew − priceOld) × (díasRestantes / 30), redondeado
+    /// al peso. Devuelve 0 si daysRemaining ≤ 0 o si el cargo sería &lt;
+    /// $1.000 (no vale la pena emitir una factura por pesos).
+    /// </summary>
+    public static decimal ComputeProratedUpgradeCharge(
+        decimal oldMonthlyPrice,
+        decimal newMonthlyPrice,
+        double daysRemaining)
+    {
+        if (newMonthlyPrice <= oldMonthlyPrice) return 0m;
+        if (daysRemaining <= 0) return 0m;
+
+        var diff = newMonthlyPrice - oldMonthlyPrice;
+        var prorated = diff * (decimal)(daysRemaining / ProratingDaysInMonth);
+        var rounded = Math.Round(prorated, 0, MidpointRounding.AwayFromZero);
+        return rounded < 1000m ? 0m : rounded;
+    }
 }

@@ -99,6 +99,10 @@ public class TenantSubscription : BaseEntity, ITenantEntity
     /// <summary>
     /// Transición Trial → Active al recibir el primer pago. La fecha
     /// del próximo cobro se computa como now + 1 mes.
+    ///
+    /// IMPORTANTE: preserva TrialEndsAt — es info histórica útil para
+    /// reportes de conversión ("cuántos clientes convirtieron desde el
+    /// trial"). No se borra al activar.
     /// </summary>
     public void Activate(DateTime utcNow)
     {
@@ -107,7 +111,6 @@ public class TenantSubscription : BaseEntity, ITenantEntity
             throw new DomainException("No se puede activar una suscripción cancelada.");
 
         Status = SubscriptionStatus.Active;
-        TrialEndsAt = null;
         CurrentPeriodEnd = utcNow.AddMonths(1);
         UpdatedAt = utcNow;
     }

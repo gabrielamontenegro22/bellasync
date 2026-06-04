@@ -91,3 +91,17 @@ export async function payInvoice(
   )
   return data
 }
+
+/**
+ * "Pagar suscripción ahora" inteligente:
+ *   - Si hay una factura Pending, la paga.
+ *   - Si no hay, emite una para el período actual y la paga atómicamente.
+ *
+ * El frontend siempre llama a este endpoint sin preocuparse por el estado
+ * actual — funciona para Trial (primera activación), Active (renovación),
+ * PastDue (regularización).
+ */
+export async function paySubscription(req: PayInvoiceRequest): Promise<Subscription> {
+  const { data } = await api.post<Subscription>('/api/Subscription/pay', req)
+  return data
+}

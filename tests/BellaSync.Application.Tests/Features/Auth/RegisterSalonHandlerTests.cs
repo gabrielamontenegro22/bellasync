@@ -15,7 +15,7 @@ public class RegisterSalonHandlerTests
     {
         var ctx = new HandlerTestContext();
         var handler = new RegisterSalonHandler(
-            ctx.Db, ctx.PasswordHasher, ctx.TokenIssuer, ctx.Logger<RegisterSalonHandler>());
+            ctx.Db, ctx.PasswordHasher, ctx.TokenIssuer, ctx.Clock, ctx.Logger<RegisterSalonHandler>());
         return (ctx, handler);
     }
 
