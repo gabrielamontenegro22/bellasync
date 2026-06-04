@@ -162,7 +162,21 @@ export function AgendaTimeline({ appointments, date, selectedId, onSelect }: Age
   const gridCols = `${RAIL_WIDTH}px repeat(${stylists.length}, minmax(220px, 1fr))`
 
   return (
-    <div ref={wrapperRef} className="bg-white border border-warm-150 rounded-xl overflow-hidden shadow-softer">
+    <>
+      {/* MOBILE (<md): lista vertical agrupada por hora. La grid horizontal
+          con N columnas por estilista era ilegible en <500px con 3+ estilistas.
+          La lista mantiene la info esencial pero priorizando el eje temporal. */}
+      <div className="md:hidden">
+        <AgendaListMobile
+          appointments={appointments}
+          stylists={stylists}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
+      </div>
+
+      {/* DESKTOP/TABLET (≥md): grid timeline original */}
+      <div ref={wrapperRef} className="hidden md:block bg-white border border-warm-150 rounded-xl overflow-hidden shadow-softer">
       {/* Header sticky con la fila de estilistas */}
       <div
         className="grid sticky top-0 z-20 bg-white border-b border-warm-150"
@@ -266,7 +280,8 @@ export function AgendaTimeline({ appointments, date, selectedId, onSelect }: Age
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -551,4 +566,143 @@ interface SalonHoursLike {
   lunchBreakFromHour: number
   lunchBreakToHour: number
   closedDates: string[]
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// AgendaListMobile — vista de lista vertical agrupada por bloque horario.
+// La grid horizontal de N columnas por estilista se vuelve ilegible en <md
+// (cada columna queda ~70-100px). Acá priorizamos el eje temporal:
+// agrupamos por franja del día (mañana/mediodía/tarde) y mostramos cada
+// cita como card compacta con: hora, cliente, servicio, estilista, status.
+// ────────────────────────────────────────────────────────────────────────────
+
+function AgendaListMobile({
+  appointments, stylists, selectedId, onSelect,
+}: {
+  appointments: AppointmentResponse[]
+  stylists: StylistResponse[]
+  selectedId: string | null
+  onSelect: (a: AppointmentResponse) => void
+}) {
+  // Mapa stylistId → stylist para mostrar nombre + tono
+  const stylistMap = useMemo(() => {
+    const m = new Map<string, StylistResponse>()
+    stylists.forEach(s => m.set(s.id, s))
+    return m
+  }, [stylists])
+
+  // Ordenadas cronológicamente
+  const sorted = useMemo(
+    () => [...appointments].sort(
+      (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+    ),
+    [appointments],
+  )
+
+  // Agrupadas por bloque del día. La admin típica piensa en "qué tengo en
+  // la mañana" / "qué tengo en la tarde" — no en cada hora suelta.
+  const groups = useMemo(() => {
+    const morning: AppointmentResponse[] = []   // < 12pm
+    const midday: AppointmentResponse[] = []    // 12pm–4pm
+    const afternoon: AppointmentResponse[] = [] // ≥ 4pm
+
+    for (const a of sorted) {
+      const h = new Date(a.startAt).getHours()
+      if (h < 12) morning.push(a)
+      else if (h < 16) midday.push(a)
+      else afternoon.push(a)
+    }
+    return [
+      { id: 'morning',   label: 'Mañana',     items: morning   },
+      { id: 'midday',    label: 'Mediodía',   items: midday    },
+      { id: 'afternoon', label: 'Tarde',      items: afternoon },
+    ].filter(g => g.items.length > 0)
+  }, [sorted])
+
+  if (sorted.length === 0) {
+    return (
+      <div className="bg-white border border-warm-150 rounded-xl p-10 text-center">
+        <div className="font-serif text-[18px] text-warm-700">Sin citas para este día</div>
+        <div className="text-[12.5px] text-warm-500 mt-1">
+          Tocá <span className="font-medium text-brand-700">+ Nueva cita</span> para agendar.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map(group => (
+        <section
+          key={group.id}
+          className="bg-white border border-warm-150 rounded-xl overflow-hidden"
+        >
+          <div className="px-4 py-2.5 bg-warm-50/60 border-b border-warm-150 flex items-center justify-between">
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-warm-500 font-medium">
+              {group.label}
+            </h3>
+            <span className="text-[11px] text-warm-400 tabular-nums">
+              {group.items.length} {group.items.length === 1 ? 'cita' : 'citas'}
+            </span>
+          </div>
+          <ul className="divide-y divide-warm-100">
+            {group.items.map(a => {
+              const stylist = stylistMap.get(a.stylistId)
+              const sTone = stylist ? toneOf(stylist.id) : null
+              const status = STATUS_BLOCK[a.status]
+              const startMin = isoToLocalMinutes(a.startAt)
+              const endMin = isoToLocalMinutes(a.endAt)
+              const isSelected = selectedId === a.id
+              return (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(a)}
+                    className={cls(
+                      'w-full px-4 py-3 flex items-start gap-3 text-left transition',
+                      isSelected ? 'bg-brand-50/60' : 'hover:bg-warm-50',
+                    )}
+                  >
+                    {/* Hora a la izquierda — col fija para alinear */}
+                    <div className="w-14 flex-shrink-0 pt-0.5">
+                      <div className="text-[13px] font-medium text-warm-800 tabular-nums">
+                        {fmtTime12(startMin)}
+                      </div>
+                      <div className="text-[10.5px] text-warm-400 tabular-nums">
+                        {fmtTime12(endMin)}
+                      </div>
+                    </div>
+
+                    {/* Contenido: cliente + servicio + estilista */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cls('w-1.5 h-1.5 rounded-full flex-shrink-0', status.dot)} />
+                        <div className="text-[13.5px] font-medium text-warm-900 truncate">
+                          {a.customerName}
+                        </div>
+                      </div>
+                      <div className="text-[12px] text-warm-500 mt-0.5 truncate">
+                        {a.serviceName}
+                      </div>
+                      {stylist && sTone && (
+                        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-warm-500">
+                          <span className={cls(
+                            'w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0',
+                            sTone.bg, sTone.fg,
+                          )}>
+                            {initialsOf(stylist.fullName)}
+                          </span>
+                          <span className="truncate">{stylist.fullName}</span>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )
 }

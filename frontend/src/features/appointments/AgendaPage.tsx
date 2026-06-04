@@ -261,7 +261,7 @@ function Header({
             <span>Agenda del día</span>
           </div>
           <div className="mt-1 flex items-baseline gap-3 flex-wrap">
-            <h1 className="font-serif text-[34px] lg:text-[40px] leading-[1.05] text-warm-800 tracking-tight">
+            <h1 className="font-serif text-[26px] sm:text-[34px] lg:text-[40px] leading-[1.05] text-warm-800 tracking-tight">
               {fmtDateLong(parseLocalDate(date))}
             </h1>
             {isToday && (
