@@ -18,7 +18,7 @@ import {
 import type { StylistFormData } from './schemas'
 import type { StatusFilter } from './types'
 import { cls } from '@/lib/cls'
-import { useIsAdmin } from '@/features/auth/useAuth'
+import { usePermissions } from '@/features/auth/useAuth'
 
 /**
  * Vista principal del catálogo de Estilistas.
@@ -33,7 +33,7 @@ import { useIsAdmin } from '@/features/auth/useAuth'
  *  - DELETE /api/Stylists/{id}
  */
 export function StylistsPage() {
-  const isAdmin = useIsAdmin()
+  const { canEditStylists: isAdmin } = usePermissions()
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)

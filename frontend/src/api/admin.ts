@@ -63,9 +63,20 @@ export async function updatePaymentPolicy(req: PaymentPolicy): Promise<PaymentPo
  * - canCloseCash: si recepción puede firmar el cierre de caja del día.
  */
 export interface ReceptionPermissions {
+  // Operación diaria
   expenseCapCop: number | null
   canCancelWithMoney: boolean
   canCloseCash: boolean
+  // Catálogo
+  canEditStylists: boolean
+  canEditServices: boolean
+  // Información sensible
+  canViewReports: boolean
+  canViewCommissions: boolean
+  // Configuración del salón
+  canEditSchedule: boolean
+  canEditPaymentPolicy: boolean
+  canEditSalonInfo: boolean
 }
 
 /** GET /api/Admin/reception-permissions */

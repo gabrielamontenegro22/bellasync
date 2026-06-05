@@ -18,7 +18,7 @@ import {
 import { serviceExtrasStorage } from './storage'
 import type { ServiceFormData } from './schemas'
 import type { StatusFilter } from './types'
-import { useIsAdmin } from '@/features/auth/useAuth'
+import { usePermissions } from '@/features/auth/useAuth'
 
 /**
  * Vista principal del Catálogo de Servicios.
@@ -34,7 +34,7 @@ import { useIsAdmin } from '@/features/auth/useAuth'
  * pueda mostrarlos en el frontend.
  */
 export function ServicesPage() {
-  const isAdmin = useIsAdmin()
+  const { canEditServices: isAdmin } = usePermissions()
   // Estado de filtros
   const [category, setCategory] = useState<ServiceCategoryEnum | 'all'>('all')
   const [status, setStatus] = useState<StatusFilter>('all')

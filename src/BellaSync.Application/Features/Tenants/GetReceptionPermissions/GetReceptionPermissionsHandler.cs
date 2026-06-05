@@ -35,6 +35,13 @@ public sealed class GetReceptionPermissionsHandler
                 ExpenseCapCop = t.ReceptionExpenseCapCop,
                 CanCancelWithMoney = t.ReceptionCanCancelWithMoney,
                 CanCloseCash = t.ReceptionCanCloseCash,
+                CanEditStylists = t.ReceptionCanEditStylists,
+                CanEditServices = t.ReceptionCanEditServices,
+                CanViewReports = t.ReceptionCanViewReports,
+                CanViewCommissions = t.ReceptionCanViewCommissions,
+                CanEditSchedule = t.ReceptionCanEditSchedule,
+                CanEditPaymentPolicy = t.ReceptionCanEditPaymentPolicy,
+                CanEditSalonInfo = t.ReceptionCanEditSalonInfo,
             })
             .FirstOrDefaultAsync(ct);
 

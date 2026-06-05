@@ -41,7 +41,14 @@ public sealed class UpdateReceptionPermissionsHandler
             tenant.UpdateReceptionPermissions(
                 command.ExpenseCapCop,
                 command.CanCancelWithMoney,
-                command.CanCloseCash);
+                command.CanCloseCash,
+                command.CanEditStylists,
+                command.CanEditServices,
+                command.CanViewReports,
+                command.CanViewCommissions,
+                command.CanEditSchedule,
+                command.CanEditPaymentPolicy,
+                command.CanEditSalonInfo);
         }
         catch (DomainException ex)
         {
@@ -51,14 +58,21 @@ public sealed class UpdateReceptionPermissionsHandler
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Permisos de recepción actualizados en tenant {TenantId}: cap={Cap}, cancelMoney={Cancel}, closeCash={Close}",
-            tenant.Id, command.ExpenseCapCop, command.CanCancelWithMoney, command.CanCloseCash);
+            "Permisos de recepción actualizados en tenant {TenantId}.",
+            tenant.Id);
 
         return Result<ReceptionPermissionsResponse>.Success(new ReceptionPermissionsResponse
         {
             ExpenseCapCop = tenant.ReceptionExpenseCapCop,
             CanCancelWithMoney = tenant.ReceptionCanCancelWithMoney,
             CanCloseCash = tenant.ReceptionCanCloseCash,
+            CanEditStylists = tenant.ReceptionCanEditStylists,
+            CanEditServices = tenant.ReceptionCanEditServices,
+            CanViewReports = tenant.ReceptionCanViewReports,
+            CanViewCommissions = tenant.ReceptionCanViewCommissions,
+            CanEditSchedule = tenant.ReceptionCanEditSchedule,
+            CanEditPaymentPolicy = tenant.ReceptionCanEditPaymentPolicy,
+            CanEditSalonInfo = tenant.ReceptionCanEditSalonInfo,
         });
     }
 }
