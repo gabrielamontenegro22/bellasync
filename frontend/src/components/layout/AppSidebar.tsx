@@ -47,13 +47,22 @@ interface NavItem {
  * usan comisiones (sueldo fijo / alquiler de silla) y no queremos
  * ensuciarles el sidebar.
  *
- * Matriz de permisos (espejo de los [Authorize Roles=...] del backend):
- *   - Agenda/Clientes/Validación/Caja → ambos roles (operativo diario)
- *   - Servicios/Estilistas → ambos pueden VER, solo admin puede editar
- *     (la página igual sirve para que recepción consulte servicios al
- *      crear cita; la app no oculta los botones de edición internos
- *      pero el backend rechaza el POST/PUT/DELETE).
- *   - Reportes/Comisiones/Configuración → solo admin (negocio + setup)
+ * Matriz de visibilidad (combinada con el filtro de abajo):
+ *   - Agenda/Clientes/Validación/Caja → siempre ambos roles (operativo).
+ *   - Servicios/Estilistas → siempre ambos roles ven el item; la
+ *     edición dentro de cada página la controla CanEditServices /
+ *     CanEditStylists (la página muestra/oculta botones de crear/editar).
+ *   - Reportes → admin siempre; recepción solo con CanViewReports.
+ *   - Comisiones → admin siempre (si el módulo está enabled); recepción
+ *     solo con CanViewCommissions. Liquidar sigue admin-only en el backend.
+ *   - Configuración → admin siempre; recepción solo si tiene al menos
+ *     uno de los 3 permisos configurables de subsecciones
+ *     (CanEditSchedule / CanEditPaymentPolicy / CanEditSalonInfo).
+ *
+ * El filtro de abajo replica la lógica del backend (frontend == defensa
+ * UI; backend == defensa real). Si recepción burla el sidebar y entra
+ * por URL directa, los endpoints devuelven 403 y los guards de ruta
+ * (<RequirePermission/>) la mandan a /agenda.
  */
 const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/agenda',                  label: 'Agenda',              icon: Calendar                 },

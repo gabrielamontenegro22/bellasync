@@ -18,6 +18,7 @@ public sealed class CreateCashClosingHandler
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
     private readonly ICurrentUserService _currentUser;
+    private readonly IReceptionPermissionsService _perms;
     private readonly IClock _clock;
     private readonly ILogger<CreateCashClosingHandler> _logger;
 
@@ -25,12 +26,14 @@ public sealed class CreateCashClosingHandler
         IApplicationDbContext db,
         ICurrentTenantService currentTenant,
         ICurrentUserService currentUser,
+        IReceptionPermissionsService perms,
         IClock clock,
         ILogger<CreateCashClosingHandler> logger)
     {
         _db = db;
         _currentTenant = currentTenant;
         _currentUser = currentUser;
+        _perms = perms;
         _clock = clock;
         _logger = logger;
     }
@@ -40,16 +43,14 @@ public sealed class CreateCashClosingHandler
     {
         // Guard de rol — configurable por tenant.
         // Admin: siempre puede firmar el cierre.
-        // Recepción: solo si la admin lo activó en /configuracion/permisos.
+        // Recepción: solo si la admin activó CanCloseCash en
+        // /configuracion/permisos. Snapshot del IReceptionPermissionsService
+        // (cacheado scoped por request, mismo source de verdad que usan
+        // los attributes [RequireReceptionPermission] en los controllers).
         if (!_currentUser.IsSalonAdmin)
         {
-            var canCloseCash = await _db.Tenants
-                .AsNoTracking()
-                .Where(t => t.Id == _currentTenant.TenantId)
-                .Select(t => t.ReceptionCanCloseCash)
-                .FirstOrDefaultAsync(ct);
-
-            if (!canCloseCash)
+            var perms = await _perms.GetAsync(ct);
+            if (!perms.CanCloseCash)
             {
                 return ApplicationError.Forbidden(
                     "cash_closing.reception_not_allowed",

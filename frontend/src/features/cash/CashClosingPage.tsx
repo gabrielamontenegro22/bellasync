@@ -46,6 +46,7 @@ export function CashClosingPage() {
   // Hook unificado de permisos — admin siempre true, recepción según
   // toggle del tenant. Cachea polling automático (20s) en useAuth.
   const { canCloseCash } = usePermissions()
+  const qc = useQueryClient()
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy')
   const [filterMethod, setFilterMethod] = useState<string>('all')
   const [closeOpen, setCloseOpen] = useState(false)

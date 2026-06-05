@@ -82,10 +82,19 @@ export function SettingsField({
   children,
 }: {
   label: string
-  hint?: string
+  /**
+   * Texto/JSX corto a la derecha del label. Si pasás JSX largo con
+   * formateo (ej. <strong>) el componente lo baja debajo del input
+   * para no romper el alineado right-aligned de hints cortos.
+   */
+  hint?: React.ReactNode
   required?: boolean
   children: React.ReactNode
 }) {
+  // Los hints simples (string corto) van en la fila del label.
+  // Los hints con JSX/largos van como bloque debajo del input para
+  // no chocar contra el text-right del slot superior.
+  const hintIsSimple = typeof hint === 'string' && hint.length < 60
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 mb-1.5">
@@ -93,9 +102,14 @@ export function SettingsField({
           {label}
           {required && <span className="text-terra-500"> *</span>}
         </label>
-        {hint && <span className="text-[11px] text-warm-400 text-right">{hint}</span>}
+        {hintIsSimple && (
+          <span className="text-[11px] text-warm-400 text-right">{hint}</span>
+        )}
       </div>
       {children}
+      {hint && !hintIsSimple && (
+        <p className="text-[11.5px] text-warm-500 mt-1.5 leading-snug">{hint}</p>
+      )}
     </div>
   )
 }

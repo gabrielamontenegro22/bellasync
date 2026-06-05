@@ -18,6 +18,7 @@ public sealed class CancelAppointmentHandler
     private readonly IClock _clock;
     private readonly WhatsAppEnqueuer _whatsApp;
     private readonly ICurrentUserService _currentUser;
+    private readonly IReceptionPermissionsService _perms;
     private readonly ILogger<CancelAppointmentHandler> _logger;
 
     public CancelAppointmentHandler(
@@ -25,12 +26,14 @@ public sealed class CancelAppointmentHandler
         IClock clock,
         WhatsAppEnqueuer whatsApp,
         ICurrentUserService currentUser,
+        IReceptionPermissionsService perms,
         ILogger<CancelAppointmentHandler> logger)
     {
         _db = db;
         _clock = clock;
         _whatsApp = whatsApp;
         _currentUser = currentUser;
+        _perms = perms;
         _logger = logger;
     }
 
@@ -72,13 +75,11 @@ public sealed class CancelAppointmentHandler
 
             if (hasMoney)
             {
-                var canCancelWithMoney = await _db.Tenants
-                    .AsNoTracking()
-                    .Where(t => t.Id == appointment.TenantId)
-                    .Select(t => t.ReceptionCanCancelWithMoney)
-                    .FirstOrDefaultAsync(ct);
-
-                if (!canCancelWithMoney)
+                // Snapshot cacheado por request (IReceptionPermissionsService).
+                // Para el primer chequeo del request hace 1 query a tenants;
+                // chequeos siguientes son in-memory.
+                var perms = await _perms.GetAsync(ct);
+                if (!perms.CanCancelWithMoney)
                 {
                     return ApplicationError.Forbidden(
                         "appointment.cancel_with_money_requires_admin",

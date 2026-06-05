@@ -11,12 +11,18 @@ using Microsoft.AspNetCore.Mvc;
 namespace BellaSync.WebApi.Controllers;
 
 /// <summary>
-/// Comisiones de estilistas. Solo SalonAdmin — es info sensible
-/// (cuánto cobra cada uno) y la liquidación implica plata real.
+/// Comisiones de estilistas. Info sensible (cuánto cobra cada uno).
 ///
-/// El módulo es opt-in: la admin lo activa desde /api/Admin/commissions-setting.
-/// Estos endpoints igual responden aunque esté OFF — el frontend es el
-/// que esconde la pantalla cuando no está activado.
+/// Autorización:
+///   - Admin: lectura y liquidación SIEMPRE.
+///   - Recepción: solo lectura SI la admin le activó CanViewCommissions
+///     en /configuracion/permisos (filter de clase). LIQUIDAR sigue
+///     admin-only (override en POST /payouts) — la liquidación maneja
+///     plata real, recepción nunca debería disparar transferencias.
+///
+/// El módulo además es opt-in a nivel tenant: la admin lo activa desde
+/// /api/Admin/commissions-setting. Estos endpoints igual responden
+/// aunque esté OFF — el frontend es el que esconde la pantalla.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]

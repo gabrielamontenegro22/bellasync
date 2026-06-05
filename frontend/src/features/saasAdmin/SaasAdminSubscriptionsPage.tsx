@@ -36,7 +36,7 @@ const fmtDateTime = (iso: string) => {
 
 export function SaasAdminSubscriptionsPage() {
   const qc = useQueryClient()
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['saasAdmin', 'pendingValidations'],
     queryFn: listPendingValidations,
   })
