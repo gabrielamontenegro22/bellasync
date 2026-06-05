@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Clock } from 'lucide-react'
+import { Clock, RotateCcw } from 'lucide-react'
 import { extractApiError } from '@/lib/extractApiError'
 import { getPaymentPolicy, updatePaymentPolicy, type PaymentPolicy } from '@/api/admin'
 import {
@@ -11,16 +11,24 @@ const KEY = 'payment-policy'
 
 /**
  * `/configuracion/pagos` — la admin del salón configura cuánto tiempo
- * reservar un cupo cuando la cliente agenda con anticipo pendiente.
+ * reservar un cupo cuando la cliente agenda con anticipo pendiente, y
+ * hasta cuándo se devuelve el anticipo si la cliente cancela.
  *
- * Mantiene los mismos 3 parámetros del backend
- * (holdDurationHours, holdMinBeforeAppointmentMinutes, minAdvanceMinutes)
- * pero presenta el formulario al estilo del mockup config-servicios:
- * eyebrow + título serif gigante + bloque único "Tiempos y reglas"
- * con NumberStepper en cada fila + SaveBar abajo.
+ * Versión 2 del UX: los nombres técnicos del backend ("HoldDurationHours",
+ * "HoldMinBeforeAppointmentMinutes", "MinAdvanceMinutes",
+ * "CancellationWindowHours") se exponen con lenguaje de admin de salón
+ * — "tiempo para enviar el comprobante", "cierre del cupo antes de la
+ * cita", "anticipación mínima", "plazo para cancelar y recuperar el
+ * anticipo".
  *
- * El BackgroundService cancela citas con hold vencido cada 5 min, así
- * que cambios acá aplican casi de inmediato.
+ * El resumen abajo recalcula dinámicamente ejemplos numéricos con los
+ * valores actuales del form (no del backend) para que la admin vea de
+ * inmediato qué pasaría si cambia un slider. Antes de guardar, los
+ * ejemplos ya reflejan la decisión.
+ *
+ * Bloques visuales:
+ *  1. "Reserva del cupo" — los 3 tiempos que afectan agendar/pagar.
+ *  2. "Cancelaciones" — solo la ventana de devolución.
  */
 export function PaymentPolicyPage() {
   const qc = useQueryClient()
@@ -77,16 +85,18 @@ export function PaymentPolicyPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <div className="flex-1 px-6 lg:px-10 py-8 max-w-3xl">
+      <div className="flex-1 px-6 lg:px-10 py-8 max-w-3xl space-y-5">
         <SettingsHeader
           eyebrow="Ajustes del salón"
           title="Política de pagos"
-          desc="Cuánto tiempo reservas el cupo cuando una cliente agenda con anticipo pendiente. Si no envía comprobante en este tiempo, la cita se cancela sola y el cupo queda libre para otra clienta."
+          desc="Decidí cuánto tiempo le das a tus clientas para enviar el comprobante de anticipo, y hasta cuándo pueden cancelar sin perderlo. Cada salón es distinto — un spa relajado puede dar 24h, una peluquería express solo 1h."
         />
 
-        <SettingsBlock icon={<Clock size={16} />} title="Tiempos y reglas">
+        {/* ── BLOQUE 1: Reserva del cupo ─────────────────────────── */}
+        <SettingsBlock icon={<Clock size={16} />} title="Reserva del cupo">
           <NumberRow
-            label="Tiempo máximo del cupo reservado"
+            label="Tiempo para enviar el comprobante"
+            hint="Después de agendar, la cliente tiene este tiempo para mandar la foto del pago. Si no llega, el cupo se libera automáticamente para otra cliente."
             suffix="horas"
             value={form.holdDurationHours}
             onChange={(v) => setField('holdDurationHours', v)}
@@ -94,7 +104,8 @@ export function PaymentPolicyPage() {
             max={48}
           />
           <NumberRow
-            label="Margen antes de la cita"
+            label="Cerrar la reserva antes de la cita"
+            hint="Si la cita está muy cerca, el cupo se libera con este margen aunque no se cumpla el tiempo de arriba. Evita reservar hasta el último segundo."
             suffix="min antes"
             value={form.holdMinBeforeAppointmentMinutes}
             onChange={(v) => setField('holdMinBeforeAppointmentMinutes', v)}
@@ -103,7 +114,8 @@ export function PaymentPolicyPage() {
             step={5}
           />
           <NumberRow
-            label="Anticipación mínima para agendar"
+            label="Anticipación mínima para agendar online"
+            hint="Las clientas no pueden reservar con menos de este tiempo. Vos sí podés agendar walk-ins desde el panel."
             suffix="min antes"
             value={form.minAdvanceMinutes}
             onChange={(v) => setField('minAdvanceMinutes', v)}
@@ -111,8 +123,13 @@ export function PaymentPolicyPage() {
             max={1440}
             step={5}
           />
+        </SettingsBlock>
+
+        {/* ── BLOQUE 2: Cancelaciones ──────────────────────────── */}
+        <SettingsBlock icon={<RotateCcw size={16} />} title="Cancelaciones con anticipo pagado">
           <NumberRow
-            label="Ventana para cancelar con devolución de anticipo"
+            label="Plazo para cancelar y recuperar el anticipo"
+            hint="Si cancelan con esta anticipación o más, se devuelve el anticipo. Si cancelan más sobre la hora, se considera perdido (vos podés cambiar la decisión caso por caso)."
             suffix="horas antes"
             value={form.cancellationWindowHours}
             onChange={(v) => setField('cancellationWindowHours', v)}
@@ -121,29 +138,8 @@ export function PaymentPolicyPage() {
           />
         </SettingsBlock>
 
-        {/* Resumen actual destacado */}
-        <div className="mt-2 rounded-xl border border-warm-150 bg-warm-50/60 p-4 text-[12.5px] text-warm-700 leading-relaxed space-y-2">
-          <p>
-            <strong className="text-warm-800">Cómo va a quedar:</strong> la cliente que
-            agende un balayage hoy a las 14:00 (anticipo pendiente) tiene hasta{' '}
-            <strong className="tabular-nums">{form.holdDurationHours}h</strong> para enviar
-            el comprobante, o hasta{' '}
-            <strong className="tabular-nums">{form.holdMinBeforeAppointmentMinutes} min</strong>{' '}
-            antes de la cita (lo que llegue primero). Las clientas no pueden agendar con
-            menos de{' '}
-            <strong className="tabular-nums">{form.minAdvanceMinutes} min</strong> de
-            anticipación.
-          </p>
-          <p>
-            <strong className="text-warm-800">Cancelación con devolución:</strong>{' '}
-            si la cliente ya pagó el anticipo y cancela{' '}
-            <strong className="tabular-nums">
-              hasta {form.cancellationWindowHours}h antes
-            </strong>{' '}
-            de la cita, se le devuelve. Si cancela dentro de esa ventana, el anticipo se
-            considera perdido (vos o tu recepción con permiso pueden override caso por caso).
-          </p>
-        </div>
+        {/* Resumen dinámico con ejemplos concretos */}
+        <PolicySummary policy={form} />
       </div>
 
       <SaveBar
@@ -156,4 +152,129 @@ export function PaymentPolicyPage() {
       />
     </div>
   )
+}
+
+/**
+ * Resumen visual que traduce los 4 parámetros a 3 escenarios concretos
+ * con números reales. La admin lee "si una clienta hace X, le pasa Y"
+ * en vez de tener que combinar las reglas en su cabeza.
+ *
+ * Cubre 3 casos típicos:
+ *  - Agenda con bastante anticipación → siempre tiene el hold completo.
+ *  - Agenda con poco tiempo → se le acorta automáticamente.
+ *  - Cancela con anticipo pagado → devolución / pérdida según ventana.
+ */
+function PolicySummary({ policy }: { policy: PaymentPolicy }) {
+  const hold = policy.holdDurationHours          // horas
+  const margin = policy.holdMinBeforeAppointmentMinutes  // min
+  const minAdvance = policy.minAdvanceMinutes    // min
+  const cancelWin = policy.cancellationWindowHours  // horas
+
+  // Punto de cruce: si la cita está a más de (hold + margin) → gana hold.
+  // Si está más cerca → gana margen.
+  const crossoverMin = hold * 60 + margin
+
+  return (
+    <div className="rounded-xl border border-warm-150 bg-warm-50/60 p-4 space-y-3 text-[13px] text-warm-700 leading-relaxed">
+      <div className="text-[11px] uppercase tracking-wide text-warm-500 font-medium">
+        Cómo va a funcionar para tus clientas
+      </div>
+
+      <div className="space-y-2.5">
+        {/* CASO 1: cita lejana (mañana) */}
+        <ExampleRow
+          emoji="📅"
+          title={
+            <>
+              <strong>Agenda hoy para mañana:</strong>{' '}
+              tiene <strong className="tabular-nums">{fmtDuration(hold * 60)}</strong>{' '}
+              para enviar el comprobante. Si no llega, el cupo se libera solo.
+            </>
+          }
+        />
+
+        {/* CASO 2: cita cercana (límite del crossover) */}
+        <ExampleRow
+          emoji="⏰"
+          title={
+            <>
+              <strong>Agenda con poco tiempo</strong> (cita en menos de{' '}
+              <span className="tabular-nums">{fmtDuration(crossoverMin)}</span>):
+              tiene menos tiempo — el cupo se cierra siempre{' '}
+              <strong className="tabular-nums">{margin} min antes</strong> de la cita.
+            </>
+          }
+        />
+
+        {/* CASO 3: anticipación mínima */}
+        <ExampleRow
+          emoji="🚫"
+          title={
+            <>
+              <strong>No pueden agendar online</strong> con menos de{' '}
+              <strong className="tabular-nums">{minAdvance} min</strong> de anticipación.
+              {' '}Vos sí podés crear walk-ins desde el panel.
+            </>
+          }
+        />
+
+        {/* Separador visual entre reserva y cancelaciones */}
+        <div className="h-px bg-warm-200/70 my-1" />
+
+        {/* CASO 4: cancelación con devolución */}
+        <ExampleRow
+          emoji="✅"
+          title={
+            <>
+              <strong>Si ya pagaron y cancelan</strong> con{' '}
+              <strong className="tabular-nums">
+                {cancelWin === 0
+                  ? 'cualquier anticipación'
+                  : `${cancelWin}h o más`}
+              </strong>{' '}
+              de anticipación → se le <strong>devuelve el anticipo</strong>.
+            </>
+          }
+        />
+
+        {/* CASO 5: cancelación tardía */}
+        {cancelWin > 0 && (
+          <ExampleRow
+            emoji="❌"
+            title={
+              <>
+                <strong>Si cancelan más sobre la hora</strong> (menos de{' '}
+                <strong className="tabular-nums">{cancelWin}h</strong>) →
+                el anticipo <strong>se pierde</strong>. Vos o tu recepción
+                (con permiso) pueden cambiar la decisión caso por caso.
+              </>
+            }
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ExampleRow({ emoji, title }: { emoji: string; title: React.ReactNode }) {
+  return (
+    <div className="flex gap-2.5">
+      <div className="shrink-0 text-[15px] leading-[1.4]" aria-hidden>{emoji}</div>
+      <div className="flex-1">{title}</div>
+    </div>
+  )
+}
+
+/**
+ * Formatea minutos a "Xh" / "Xh Ymin" / "X min" según el caso. Para que
+ * los ejemplos del resumen lean naturales independiente de qué slider
+ * se mueva.
+ */
+function fmtDuration(totalMinutes: number): string {
+  if (totalMinutes <= 0) return '0 min'
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  if (h === 0) return `${m} min`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}min`
 }
