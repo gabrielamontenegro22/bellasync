@@ -19,7 +19,6 @@ import {
 } from '@/features/customers/lib/customerLook'
 import {
   useAgenda,
-  useCancelAppointment,
   useCompleteAppointment,
   useConfirmAppointment,
   useMarkNoShow,
@@ -29,6 +28,7 @@ import { DatePicker } from '@/components/ui'
 import { NewAppointmentModal } from './components/NewAppointmentModal'
 import { AgendaTimeline } from './components/AgendaTimeline'
 import { RescheduleModal } from './components/RescheduleModal'
+import { CancelAppointmentModal } from './components/CancelAppointmentModal'
 import { RegisterPaymentModal } from '@/features/payments/components/RegisterPaymentModal'
 
 /**
@@ -483,11 +483,11 @@ const STATUS_LOOK = {
 
 function DetailPanel({ appointment, onClose }: { appointment: AppointmentResponse; onClose: () => void }) {
   const confirm = useConfirmAppointment()
-  const cancel = useCancelAppointment()
   const start = useStartAppointment()
   const complete = useCompleteAppointment()
   const noShow = useMarkNoShow()
   const [showReschedule, setShowReschedule] = useState(false)
+  const [showCancel, setShowCancel] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
 
   // Historial reciente del cliente — últimas 3 citas completadas (excluyendo
@@ -835,23 +835,13 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
           <CalendarReschedule /> Reagendar
         </button>
 
-        {/* Cancelar */}
+        {/* Cancelar — abre modal con decisión de anticipo (si lo hay).
+            El modal aplica las reglas de permiso (refund override) y
+            obliga a escribir motivo cuando hay anticipo. */}
         <button
           type="button"
-          onClick={async () => {
-            const reason = window.prompt('Razón de la cancelación (opcional):') ?? undefined
-            try {
-              await cancel.mutateAsync({ id: appointment.id, reason })
-            } catch (e) {
-              // Casos comunes que llegan acá:
-              //   - 403 "cancel_with_money_requires_admin" → recepción
-              //     intentando cancelar una cita con pagos. Mostramos el
-              //     mensaje claro del backend.
-              //   - 400 "invalid_transition" → estado incompatible.
-              window.alert(extractApiError(e, 'No se pudo cancelar la cita.'))
-            }
-          }}
-          disabled={!canCancel || cancel.isPending}
+          onClick={() => setShowCancel(true)}
+          disabled={!canCancel}
           className={cls(
             'flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-[12.5px] font-medium',
             canCancel
@@ -956,6 +946,12 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
         <RescheduleModal
           appointment={appointment}
           onClose={() => setShowReschedule(false)}
+        />
+      )}
+      {showCancel && (
+        <CancelAppointmentModal
+          appointment={appointment}
+          onClose={() => setShowCancel(false)}
         />
       )}
       {showPayment && (

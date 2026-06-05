@@ -37,6 +37,9 @@ public sealed class TenantAppointmentSettingsService : ITenantAppointmentSetting
     public async Task<int> GetMinAdvanceMinutesAsync(CancellationToken ct)
         => (await LoadAsync(ct)).MinAdvanceMinutes;
 
+    public async Task<int> GetCancellationWindowHoursAsync(CancellationToken ct)
+        => (await LoadAsync(ct)).CancellationWindowHours;
+
     private async Task<CachedSettings> LoadAsync(CancellationToken ct)
     {
         if (_cache is not null) return _cache;
@@ -44,7 +47,7 @@ public sealed class TenantAppointmentSettingsService : ITenantAppointmentSetting
         var tenantId = _currentTenant.TenantId;
         if (tenantId == Guid.Empty)
         {
-            _cache = new CachedSettings(3, 30, 30);
+            _cache = new CachedSettings(3, 30, 30, 2);
             return _cache;
         }
 
@@ -57,12 +60,17 @@ public sealed class TenantAppointmentSettingsService : ITenantAppointmentSetting
             .Select(t => new CachedSettings(
                 t.HoldDurationHours,
                 t.HoldMinBeforeAppointmentMinutes,
-                t.MinAdvanceMinutes))
+                t.MinAdvanceMinutes,
+                t.CancellationWindowHours))
             .FirstOrDefaultAsync(ct);
 
-        _cache = row ?? new CachedSettings(3, 30, 30);
+        _cache = row ?? new CachedSettings(3, 30, 30, 2);
         return _cache;
     }
 
-    private record CachedSettings(int HoldDurationHours, int HoldMinBeforeAppointmentMinutes, int MinAdvanceMinutes);
+    private record CachedSettings(
+        int HoldDurationHours,
+        int HoldMinBeforeAppointmentMinutes,
+        int MinAdvanceMinutes,
+        int CancellationWindowHours);
 }

@@ -105,11 +105,19 @@ public class AppointmentsController : ControllerBase
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(
-            new CancelAppointmentCommand(id, request?.Reason), ct);
+            new CancelAppointmentCommand(id, request?.Reason, request?.DepositOverride), ct);
         return result.ToActionResult();
     }
 
-    public sealed record CancelAppointmentRequest(string? Reason);
+    /// <summary>
+    /// Body opcional del cancel. DepositOverride lo manda la admin (o
+    /// recepción con permiso) cuando quiere elegir explícitamente qué
+    /// hacer con el anticipo. Si vino null, el handler aplica la regla
+    /// automática según la ventana del salón.
+    /// </summary>
+    public sealed record CancelAppointmentRequest(
+        string? Reason,
+        BellaSync.Domain.Entities.DepositRefundDecision? DepositOverride);
 
     [HttpPost("{id:guid}/start")]
     [ProducesResponseType(typeof(AppointmentResponse), StatusCodes.Status200OK)]
