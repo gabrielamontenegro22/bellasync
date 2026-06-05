@@ -67,6 +67,9 @@ public class AdminController : ControllerBase
     /// Lee los tiempos de hold y anticipación del salón actual.
     /// </summary>
     [HttpGet("payment-policy")]
+    // Lectura abierta a recepción para que pueda ver la configuración
+    // actual (no necesita CanEditPaymentPolicy para mirarla).
+    [Authorize(Roles = "SalonAdmin,Receptionist")]
     [ProducesResponseType(typeof(TenantPaymentPolicyResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPaymentPolicy(
         [FromServices] IQueryHandler<GetPaymentPolicyQuery, TenantPaymentPolicyResponse> handler,
@@ -82,8 +85,11 @@ public class AdminController : ControllerBase
     /// (hold entre 1-48h, etc.) y devuelve 400 si no.
     /// </summary>
     [HttpPut("payment-policy")]
+    [Authorize(Roles = "SalonAdmin,Receptionist")]
+    [RequireReceptionPermission(Perm.CanEditPaymentPolicy)]
     [ProducesResponseType(typeof(TenantPaymentPolicyResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UpdatePaymentPolicy(
         [FromBody] UpdatePaymentPolicyCommand command,
         [FromServices] ICommandHandler<UpdatePaymentPolicyCommand, TenantPaymentPolicyResponse> handler,
@@ -103,6 +109,10 @@ public class AdminController : ControllerBase
     /// (cap de egresos, cancelar con plata, cerrar caja).
     /// </summary>
     [HttpGet("reception-permissions")]
+    // Recepción necesita leer SUS permisos para que el frontend
+    // (usePermissions hook) sepa qué mostrarle. Pero EDITAR sigue
+    // siendo admin-only (no se puede dar permisos a sí misma).
+    [Authorize(Roles = "SalonAdmin,Receptionist")]
     [ProducesResponseType(typeof(ReceptionPermissionsResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReceptionPermissions(
         [FromServices] IQueryHandler<GetReceptionPermissionsQuery, ReceptionPermissionsResponse> handler,
@@ -171,6 +181,7 @@ public class AdminController : ControllerBase
     /// Lee la info pública/contacto del salón (nombre, dirección, etc.).
     /// </summary>
     [HttpGet("tenant-info")]
+    [Authorize(Roles = "SalonAdmin,Receptionist")]
     [ProducesResponseType(typeof(TenantInfoResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTenantInfo(
         [FromServices] IQueryHandler<GetTenantInfoQuery, TenantInfoResponse> handler,
@@ -186,8 +197,11 @@ public class AdminController : ControllerBase
     /// dominio: email con @, URL http(s), maxlen por campo.
     /// </summary>
     [HttpPut("tenant-info")]
+    [Authorize(Roles = "SalonAdmin,Receptionist")]
+    [RequireReceptionPermission(Perm.CanEditSalonInfo)]
     [ProducesResponseType(typeof(TenantInfoResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UpdateTenantInfo(
         [FromBody] UpdateTenantInfoCommand command,
         [FromServices] ICommandHandler<UpdateTenantInfoCommand, TenantInfoResponse> handler,
@@ -206,6 +220,9 @@ public class AdminController : ControllerBase
     /// Devuelve el horario completo (días, almuerzo, festivos, cierres).
     /// </summary>
     [HttpGet("salon-hours")]
+    // Lectura abierta a recepción — useSalonHours hook del frontend
+    // necesita esto para pintar la grilla del agenda con franjas cerradas.
+    [Authorize(Roles = "SalonAdmin,Receptionist")]
     [ProducesResponseType(typeof(SalonHoursResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSalonHours(
         [FromServices] IQueryHandler<GetSalonHoursQuery, SalonHoursResponse> handler,
@@ -221,8 +238,11 @@ public class AdminController : ControllerBase
     /// en una transacción.
     /// </summary>
     [HttpPut("salon-hours")]
+    [Authorize(Roles = "SalonAdmin,Receptionist")]
+    [RequireReceptionPermission(Perm.CanEditSchedule)]
     [ProducesResponseType(typeof(SalonHoursResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UpdateSalonHours(
         [FromBody] UpdateSalonHoursCommand command,
         [FromServices] ICommandHandler<UpdateSalonHoursCommand, SalonHoursResponse> handler,

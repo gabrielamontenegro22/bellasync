@@ -52,7 +52,7 @@ public class ServicesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SalonAdmin")]
+    [RequireReceptionPermission(Perm.CanEditServices)]
     [ProducesResponseType(typeof(ServiceResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -82,7 +82,7 @@ public class ServicesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "SalonAdmin")]
+    [RequireReceptionPermission(Perm.CanEditServices)]
     [ProducesResponseType(typeof(ServiceResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -116,7 +116,7 @@ public class ServicesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "SalonAdmin")]
+    [RequireReceptionPermission(Perm.CanEditServices)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(

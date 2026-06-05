@@ -50,7 +50,7 @@ public class StylistsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SalonAdmin")]
+    [RequireReceptionPermission(Perm.CanEditStylists)]
     [ProducesResponseType(typeof(StylistResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -79,7 +79,7 @@ public class StylistsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "SalonAdmin")]
+    [RequireReceptionPermission(Perm.CanEditStylists)]
     [ProducesResponseType(typeof(StylistResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -112,7 +112,7 @@ public class StylistsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "SalonAdmin")]
+    [RequireReceptionPermission(Perm.CanEditStylists)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(
@@ -149,7 +149,7 @@ public class StylistsController : ControllerBase
     /// Marca un período (rango de días) como no disponible. Solo SalonAdmin.
     /// </summary>
     [HttpPost("{id:guid}/time-off")]
-    [Authorize(Roles = "SalonAdmin")]
+    [RequireReceptionPermission(Perm.CanEditStylists)]
     [ProducesResponseType(typeof(StylistTimeOffResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -171,7 +171,7 @@ public class StylistsController : ControllerBase
     /// reagenda automáticamente — la admin tiene la lista en pantalla.
     /// </summary>
     [HttpDelete("time-off/{timeOffId:guid}")]
-    [Authorize(Roles = "SalonAdmin")]
+    [RequireReceptionPermission(Perm.CanEditStylists)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveTimeOff(

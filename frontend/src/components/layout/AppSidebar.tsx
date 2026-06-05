@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cls } from '@/lib/cls'
-import { useAuth } from '@/features/auth/useAuth'
+import { useAuth, usePermissions } from '@/features/auth/useAuth'
 import { useCommissionsSetting } from '@/features/commissions/useCommissionsSetting'
 import { getDashboardSummary } from '@/api/dashboard'
 
@@ -84,6 +84,9 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { data: commissionsSetting } = useCommissionsSetting()
+  // Para que recepción vea Reportes/Comisiones SOLO si la admin
+  // les dio permiso. Admin siempre los ve.
+  const perms = usePermissions()
 
   // Reusamos el mismo query que el Dashboard para badges. Compartir
   // la queryKey hace que ambos componentes lean el mismo cache — sin
@@ -120,10 +123,30 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
       items = [...items.slice(0, idx), COMMISSIONS_ITEM, ...items.slice(idx)]
     }
 
-    const isAdmin = user?.role === 'SalonAdmin'
-    if (!isAdmin) {
-      items = items.filter(i => !i.adminOnly)
-    }
+    // Filtros por permisos (admin pasa todo; recepción según toggles):
+    //   /reportes      → CanViewReports
+    //   /comisiones    → CanViewCommissions
+    //   /configuracion → admin only (es agregador; las subpages tienen
+    //                    sus propios chequeos por sub-item)
+    items = items.filter((item) => {
+      if (item.to === '/reportes' && !perms.canViewReports) return false
+      if (item.to === '/comisiones' && !perms.canViewCommissions) return false
+      // Configuración: necesita ser admin O tener al menos un permiso
+      // de edición de algo. Si no tiene ninguno, no le sirve entrar.
+      if (item.to === '/configuracion' && !perms.isAdmin
+          && !perms.canEditSchedule && !perms.canEditPaymentPolicy
+          && !perms.canEditSalonInfo) return false
+      // Items legacy con flag adminOnly que no son configurables (ej.
+      // Configuración para no-admin si tampoco tiene sub-permisos).
+      if (item.adminOnly && !perms.isAdmin) {
+        // Excepción: si es uno de los que recién agregamos como
+        // configurable, ya filtramos arriba. Para el resto (none por
+        // ahora pero defensa a futuro), seguimos restringiendo.
+        if (item.to !== '/reportes' && item.to !== '/comisiones'
+            && item.to !== '/configuracion') return false
+      }
+      return true
+    })
 
     // Inyectamos badges desde el dashboard summary. Los hace silenciar
     // cuando el conteo es 0 (no queremos un "(0)" estético).

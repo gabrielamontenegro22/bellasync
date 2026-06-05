@@ -20,7 +20,8 @@ namespace BellaSync.WebApi.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "SalonAdmin")]
+[Authorize(Roles = "SalonAdmin,Receptionist")]
+[RequireReceptionPermission(Perm.CanViewCommissions)]
 public class CommissionsController : ControllerBase
 {
     /// <summary>
@@ -50,8 +51,12 @@ public class CommissionsController : ControllerBase
     /// cubriendo el período from-to.
     /// </summary>
     [HttpPost("payouts")]
+    // Override del filtro del controller: liquidar es plata real,
+    // siempre admin. Recepción con CanViewCommissions solo lee.
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(CommissionPayoutResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreatePayout(
         [FromBody] CreatePayoutRequest request,
         [FromServices] ICommandHandler<LiquidateCommissionsCommand, CommissionPayoutResponse> handler,
