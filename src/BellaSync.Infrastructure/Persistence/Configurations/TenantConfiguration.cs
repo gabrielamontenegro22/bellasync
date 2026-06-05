@@ -54,6 +54,18 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.LunchBreakToHour).IsRequired().HasDefaultValue(14);
         builder.Property(t => t.IsHolidaysClosed).IsRequired().HasDefaultValue(false);
 
+        // Permisos de recepción configurables. Defaults conservadores
+        // para no romper salones existentes ni asumir confianza por demás:
+        //   - Cap egresos: $100.000 COP (recepción hace gastos chicos)
+        //   - Cancelar con plata: SÍ (con nota obligatoria — la admin
+        //     decide después qué hacer con el dinero)
+        //   - Cerrar caja: NO (decisión financiera de admin)
+        builder.Property(t => t.ReceptionExpenseCapCop)
+            .HasColumnType("numeric(12,2)")
+            .HasDefaultValue(100_000m);
+        builder.Property(t => t.ReceptionCanCancelWithMoney).IsRequired().HasDefaultValue(true);
+        builder.Property(t => t.ReceptionCanCloseCash).IsRequired().HasDefaultValue(false);
+
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.UpdatedAt);
 

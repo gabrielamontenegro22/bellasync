@@ -14,16 +14,6 @@ namespace BellaSync.Application.Features.Expenses.RegisterExpense;
 public sealed class RegisterExpenseHandler
     : ICommandHandler<RegisterExpenseCommand, ExpenseResponse>
 {
-    /// <summary>
-    /// Tope (en COP) para egresos registrados por recepción sin pasar
-    /// por admin. Pensado para gastos chicos del día (almuerzo del equipo,
-    /// domicilios, insumos menores). Por encima se asume que requiere
-    /// decisión de la admin (compra grande a proveedor, propinas grandes).
-    /// Hardcoded por ahora; en una iteración futura podría vivir en
-    /// TenantSettings para que cada salón lo ajuste.
-    /// </summary>
-    private const decimal ReceptionExpenseCapCop = 100_000m;
-
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
     private readonly ICurrentUserService _currentUser;
@@ -73,13 +63,35 @@ public sealed class RegisterExpenseHandler
             return ApplicationError.Validation("expense.invalid_amount", ex.Message);
         }
 
-        // 2.5. Cap por rol: recepción tiene tope para evitar que registre
-        // egresos enormes sin que la admin se entere. La admin no tiene cap.
-        if (!_currentUser.IsSalonAdmin && amount.Amount > ReceptionExpenseCapCop)
+        // 2.5. Cap por rol — el valor se configura por salón (Tenant).
+        // Lectura mínima: solo el campo del cap, no traemos el tenant
+        // completo. La admin no tiene cap NUNCA, independiente del valor.
+        if (!_currentUser.IsSalonAdmin)
         {
-            return ApplicationError.Forbidden(
-                "expense.over_reception_cap",
-                $"Egresos sobre ${ReceptionExpenseCapCop:N0} COP requieren autorización de la administradora del salón.");
+            var cap = await _db.Tenants
+                .AsNoTracking()
+                .Where(t => t.Id == _currentTenant.TenantId)
+                .Select(t => t.ReceptionExpenseCapCop)
+                .FirstOrDefaultAsync(ct);
+
+            // cap = null  → sin límite (admin lo configuró así).
+            // cap = 0     → recepción no puede registrar egresos.
+            // cap > 0     → tope; sobre este monto requiere admin.
+            if (cap is decimal capValue)
+            {
+                if (capValue == 0m)
+                {
+                    return ApplicationError.Forbidden(
+                        "expense.reception_disabled",
+                        "La administradora del salón configuró que solo ella puede registrar egresos.");
+                }
+                if (amount.Amount > capValue)
+                {
+                    return ApplicationError.Forbidden(
+                        "expense.over_reception_cap",
+                        $"Egresos sobre ${capValue:N0} COP requieren autorización de la administradora del salón.");
+                }
+            }
         }
 
         Expense expense;

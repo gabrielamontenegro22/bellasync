@@ -48,11 +48,15 @@ public sealed class CancelAppointmentHandler
             return ApplicationError.NotFound("appointment.not_found",
                 $"No existe una cita con id {command.Id}.");
 
-        // Guard de auditoría: si la cita YA tiene plata cobrada (Payments
-        // registrados o vouchers validados), recepción no puede cancelarla
-        // por su cuenta. Cancelar una cita con plata involucra decidir
-        // qué hacer con el dinero (reembolsar, aplicar a otra cita, etc.)
-        // — esa es decisión de admin, no operativa.
+        // Guard configurable: si la cita YA tiene plata cobrada (Payments
+        // registrados o vouchers validados), aplicamos las reglas del salón.
+        //
+        // - Admin: puede cancelar siempre, sin restricciones.
+        // - Recepción + tenant.ReceptionCanCancelWithMoney = false:
+        //     bloqueado — debe pedirle a admin.
+        // - Recepción + tenant.ReceptionCanCancelWithMoney = true:
+        //     puede cancelar pero la razón es OBLIGATORIA (auditoría
+        //     para que la admin sepa qué hacer con el dinero después).
         if (!_currentUser.IsSalonAdmin)
         {
             var hasMoney = await _db.Payments
@@ -65,10 +69,31 @@ public sealed class CancelAppointmentHandler
                     .AnyAsync(v => v.AppointmentId == appointment.Id
                                 && v.Status == BellaSync.Domain.Entities.PaymentVoucherStatus.Validated, ct);
             }
+
             if (hasMoney)
-                return ApplicationError.Forbidden(
-                    "appointment.cancel_with_money_requires_admin",
-                    "Esta cita ya tiene dinero asociado. Pedile a la administradora del salón que la cancele — ella decide qué hacer con el pago.");
+            {
+                var canCancelWithMoney = await _db.Tenants
+                    .AsNoTracking()
+                    .Where(t => t.Id == appointment.TenantId)
+                    .Select(t => t.ReceptionCanCancelWithMoney)
+                    .FirstOrDefaultAsync(ct);
+
+                if (!canCancelWithMoney)
+                {
+                    return ApplicationError.Forbidden(
+                        "appointment.cancel_with_money_requires_admin",
+                        "Esta cita ya tiene dinero asociado. La administradora configuró que solo ella puede cancelarlas.");
+                }
+
+                // Permitido por el tenant pero exige nota explicativa
+                // — admin la verá en la auditoría para decidir refund/crédito.
+                if (string.IsNullOrWhiteSpace(command.Reason))
+                {
+                    return ApplicationError.Validation(
+                        "appointment.cancel_with_money_requires_reason",
+                        "Esta cita tiene dinero asociado. Tenés que escribir un motivo (qué hacer con el anticipo, si el cliente avisó, etc.) para que la administradora decida después.");
+                }
+            }
         }
 
         // Snapshot del status anterior — necesario para decidir si enviar

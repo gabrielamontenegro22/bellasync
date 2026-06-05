@@ -58,12 +58,13 @@ public class CashController : ControllerBase
     /// efectivo desde Payments/Expenses, así que el cierre queda inmutable
     /// aunque después se agreguen/borren movimientos del día.
     ///
-    /// SalonAdmin-only: el cierre es una decisión financiera que rinde
-    /// cuentas a fin de día. Recepción puede preparar (registrar pagos,
-    /// contar la caja) pero el "firmar" lo hace la admin.
+    /// Por default solo admin firma. La admin puede delegar a recepción
+    /// activando Tenant.ReceptionCanCloseCash desde /configuracion/permisos.
+    /// El handler chequea el setting y devuelve 403 si recepción intenta
+    /// sin permiso — no usamos [Authorize(Roles=...)] porque la regla es
+    /// condicional al tenant, no tajante.
     /// </summary>
     [HttpPost("closings")]
-    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(CashClosingResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Banknote, Plus, X } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import { extractApiError } from '@/lib/extractApiError'
@@ -7,9 +7,7 @@ import { registerExpense, type ExpenseResponse } from '@/api/expenses'
 import type { PaymentMethod } from '@/api/payments'
 import { PaymentMethodPicker } from '@/features/payments/components/PaymentMethodPicker'
 import { useIsAdmin } from '@/features/auth/useAuth'
-
-/** Tope (COP) para egresos de recepción — mismo valor que el backend. */
-const RECEPTION_EXPENSE_CAP = 100_000
+import { getReceptionPermissions } from '@/api/admin'
 
 interface Props {
   open: boolean
@@ -36,6 +34,15 @@ interface Props {
 export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   const qc = useQueryClient()
   const isAdmin = useIsAdmin()
+  // Solo cargamos los permisos si NO es admin (admin no tiene cap).
+  // staleTime alto: estos settings cambian muy poco, vale la pena
+  // evitar refetch en cada apertura del modal.
+  const permsQ = useQuery({
+    queryKey: ['receptionPermissions'],
+    queryFn: getReceptionPermissions,
+    enabled: !isAdmin && open,
+    staleTime: 5 * 60_000,
+  })
   const [concept, setConcept] = useState('')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('Cash')
@@ -76,11 +83,17 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   const conceptOk = concept.trim().length > 0
   const amountOk = amountNum > 0
   const providerOk = method !== 'Transfer' || !!provider
-  // Recepción tiene cap; admin no. Pre-validamos para mostrar warning
-  // ANTES del submit y evitar el 403 silencioso (lo mostrará igual si
-  // el chequeo local falla, pero la UX queda más limpia).
-  const overReceptionCap = !isAdmin && amountNum > RECEPTION_EXPENSE_CAP
-  const canSubmit = conceptOk && amountOk && providerOk && !overReceptionCap && !mut.isPending
+
+  // Cap configurable por tenant (lo lee la admin desde /configuracion/permisos).
+  // - null = sin cap, recepción puede registrar lo que sea.
+  // - 0    = recepción no puede registrar nada.
+  // - X    = tope; sobre eso requiere admin.
+  // Admin no tiene cap NUNCA.
+  const cap = permsQ.data?.expenseCapCop
+  const receptionBlocked = !isAdmin && cap === 0
+  const overReceptionCap = !isAdmin && cap != null && cap > 0 && amountNum > cap
+  const canSubmit = conceptOk && amountOk && providerOk
+    && !receptionBlocked && !overReceptionCap && !mut.isPending
 
   const handleSubmit = () => {
     if (!canSubmit || submittingRef.current) return
@@ -198,13 +211,20 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
             )}
           </div>
 
-          {/* Aviso de cap para recepción — preventivo, antes del submit.
-              Se muestra apenas el monto supera el tope, no espera al 403
-              del backend. La admin no ve este aviso. */}
-          {overReceptionCap && (
+          {/* Bloqueo total: la admin configuró cap=0 → recepción no
+              puede registrar nada de egresos en este salón. */}
+          {receptionBlocked && (
             <div className="rounded-lg bg-gold-50 ring-1 ring-gold-200 px-3 py-2 text-[12px] text-gold-700">
-              ⚠️ Egresos sobre ${RECEPTION_EXPENSE_CAP.toLocaleString('es-CO')} requieren
-              autorización de la administradora del salón.
+              ⚠️ La administradora del salón configuró que solo ella puede registrar egresos.
+            </div>
+          )}
+
+          {/* Aviso de cap para recepción — preventivo, antes del submit.
+              Se muestra apenas el monto supera el tope configurado por la
+              admin para este salón. La admin no ve este aviso. */}
+          {overReceptionCap && cap != null && (
+            <div className="rounded-lg bg-gold-50 ring-1 ring-gold-200 px-3 py-2 text-[12px] text-gold-700">
+              ⚠️ Egresos sobre ${cap.toLocaleString('es-CO')} requieren autorización de la administradora del salón.
             </div>
           )}
 

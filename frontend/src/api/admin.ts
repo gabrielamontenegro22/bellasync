@@ -48,6 +48,43 @@ export async function updatePaymentPolicy(req: PaymentPolicy): Promise<PaymentPo
   return data
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Permisos de recepción                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Permisos que la admin asigna a recepción.
+ * - expenseCapCop:
+ *     null = sin límite (recepción puede registrar lo que sea)
+ *     0    = recepción NO puede registrar egresos
+ *     X    = cap en COP
+ * - canCancelWithMoney: si recepción puede cancelar citas con pagos
+ *     asociados (con nota obligatoria si true).
+ * - canCloseCash: si recepción puede firmar el cierre de caja del día.
+ */
+export interface ReceptionPermissions {
+  expenseCapCop: number | null
+  canCancelWithMoney: boolean
+  canCloseCash: boolean
+}
+
+/** GET /api/Admin/reception-permissions */
+export async function getReceptionPermissions(): Promise<ReceptionPermissions> {
+  const { data } = await api.get<ReceptionPermissions>('/api/Admin/reception-permissions')
+  return data
+}
+
+/** PUT /api/Admin/reception-permissions */
+export async function updateReceptionPermissions(
+  req: ReceptionPermissions,
+): Promise<ReceptionPermissions> {
+  const { data } = await api.put<ReceptionPermissions>(
+    '/api/Admin/reception-permissions',
+    req,
+  )
+  return data
+}
+
 /** Espejo de CommissionsSettingResponse. */
 export interface CommissionsSetting {
   enabled: boolean
