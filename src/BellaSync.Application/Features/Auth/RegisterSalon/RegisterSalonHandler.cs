@@ -77,9 +77,23 @@ public sealed class RegisterSalonHandler : ICommandHandler<RegisterSalonCommand,
             trialDays: SubscriptionPlanCatalog.DefaultTrialDays,
             utcNow: _clock.UtcNow);
 
+        // Seed de 5 categorías default de inventario. Para que la admin
+        // vea opciones apenas entra a /inventario sin tener que crearlas
+        // desde cero. Puede borrarlas/renombrarlas libremente después.
+        // Espeja exactamente el backfill SQL de la migración AddCustomProductCategories.
+        var defaultCategories = new[]
+        {
+            ProductCategory.Create(tenant.Id, "Cabello",    ProductTone.Amber),
+            ProductCategory.Create(tenant.Id, "Uñas",       ProductTone.Rose),
+            ProductCategory.Create(tenant.Id, "Depilación", ProductTone.Sand),
+            ProductCategory.Create(tenant.Id, "Spa",        ProductTone.Wine),
+            ProductCategory.Create(tenant.Id, "Accesorios", ProductTone.Mist),
+        };
+
         _db.Tenants.Add(tenant);
         _db.Users.Add(adminUser);
         _db.TenantSubscriptions.Add(subscription);
+        foreach (var cat in defaultCategories) _db.ProductCategories.Add(cat);
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(

@@ -1,20 +1,21 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Box, AlertTriangle, AlertCircle, Wallet, Plus, Search,
+  Box, AlertTriangle, AlertCircle, Wallet, Plus, Search, Tag,
   Pencil, Activity, MoreHorizontal, Archive as ArchiveIcon,
 } from 'lucide-react'
 import { useAuth, usePermissions } from '@/features/auth/useAuth'
 import { cls } from '@/lib/cls'
 import { fmtCop } from '@/features/customers/lib/customerLook'
 import {
-  listProducts, getInventorySummary, archiveProduct,
-  type Product, type ProductCategory, type ProductStatus, type ProductTone,
+  listProducts, getInventorySummary, archiveProduct, listCategories,
+  type Product, type ProductStatus, type ProductTone,
 } from '@/api/inventory'
 import { extractApiError } from '@/lib/extractApiError'
 import { ProductMovementModal } from './components/ProductMovementModal'
 import { ProductFormModal } from './components/ProductFormModal'
 import { ProductMovementsModal } from './components/ProductMovementsModal'
+import { CategoriesModal } from './components/CategoriesModal'
 
 /**
  * /inventario — página principal del módulo. Espeja el mockup
@@ -38,17 +39,6 @@ import { ProductMovementsModal } from './components/ProductMovementsModal'
 // ─────────────────────────────────────────────────────────────────
 // Constantes visuales
 // ─────────────────────────────────────────────────────────────────
-
-interface CategoryDef { id: string; label: string }
-
-const CATEGORIES: CategoryDef[] = [
-  { id: 'all',         label: 'Todos'       },
-  { id: 'Hair',        label: 'Cabello'     },
-  { id: 'Nails',       label: 'Uñas'        },
-  { id: 'Hairremoval', label: 'Depilación'  },
-  { id: 'Spa',         label: 'Spa'         },
-  { id: 'Accessories', label: 'Accesorios'  },
-]
 
 // Map de tone → clases tailwind para el avatar (espeja TONES del mockup).
 const TONE_CLS: Record<ProductTone, { bg: string; fg: string }> = {
@@ -93,7 +83,9 @@ export function InventoryPage() {
   const { canEditInventory } = usePermissions()
   const qc = useQueryClient()
 
-  const [cat, setCat] = useState<string>('all')
+  // categoryId='all' = sin filtro. Cuando la admin pickea una específica
+  // guardamos su Guid acá para pasarlo al backend.
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | ProductStatus | 'ok' | 'low' | 'out'>('all')
   const [query, setQuery] = useState('')
   const [bannerOpen, setBannerOpen] = useState(true)
@@ -104,11 +96,19 @@ export function InventoryPage() {
   const [formModal, setFormModal] = useState<{ product?: Product } | null>(null)
   // Modal de historial.
   const [historyModal, setHistoryModal] = useState<Product | null>(null)
+  // Modal de gestión de categorías custom del salón.
+  const [categoriesOpen, setCategoriesOpen] = useState(false)
+
+  // Categorías activas del tenant. La admin las gestiona vía CategoriesModal.
+  const { data: categories = [] } = useQuery({
+    queryKey: ['inventoryCategories'],
+    queryFn: () => listCategories(false),
+  })
 
   const { data: products = [], isLoading } = useQuery({
-    queryKey: ['inventoryProducts', cat, statusFilter, query],
+    queryKey: ['inventoryProducts', categoryFilter, statusFilter, query],
     queryFn: () => listProducts({
-      category: cat,
+      categoryId: categoryFilter === 'all' ? undefined : categoryFilter,
       status: statusFilter,
       query: query || undefined,
     }),
@@ -122,6 +122,7 @@ export function InventoryPage() {
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: ['inventoryProducts'] })
     qc.invalidateQueries({ queryKey: ['inventorySummary'] })
+    qc.invalidateQueries({ queryKey: ['inventoryCategories'] })
   }
 
   const totalValueVisible = useMemo(
@@ -176,8 +177,22 @@ export function InventoryPage() {
         {canEditInventory && (
           <div className="hidden md:flex items-center gap-2.5">
             <button
-              onClick={() => setFormModal({})}
+              onClick={() => setCategoriesOpen(true)}
               className="px-3.5 py-2.5 rounded-lg border border-warm-200 text-warm-700 hover:bg-warm-50 text-[13.5px] font-medium flex items-center gap-1.5"
+              title="Crear, renombrar o archivar categorías de productos de tu salón"
+            >
+              <Tag size={15}/> Categorías
+            </button>
+            <button
+              onClick={() => setFormModal({})}
+              disabled={categories.length === 0}
+              title={categories.length === 0 ? 'Primero creá al menos una categoría' : undefined}
+              className={cls(
+                'px-3.5 py-2.5 rounded-lg border text-[13.5px] font-medium flex items-center gap-1.5',
+                categories.length === 0
+                  ? 'border-warm-200 text-warm-400 cursor-not-allowed'
+                  : 'border-warm-200 text-warm-700 hover:bg-warm-50',
+              )}
             >
               <Plus size={15}/> Nuevo producto
             </button>
@@ -222,13 +237,25 @@ export function InventoryPage() {
       <div className="px-6 lg:px-10 mt-8">
         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
           <div className="flex items-center gap-1 overflow-x-auto -mx-1 px-1">
-            {CATEGORIES.map(c => (
-              <button key={c.id} onClick={() => setCat(c.id)}
+            <button
+              onClick={() => setCategoryFilter('all')}
+              className={cls(
+                'px-3.5 py-2 rounded-full text-[13px] whitespace-nowrap transition',
+                categoryFilter === 'all' ? 'bg-warm-800 text-white' : 'text-warm-600 hover:bg-warm-100',
+              )}
+            >
+              Todos
+            </button>
+            {categories.map(c => (
+              <button
+                key={c.id}
+                onClick={() => setCategoryFilter(c.id)}
                 className={cls(
                   'px-3.5 py-2 rounded-full text-[13px] whitespace-nowrap transition',
-                  cat === c.id ? 'bg-warm-800 text-white' : 'text-warm-600 hover:bg-warm-100',
-                )}>
-                {c.label}
+                  categoryFilter === c.id ? 'bg-warm-800 text-white' : 'text-warm-600 hover:bg-warm-100',
+                )}
+              >
+                {c.name}
               </button>
             ))}
           </div>
@@ -307,7 +334,7 @@ export function InventoryPage() {
             <div className="py-16 text-center">
               <div className="text-[14px] text-warm-500">No se encontraron productos con esos filtros.</div>
               <button
-                onClick={() => { setCat('all'); setStatusFilter('all'); setQuery('') }}
+                onClick={() => { setCategoryFilter('all'); setStatusFilter('all'); setQuery('') }}
                 className="mt-3 text-[13px] text-brand-700 font-medium hover:underline"
               >
                 Limpiar filtros
@@ -356,6 +383,13 @@ export function InventoryPage() {
           open
           product={historyModal}
           onClose={() => setHistoryModal(null)}
+        />
+      )}
+      {categoriesOpen && (
+        <CategoriesModal
+          open
+          onClose={() => setCategoriesOpen(false)}
+          onChanged={refreshAll}
         />
       )}
     </div>
@@ -427,8 +461,6 @@ function ProductRow({
     low:  'bg-gold-500',
     out:  'bg-warm-300',
   }[p.status as ProductStatus] ?? 'bg-warm-300'
-  const categoryLabel = CATEGORIES.find(c => c.id === p.category)?.label ?? p.category
-
   return (
     <tr className={cls(
       'border-b border-warm-100 hover:bg-warm-50/50 transition-colors',
@@ -449,7 +481,7 @@ function ProductRow({
         </div>
       </td>
       <td className="py-4 px-3 align-middle">
-        <span className="text-[12px] text-warm-600">{categoryLabel}</span>
+        <span className="text-[12px] text-warm-600">{p.categoryName || '—'}</span>
       </td>
       <td className="py-4 px-3 align-middle">
         <div className="font-serif text-[20px] tabular-nums text-warm-800 leading-none">{p.stock}</div>
@@ -558,5 +590,3 @@ function MenuItem({
   )
 }
 
-// Re-export para tipado en otros archivos.
-export type { ProductCategory }

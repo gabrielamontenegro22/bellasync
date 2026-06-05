@@ -34,15 +34,16 @@ public class Product : BaseEntity, ITenantEntity
         Guid tenantId,
         string name,
         string brand,
-        ProductCategory category,
+        Guid categoryId,
         string unit,
         int minStock,
         Money cost,
-        ProductTone tone,
         DateTime utcNow)
     {
         if (tenantId == Guid.Empty)
             throw new DomainException("TenantId es obligatorio.");
+        if (categoryId == Guid.Empty)
+            throw new DomainException("La categoría del producto es obligatoria.");
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("El nombre del producto es obligatorio.");
         if (string.IsNullOrWhiteSpace(brand))
@@ -61,12 +62,11 @@ public class Product : BaseEntity, ITenantEntity
             TenantId = tenantId,
             Name = name.Trim(),
             Brand = brand.Trim(),
-            Category = category,
+            CategoryId = categoryId,
             Unit = unit.Trim(),
             Stock = 0,
             MinStock = minStock,
             Cost = cost,
-            Tone = tone,
             LastInAt = null,
             IsActive = true,
         };
@@ -77,7 +77,10 @@ public class Product : BaseEntity, ITenantEntity
 
     public string Name { get; private set; } = string.Empty;
     public string Brand { get; private set; } = string.Empty;
-    public ProductCategory Category { get; private set; }
+
+    /// <summary>FK a la categoría del salón. La nav property facilita Include.</summary>
+    public Guid CategoryId { get; private set; }
+    public ProductCategory? Category { get; private set; }
 
     /// <summary>
     /// Unidad de medida visible (texto libre): "frasco", "tubo", "kg",
@@ -97,7 +100,9 @@ public class Product : BaseEntity, ITenantEntity
     /// <summary>Costo unitario (lo que pagó el salón al proveedor). Para valor del inventario.</summary>
     public Money Cost { get; private set; } = Money.Zero;
 
-    public ProductTone Tone { get; private set; }
+    // El tono visual ahora vive en ProductCategory (el avatar del producto
+    // hereda el color de su categoría). El frontend lee el tone del Category
+    // adjunto al ProductResponse.
 
     /// <summary>
     /// Última vez que se registró una entrada (Inflow) para este producto.
@@ -124,13 +129,14 @@ public class Product : BaseEntity, ITenantEntity
     public void UpdateDetails(
         string name,
         string brand,
-        ProductCategory category,
+        Guid categoryId,
         string unit,
         int minStock,
         Money cost,
-        ProductTone tone,
         DateTime utcNow)
     {
+        if (categoryId == Guid.Empty)
+            throw new DomainException("La categoría del producto es obligatoria.");
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("El nombre del producto es obligatorio.");
         if (string.IsNullOrWhiteSpace(brand))
@@ -145,11 +151,10 @@ public class Product : BaseEntity, ITenantEntity
         _ = utcNow;  // SaveChangesAsync setea UpdatedAt automáticamente.
         Name = name.Trim();
         Brand = brand.Trim();
-        Category = category;
+        CategoryId = categoryId;
         Unit = unit.Trim();
         MinStock = minStock;
         Cost = cost;
-        Tone = tone;
     }
 
     /// <summary>

@@ -23,6 +23,7 @@ public interface IApplicationDbContext
     DbSet<Payment> Payments { get; }
     DbSet<Expense> Expenses { get; }
     DbSet<Product> Products { get; }
+    DbSet<ProductCategory> ProductCategories { get; }
     DbSet<ProductMovement> ProductMovements { get; }
     DbSet<CommissionPayout> CommissionPayouts { get; }
     DbSet<CashClosing> CashClosings { get; }

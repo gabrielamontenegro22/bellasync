@@ -18,17 +18,16 @@ public sealed class ListProductsHandler
     public async Task<Result<IReadOnlyList<ProductResponse>>> HandleAsync(
         ListProductsQuery query, CancellationToken ct)
     {
-        var q = _db.Products.AsNoTracking();
+        IQueryable<Product> q = _db.Products.AsNoTracking();
 
         if (!query.IncludeArchived)
             q = q.Where(p => p.IsActive);
 
-        // Filtro de categoría server-side (vs traer todos y filtrar en client).
-        if (!string.IsNullOrWhiteSpace(query.Category)
-            && !query.Category.Equals("all", StringComparison.OrdinalIgnoreCase))
+        // Filtro de categoría server-side: si CategoryId está seteado, restringe.
+        if (query.CategoryId.HasValue && query.CategoryId.Value != Guid.Empty)
         {
-            if (Enum.TryParse<ProductCategory>(query.Category, ignoreCase: true, out var cat))
-                q = q.Where(p => p.Category == cat);
+            var catId = query.CategoryId.Value;
+            q = q.Where(p => p.CategoryId == catId);
         }
 
         // Search libre case-insensitive (name OR brand). Usamos ToLower().Contains()
@@ -42,7 +41,9 @@ public sealed class ListProductsHandler
                 p.Brand.ToLower().Contains(needle));
         }
 
+        // Include al final — un solo lugar, para hidratar Tone+Name del DTO.
         var list = await q
+            .Include(p => p.Category)
             .OrderBy(p => p.Name)
             .ToListAsync(ct);
 

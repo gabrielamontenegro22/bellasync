@@ -34,16 +34,26 @@ internal static class InventoryMapper
         Id = p.Id,
         Name = p.Name,
         Brand = p.Brand,
-        Category = p.Category.ToString(),
+        CategoryId = p.CategoryId,
+        CategoryName = p.Category?.Name ?? string.Empty,
         Unit = p.Unit,
         Stock = p.Stock,
         MinStock = p.MinStock,
         Cost = p.Cost.Amount,
-        Tone = p.Tone.ToString(),
+        Tone = (p.Category?.Tone ?? ProductTone.Olive).ToString(),
         LastInAt = p.LastInAt,
         IsActive = p.IsActive,
         CreatedAt = p.CreatedAt,
         Status = StatusOf(p.Stock, p.MinStock),
+    };
+
+    public static ProductCategoryResponse ToResponse(ProductCategory c, int activeProductsCount) => new()
+    {
+        Id = c.Id,
+        Name = c.Name,
+        Tone = c.Tone.ToString(),
+        IsActive = c.IsActive,
+        ActiveProductsCount = activeProductsCount,
     };
 
     public static ProductMovementResponse ToResponse(ProductMovement m) => new()

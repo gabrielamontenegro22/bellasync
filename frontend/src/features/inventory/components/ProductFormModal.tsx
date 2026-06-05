@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { X, CheckCircle2 } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import { extractApiError } from '@/lib/extractApiError'
 import {
-  createProduct, updateProduct,
-  type Product, type ProductCategory, type ProductTone,
+  createProduct, updateProduct, listCategories,
+  type Product,
 } from '@/api/inventory'
 
 interface Props {
@@ -16,23 +16,6 @@ interface Props {
   onSaved: () => void
 }
 
-const CATEGORY_OPTIONS: { value: ProductCategory; label: string }[] = [
-  { value: 'Hair',        label: 'Cabello' },
-  { value: 'Nails',       label: 'Uñas' },
-  { value: 'Hairremoval', label: 'Depilación' },
-  { value: 'Spa',         label: 'Spa' },
-  { value: 'Accessories', label: 'Accesorios' },
-]
-
-const TONE_OPTIONS: { value: ProductTone; label: string; cls: string }[] = [
-  { value: 'Rose',  label: 'Rosa',     cls: 'bg-[#f5dfd8]' },
-  { value: 'Amber', label: 'Ámbar',    cls: 'bg-[#f1e3c1]' },
-  { value: 'Sand',  label: 'Arena',    cls: 'bg-[#ece1cf]' },
-  { value: 'Olive', label: 'Oliva',    cls: 'bg-[#dde6d4]' },
-  { value: 'Wine',  label: 'Vino',     cls: 'bg-[#e8d2d4]' },
-  { value: 'Mist',  label: 'Bruma',    cls: 'bg-[#dde7eb]' },
-]
-
 /**
  * Modal "Nuevo producto" / "Editar producto". Form básico con todos los
  * campos del Product (sin Stock — el stock se mueve solo vía movimientos).
@@ -41,38 +24,44 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
   const isEdit = !!product
   const [name, setName] = useState('')
   const [brand, setBrand] = useState('')
-  const [category, setCategory] = useState<ProductCategory>('Hair')
+  const [categoryId, setCategoryId] = useState<string>('')
   const [unit, setUnit] = useState('')
   const [minStock, setMinStock] = useState('5')
   const [cost, setCost] = useState('')
-  const [tone, setTone] = useState<ProductTone>('Amber')
   const [error, setError] = useState<string | null>(null)
   const submittingRef = useRef(false)
+
+  // Cargar categorías activas del tenant para el dropdown.
+  const { data: categories = [] } = useQuery({
+    queryKey: ['inventoryCategories'],
+    queryFn: () => listCategories(false),
+    enabled: open,
+  })
 
   useEffect(() => {
     if (open) {
       setName(product?.name ?? '')
       setBrand(product?.brand ?? '')
-      setCategory((product?.category as ProductCategory) ?? 'Hair')
+      // Si editamos, prellenamos la categoría actual. Si creamos, pickeamos
+      // la primera activa por default (la admin elige otra si quiere).
+      setCategoryId(product?.categoryId ?? (categories[0]?.id ?? ''))
       setUnit(product?.unit ?? '')
       setMinStock(String(product?.minStock ?? 5))
       setCost(product ? String(Math.round(product.cost)) : '')
-      setTone((product?.tone as ProductTone) ?? 'Amber')
       setError(null)
       submittingRef.current = false
     }
-  }, [open, product])
+  }, [open, product, categories])
 
   const mut = useMutation({
     mutationFn: async () => {
       const req = {
         name: name.trim(),
         brand: brand.trim(),
-        category,
+        categoryId,
         unit: unit.trim(),
         minStock: parseInt(minStock, 10) || 0,
         cost: parseInt(cost.replace(/[^0-9]/g, ''), 10) || 0,
-        tone,
       }
       if (product) return updateProduct(product.id, req)
       return createProduct(req)
@@ -92,6 +81,7 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
   const canSubmit = name.trim().length > 0
     && brand.trim().length > 0
     && unit.trim().length > 0
+    && categoryId !== ''
     && !mut.isPending
 
   const handleSubmit = () => {
@@ -148,14 +138,16 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Categoría" required>
+            <Field label="Categoría" required hint="creá/editá desde el botón Categorías">
               <select
-                value={category}
-                onChange={e => setCategory(e.target.value as ProductCategory)}
+                value={categoryId}
+                onChange={e => setCategoryId(e.target.value)}
                 className={inputCls}
+                disabled={categories.length === 0}
               >
-                {CATEGORY_OPTIONS.map(c => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
+                {categories.length === 0 && <option value="">— Sin categorías —</option>}
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </Field>
@@ -195,26 +187,10 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
             </Field>
           </div>
 
-          <Field label="Color visual" hint="cómo se ve el avatar del producto en la tabla">
-            <div className="flex gap-2 flex-wrap">
-              {TONE_OPTIONS.map(t => (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => setTone(t.value)}
-                  className={cls(
-                    'h-9 px-3 rounded-lg border flex items-center gap-2 text-[12.5px] transition',
-                    tone === t.value
-                      ? 'border-brand-700 ring-2 ring-brand-700/15 text-warm-800 font-medium'
-                      : 'border-warm-200 text-warm-600 hover:border-warm-300',
-                  )}
-                >
-                  <span className={cls('w-4 h-4 rounded', t.cls)}/>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </Field>
+          {/* El color visual del producto ya no se elige acá: ahora se hereda
+              de la categoría (cada categoría tiene su color). Si querés cambiar
+              cómo se ve un producto en la tabla, cambiá el color de su categoría
+              desde el modal Categorías. */}
 
           {!isEdit && (
             <div className="rounded-lg bg-warm-50 border border-warm-150 px-3 py-2.5 text-[12px] text-warm-600">

@@ -26,9 +26,7 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
             .IsRequired()
             .HasMaxLength(100);
 
-        builder.Property(p => p.Category)
-            .IsRequired()
-            .HasConversion<int>();
+        builder.Property(p => p.CategoryId).IsRequired();
 
         builder.Property(p => p.Unit)
             .IsRequired()
@@ -42,10 +40,6 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
             .HasColumnType("numeric(12,2)")
             .HasConversion(vo => vo.Amount, amount => Money.Create(amount));
 
-        builder.Property(p => p.Tone)
-            .IsRequired()
-            .HasConversion<int>();
-
         builder.Property(p => p.LastInAt);  // nullable
         builder.Property(p => p.IsActive).IsRequired().HasDefaultValue(true);
 
@@ -55,12 +49,20 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         // Filtros típicos:
         //  - Listado por tenant + categoría
         //  - Buscar por nombre dentro de un tenant
-        builder.HasIndex(p => new { p.TenantId, p.Category });
+        builder.HasIndex(p => new { p.TenantId, p.CategoryId });
         builder.HasIndex(p => new { p.TenantId, p.IsActive });
 
         builder.HasOne<Tenant>()
             .WithMany()
             .HasForeignKey(p => p.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // FK a categoría. Restrict para evitar borrar categorías que tienen
+        // productos asignados (el handler de archive valida que no haya
+        // productos activos; este FK es defensa en profundidad).
+        builder.HasOne(p => p.Category)
+            .WithMany()
+            .HasForeignKey(p => p.CategoryId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
