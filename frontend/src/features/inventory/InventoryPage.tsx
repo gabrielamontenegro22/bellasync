@@ -299,8 +299,13 @@ export function InventoryPage() {
 
       {/* ─── Tabla ─── */}
       <div className="px-6 lg:px-10 mt-5 mb-10">
-        <div className="bg-white rounded-2xl border border-warm-150 overflow-hidden">
-          <div className="overflow-x-auto">
+        {/* overflow-x-auto sin overflow-y explícito provoca que algunos browsers
+            (Chrome/Edge) reserven scrollbar vertical "fantasma" cuando el
+            contenido es más ancho que el container. Forzamos overflow-y-visible
+            para que la tabla nunca scrollee vertical (queremos scroll de
+            página, no del card). */}
+        <div className="bg-white rounded-2xl border border-warm-150">
+          <div className="overflow-x-auto overflow-y-visible">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="bg-warm-50/60 border-b border-warm-150 text-[10.5px] tracking-[0.14em] uppercase text-warm-500">
