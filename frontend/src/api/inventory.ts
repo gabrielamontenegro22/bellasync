@@ -76,7 +76,14 @@ export interface CreateProductRequest {
   cost: number
 }
 
-export interface UpdateProductRequest extends CreateProductRequest {}
+export interface UpdateProductRequest extends CreateProductRequest {
+  /**
+   * Si viene y es distinto al stock actual, el backend ajusta el stock
+   * Y crea automáticamente un movimiento tipo Ajuste para preservar el
+   * historial. Si null o igual al actual, el stock no se toca.
+   */
+  newStock?: number | null
+}
 
 export interface RegisterMovementRequest {
   productId: string

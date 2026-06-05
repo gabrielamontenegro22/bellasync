@@ -29,6 +29,9 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
   const [unit, setUnit] = useState('')
   const [minStock, setMinStock] = useState('5')
   const [cost, setCost] = useState('')
+  // Stock actual (solo en edit). Si el user lo cambia y guarda, el backend
+  // ajusta el stock y crea automáticamente un movimiento tipo Ajuste.
+  const [stock, setStock] = useState('0')
   const [error, setError] = useState<string | null>(null)
   const submittingRef = useRef(false)
 
@@ -49,10 +52,18 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
       setUnit(product?.unit ?? '')
       setMinStock(String(product?.minStock ?? 5))
       setCost(product ? String(Math.round(product.cost)) : '')
+      setStock(String(product?.stock ?? 0))
       setError(null)
       submittingRef.current = false
     }
   }, [open, product, categories])
+
+  // Stock parseado para detectar si cambió. Solo se manda al backend si
+  // (editando) Y (es distinto al original). Si igual al original, omitimos
+  // el campo — backend lo trata como "no tocar stock".
+  const stockNum = parseInt(stock, 10)
+  const stockChanged = isEdit && product != null
+    && !Number.isNaN(stockNum) && stockNum !== product.stock
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -63,14 +74,23 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
         unit: unit.trim(),
         minStock: parseInt(minStock, 10) || 0,
         cost: parseInt(cost.replace(/[^0-9]/g, ''), 10) || 0,
+        // Si cambió el stock en modo edit, mandamos el nuevo valor.
+        // null = no tocar.
+        newStock: stockChanged ? stockNum : null,
       }
       if (product) return updateProduct(product.id, req)
       return createProduct(req)
     },
     onSuccess: () => {
       submittingRef.current = false
-      const verb = isEdit ? 'Producto actualizado' : 'Producto creado'
-      onSaved(`${verb} · ${name.trim()}`)
+      // Si el stock cambió en esta edición, lo decimos en el toast para
+      // que la admin vea el cambio sin tener que abrir el historial.
+      if (isEdit && stockChanged && product) {
+        onSaved(`Stock ajustado · ${name.trim()} (${product.stock} → ${stockNum})`)
+      } else {
+        const verb = isEdit ? 'Producto actualizado' : 'Producto creado'
+        onSaved(`${verb} · ${name.trim()}`)
+      }
     },
     onError: (e) => {
       submittingRef.current = false
@@ -153,11 +173,11 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
                 ))}
               </select>
             </Field>
-            <Field label="Unidad" required hint="frasco, tubo, 500ml…">
+            <Field label="Unidad" required hint="cómo se cuenta">
               <input
                 value={unit}
                 onChange={e => setUnit(e.target.value)}
-                placeholder="frasco"
+                placeholder="frasco, tubo, 500ml…"
                 className={inputCls}
               />
             </Field>
@@ -201,17 +221,37 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
             </div>
           )}
 
-          {/* Edición: aviso de que el stock NO se cambia desde este form. Es
-              error común — el user busca cambiarlo acá y no encuentra el
-              campo. Le recordamos que para eso está "Registrar movimiento". */}
+          {/* Edición: campo Stock editable directo. Si cambia, el backend
+              registra automáticamente un Ajuste en el historial (audit trail
+              preservado). Caso típico: la admin hace inventario físico,
+              cuenta 20 en vez de 25, cambia el número acá y guarda. */}
           {isEdit && product && (
-            <div className="rounded-lg bg-warm-50 border border-warm-150 px-3 py-2.5 text-[12px] text-warm-600 flex items-start gap-2">
-              <span className="text-warm-400 mt-0.5">ℹ️</span>
-              <span>
-                El stock actual (<strong className="text-warm-800">{product.stock} {product.unit}</strong>) se cambia
-                registrando un movimiento (entrada / salida / ajuste), no desde acá.
-              </span>
-            </div>
+            <Field
+              label="Stock actual"
+              hint={stockChanged ? '↻ Se registrará un Ajuste en el historial' : 'inventario físico, corrección, etc.'}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={stock}
+                  onChange={e => setStock(e.target.value.replace(/[^0-9]/g, ''))}
+                  className={cls(inputCls, 'tabular-nums max-w-[140px]', stockChanged && 'border-brand-500 ring-2 ring-brand-100')}
+                />
+                <span className="text-[13px] text-warm-500">{product.unit}</span>
+                {stockChanged && (
+                  <span className="text-[11.5px] text-brand-700 font-medium tabular-nums">
+                    {product.stock} → {stockNum}
+                  </span>
+                )}
+              </div>
+              {stockChanged && (
+                <p className="text-[11px] text-warm-500 mt-1.5 leading-snug">
+                  Quedará un movimiento en el historial con motivo{' '}
+                  <em>"Ajuste desde editar producto"</em> para que sepas cuándo se cambió.
+                </p>
+              )}
+            </Field>
           )}
 
           {error && (
