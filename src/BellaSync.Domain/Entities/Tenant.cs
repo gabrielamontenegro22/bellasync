@@ -47,6 +47,15 @@ public class Tenant : BaseEntity
         tenant.ReceptionExpenseCapCop = 100_000m;
         tenant.ReceptionCanCancelWithMoney = true;
         tenant.ReceptionCanCloseCash = false;
+        // Permisos granulares — todos OFF por default. La admin los
+        // activa selectivamente según confíe en cada miembro del equipo.
+        tenant.ReceptionCanEditStylists = false;
+        tenant.ReceptionCanEditServices = false;
+        tenant.ReceptionCanViewReports = false;
+        tenant.ReceptionCanViewCommissions = false;
+        tenant.ReceptionCanEditSchedule = false;
+        tenant.ReceptionCanEditPaymentPolicy = false;
+        tenant.ReceptionCanEditSalonInfo = false;
         return tenant;
     }
 
@@ -181,6 +190,54 @@ public class Tenant : BaseEntity
     /// </summary>
     public bool ReceptionCanCloseCash { get; private set; }
 
+    // ---- Catálogo del salón ----
+
+    /// <summary>
+    /// Si recepción puede crear/editar/borrar estilistas + marcar sus
+    /// días libres. False por default — el equipo es decisión de admin.
+    /// </summary>
+    public bool ReceptionCanEditStylists { get; private set; }
+
+    /// <summary>
+    /// Si recepción puede crear/editar/borrar servicios y cambiar
+    /// precios. False por default — oferta y precios son decisión admin.
+    /// </summary>
+    public bool ReceptionCanEditServices { get; private set; }
+
+    // ---- Información sensible (KPIs financieros) ----
+
+    /// <summary>
+    /// Si recepción puede ver /reportes (facturación, KPIs, tendencias).
+    /// False por default — son datos financieros sensibles.
+    /// </summary>
+    public bool ReceptionCanViewReports { get; private set; }
+
+    /// <summary>
+    /// Si recepción puede ver /comisiones (cuánto le toca a cada
+    /// estilista, liquidaciones). False por default — info sensible.
+    /// </summary>
+    public bool ReceptionCanViewCommissions { get; private set; }
+
+    // ---- Configuración del salón ----
+
+    /// <summary>
+    /// Si recepción puede editar /configuracion/horario.
+    /// False por default — el horario lo decide admin.
+    /// </summary>
+    public bool ReceptionCanEditSchedule { get; private set; }
+
+    /// <summary>
+    /// Si recepción puede editar /configuracion/pagos (tiempos de hold,
+    /// anticipación mínima). False por default.
+    /// </summary>
+    public bool ReceptionCanEditPaymentPolicy { get; private set; }
+
+    /// <summary>
+    /// Si recepción puede editar /configuracion/general (nombre,
+    /// dirección, logo, info pública). False por default.
+    /// </summary>
+    public bool ReceptionCanEditSalonInfo { get; private set; }
+
     // Relación inversa: usuarios que pertenecen a este salón
     public ICollection<User> Users { get; private set; } = new List<User>();
 
@@ -303,15 +360,26 @@ public class Tenant : BaseEntity
     }
 
     /// <summary>
-    /// Actualiza los permisos de recepción del salón. Valida que el cap
-    /// de egresos sea null (sin límite) o no-negativo. Los tres flags son
-    /// independientes — la admin puede mezclar (ej. permitir cancelar con
-    /// plata + cerrar caja, pero cap chico de egresos).
+    /// Actualiza TODOS los permisos de recepción del salón en una pasada.
+    /// Pasamos el set completo (no parcial) para que el dominio refleje
+    /// el estado del form de la admin tal como lo ve. Validación mínima
+    /// porque son booleans + un decimal opcional.
     /// </summary>
     public void UpdateReceptionPermissions(
+        // Operación diaria
         decimal? expenseCapCop,
         bool canCancelWithMoney,
-        bool canCloseCash)
+        bool canCloseCash,
+        // Catálogo
+        bool canEditStylists,
+        bool canEditServices,
+        // Info sensible
+        bool canViewReports,
+        bool canViewCommissions,
+        // Configuración
+        bool canEditSchedule,
+        bool canEditPaymentPolicy,
+        bool canEditSalonInfo)
     {
         if (expenseCapCop is not null && expenseCapCop < 0m)
             throw new DomainException(
@@ -320,6 +388,13 @@ public class Tenant : BaseEntity
         ReceptionExpenseCapCop = expenseCapCop;
         ReceptionCanCancelWithMoney = canCancelWithMoney;
         ReceptionCanCloseCash = canCloseCash;
+        ReceptionCanEditStylists = canEditStylists;
+        ReceptionCanEditServices = canEditServices;
+        ReceptionCanViewReports = canViewReports;
+        ReceptionCanViewCommissions = canViewCommissions;
+        ReceptionCanEditSchedule = canEditSchedule;
+        ReceptionCanEditPaymentPolicy = canEditPaymentPolicy;
+        ReceptionCanEditSalonInfo = canEditSalonInfo;
     }
 
     private static string? Normalize(string? value, int maxLen, string fieldName)

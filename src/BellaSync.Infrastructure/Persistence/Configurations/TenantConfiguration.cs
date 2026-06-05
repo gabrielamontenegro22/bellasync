@@ -66,6 +66,17 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.ReceptionCanCancelWithMoney).IsRequired().HasDefaultValue(true);
         builder.Property(t => t.ReceptionCanCloseCash).IsRequired().HasDefaultValue(false);
 
+        // Permisos granulares — default OFF para mantener el comportamiento
+        // restrictivo anterior. La admin los activa según su nivel de
+        // confianza en /configuracion/permisos.
+        builder.Property(t => t.ReceptionCanEditStylists).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.ReceptionCanEditServices).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.ReceptionCanViewReports).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.ReceptionCanViewCommissions).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.ReceptionCanEditSchedule).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.ReceptionCanEditPaymentPolicy).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.ReceptionCanEditSalonInfo).IsRequired().HasDefaultValue(false);
+
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.UpdatedAt);
 

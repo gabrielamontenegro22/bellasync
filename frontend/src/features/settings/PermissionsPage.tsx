@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Shield } from 'lucide-react'
+import { Shield, Scissors, Eye, Settings } from 'lucide-react'
 import { extractApiError } from '@/lib/extractApiError'
 import {
   getReceptionPermissions, updateReceptionPermissions,
@@ -14,18 +14,32 @@ import { cls } from '@/lib/cls'
 
 const KEY = 'receptionPermissions'
 
+const DEFAULTS: ReceptionPermissions = {
+  expenseCapCop: 100_000,
+  canCancelWithMoney: true,
+  canCloseCash: false,
+  canEditStylists: false,
+  canEditServices: false,
+  canViewReports: false,
+  canViewCommissions: false,
+  canEditSchedule: false,
+  canEditPaymentPolicy: false,
+  canEditSalonInfo: false,
+}
+
 /**
- * `/configuracion/permisos` — la admin del salón ajusta qué puede
- * hacer recepción sin pedirle autorización para cada cosa.
+ * `/configuracion/permisos` — la admin decide qué puede hacer recepción
+ * sin pedirle autorización para cada cosa. Cada salón es distinto: en
+ * unos recepción es solo "agendar y cobrar"; en otros maneja plata,
+ * equipo, y configuración del local.
  *
- * Cada salón es distinto: en uno la recepcionista compra los tintes y
- * cierra caja porque la admin no pasa por el local; en otro recepción
- * solo agenda y cobra. Esta página es donde la admin afina esos
- * comportamientos según su nivel de confianza con su equipo.
+ * 4 bloques temáticos:
+ *  1. Operación diaria — cap egresos, cancelar con plata, cerrar caja
+ *  2. Catálogo del salón — estilistas, servicios
+ *  3. Información sensible — reportes, comisiones (KPIs financieros)
+ *  4. Configuración del salón — horario, política de pagos, info pública
  *
- * Los handlers de Application leen estos settings en cada operación
- * (RegisterExpense, CancelAppointment, CreateCashClosing) y rechazan
- * con 403 si no aplican.
+ * Los handlers de cada operación leen estos settings en cada request.
  */
 export function PermissionsPage() {
   const qc = useQueryClient()
@@ -34,19 +48,11 @@ export function PermissionsPage() {
     queryFn: getReceptionPermissions,
   })
 
-  const initial: ReceptionPermissions = useMemo(
-    () => data ?? {
-      expenseCapCop: 100_000,
-      canCancelWithMoney: true,
-      canCloseCash: false,
-    },
-    [data],
-  )
+  const initial: ReceptionPermissions = useMemo(() => data ?? DEFAULTS, [data])
 
   const [form, setForm] = useState<ReceptionPermissions>(initial)
-  // Manejamos el input del cap como string para que el usuario pueda
-  // tipear, borrar todo (= sin límite = null), o poner 0 (= bloqueado).
-  // Convertimos a number/null al guardar.
+  // El cap se maneja como string para permitir vacío (= null = sin límite)
+  // y "0" (= bloqueado). Se convierte a number/null al guardar.
   const [capText, setCapText] = useState<string>(() =>
     initial.expenseCapCop === null ? '' : String(initial.expenseCapCop),
   )
@@ -62,8 +68,7 @@ export function PermissionsPage() {
     mutationFn: (req: ReceptionPermissions) => updateReceptionPermissions(req),
     onSuccess: (r) => {
       qc.setQueryData([KEY], r)
-      // Invalidamos también el modal de egresos para que tome el cap nuevo.
-      qc.invalidateQueries({ queryKey: ['receptionPermissions'] })
+      qc.invalidateQueries({ queryKey: [KEY] })
       setSubmitError(null)
       setSaved(true)
     },
@@ -76,12 +81,17 @@ export function PermissionsPage() {
     return () => clearTimeout(t)
   }, [saved])
 
-  // Construye el form actual leyendo capText. Compara contra initial
-  // para detectar cambios sin guardar.
+  const setField = <K extends keyof ReceptionPermissions>(k: K, v: ReceptionPermissions[K]) => {
+    setForm(f => ({ ...f, [k]: v }))
+    setSaved(false); setSubmitError(null)
+  }
+
+  // Construye el form actual con el cap parseado.
   const formNow: ReceptionPermissions = {
-    expenseCapCop: capText.trim() === '' ? null : Math.max(0, parseInt(capText.replace(/[^0-9]/g, '')) || 0),
-    canCancelWithMoney: form.canCancelWithMoney,
-    canCloseCash: form.canCloseCash,
+    ...form,
+    expenseCapCop: capText.trim() === ''
+      ? null
+      : Math.max(0, parseInt(capText.replace(/[^0-9]/g, '')) || 0),
   }
   const isDirty = JSON.stringify(formNow) !== JSON.stringify(initial)
 
@@ -91,26 +101,17 @@ export function PermissionsPage() {
     )
   }
 
-  // Helper para describir lo que está configurado en lenguaje humano.
-  // Aparece arriba del SaveBar para que la admin vea el impacto antes
-  // de guardar.
-  const capDesc = formNow.expenseCapCop === null
-    ? 'sin límite (puede registrar lo que sea)'
-    : formNow.expenseCapCop === 0
-      ? 'no puede registrar egresos'
-      : `hasta $${formNow.expenseCapCop.toLocaleString('es-CO')} COP por egreso`
-
   return (
     <div className="flex flex-col min-h-full">
-      <div className="flex-1 px-6 lg:px-10 py-8 max-w-3xl">
+      <div className="flex-1 px-6 lg:px-10 py-8 max-w-3xl space-y-5">
         <SettingsHeader
           eyebrow="Ajustes del salón"
           title="Permisos del equipo"
           desc="Definí qué puede hacer la recepción sin pedirte autorización. Si tu recepcionista es de confianza y maneja plata del salón, dale más permisos. Si recién empieza, dejalo restringido."
         />
 
-        <SettingsBlock icon={<Shield size={16} />} title="Recepción">
-          {/* Cap de egresos */}
+        {/* ── BLOQUE 1: Operación diaria ─────────────────────────── */}
+        <SettingsBlock icon={<Shield size={16} />} title="Operación diaria">
           <SettingsField
             label="Tope para registrar egresos"
             hint={
@@ -122,59 +123,90 @@ export function PermissionsPage() {
             }
           >
             <div className="relative max-w-[200px]">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 text-[14px]">
-                $
-              </span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 text-[14px]">$</span>
               <input
                 type="text"
                 inputMode="numeric"
                 value={capText}
-                onChange={(e) => {
-                  setCapText(e.target.value)
-                  setSaved(false)
-                  setSubmitError(null)
-                }}
+                onChange={(e) => { setCapText(e.target.value); setSaved(false); setSubmitError(null) }}
                 placeholder="Sin límite"
                 className={cls(inputCls, 'pl-7 tabular-nums')}
               />
             </div>
           </SettingsField>
 
-          {/* Cancelar citas con plata */}
           <ToggleRow
             title="Puede cancelar citas con anticipo cobrado"
-            desc="Cuando la cliente avisa que no puede ir y ya pagó. Recepción debe escribir un motivo obligatorio (devolver / aplicar a otra cita / política estricta) para que vos sepas qué hacer con el dinero después."
+            desc="Cuando la cliente avisa que no puede ir y ya pagó. Recepción debe escribir motivo obligatorio (devolver / aplicar a otra cita / política estricta) para que vos sepas qué hacer con el dinero después."
             on={form.canCancelWithMoney}
-            onChange={(v) => {
-              setForm(f => ({ ...f, canCancelWithMoney: v }))
-              setSaved(false); setSubmitError(null)
-            }}
+            onChange={(v) => setField('canCancelWithMoney', v)}
           />
 
-          {/* Cerrar caja */}
           <ToggleRow
             title="Puede firmar el cierre de caja del día"
-            desc="Si pasás por el salón cada noche, dejalo OFF (vos firmás). Si no, activá para que tu recepción cierre el día (igual queda registrado 'Cerrado por X' en el historial)."
+            desc="Si pasás por el salón cada noche, dejalo OFF (vos firmás). Si no, activá para que tu recepción cierre el día (queda registrado quién firmó)."
             on={form.canCloseCash}
-            onChange={(v) => {
-              setForm(f => ({ ...f, canCloseCash: v }))
-              setSaved(false); setSubmitError(null)
-            }}
+            onChange={(v) => setField('canCloseCash', v)}
           />
         </SettingsBlock>
 
-        {/* Resumen humano */}
-        <div className="mt-2 rounded-xl border border-warm-150 bg-warm-50/60 p-4 text-[12.5px] text-warm-700 leading-relaxed">
-          <strong className="text-warm-800">Cómo va a quedar:</strong> tu recepción
-          podrá registrar egresos {capDesc};{' '}
-          {formNow.canCancelWithMoney
-            ? 'cancelar citas con anticipo (con nota explicativa obligatoria)'
-            : 'NO podrá cancelar citas con anticipo (deberá pedirte a vos)'};
-          {' '}y{' '}
-          {formNow.canCloseCash
-            ? 'firmar el cierre de caja del día.'
-            : 'NO podrá firmar el cierre de caja (vos lo hacés).'}
-        </div>
+        {/* ── BLOQUE 2: Catálogo ─────────────────────────────────── */}
+        <SettingsBlock icon={<Scissors size={16} />} title="Catálogo del salón">
+          <ToggleRow
+            title="Puede crear y editar estilistas"
+            desc="Incluye agregar al equipo, editar datos de contacto, desactivar y marcar días libres / vacaciones. Si está OFF, recepción solo puede VER el equipo."
+            on={form.canEditStylists}
+            onChange={(v) => setField('canEditStylists', v)}
+          />
+
+          <ToggleRow
+            title="Puede crear y editar servicios"
+            desc="Crear servicios nuevos, editar precios, duración, política de anticipo. Activá si recepción coordina el catálogo. Cambiar precios sin admin requiere mucha confianza."
+            on={form.canEditServices}
+            onChange={(v) => setField('canEditServices', v)}
+          />
+        </SettingsBlock>
+
+        {/* ── BLOQUE 3: Información sensible ─────────────────────── */}
+        <SettingsBlock icon={<Eye size={16} />} title="Información sensible">
+          <ToggleRow
+            title="Puede ver Reportes"
+            desc="Facturación del salón, KPIs financieros, tendencias. Es información de negocio sensible — recepción típicamente no la necesita para su trabajo diario."
+            on={form.canViewReports}
+            onChange={(v) => setField('canViewReports', v)}
+          />
+
+          <ToggleRow
+            title="Puede ver Comisiones"
+            desc="Cuánto le toca a cada estilista, liquidaciones del mes. También información sensible — si lo activás, recepción ve sueldos del equipo."
+            on={form.canViewCommissions}
+            onChange={(v) => setField('canViewCommissions', v)}
+          />
+        </SettingsBlock>
+
+        {/* ── BLOQUE 4: Configuración del salón ──────────────────── */}
+        <SettingsBlock icon={<Settings size={16} />} title="Configuración del salón">
+          <ToggleRow
+            title="Puede editar el horario del salón"
+            desc="Días que abre, franjas horarias, hora de almuerzo, festivos. Útil activar si recepción ajusta horarios estacionales sin pedirte cada cambio."
+            on={form.canEditSchedule}
+            onChange={(v) => setField('canEditSchedule', v)}
+          />
+
+          <ToggleRow
+            title="Puede editar la política de pagos"
+            desc="Cuánto tiempo el cupo queda reservado esperando anticipo, anticipación mínima para agendar. Son decisiones de negocio."
+            on={form.canEditPaymentPolicy}
+            onChange={(v) => setField('canEditPaymentPolicy', v)}
+          />
+
+          <ToggleRow
+            title="Puede editar la información pública del salón"
+            desc="Nombre, dirección, teléfono, logo, descripción que ven las clientas en el portal de booking. Cambios acá afectan la imagen del salón."
+            on={form.canEditSalonInfo}
+            onChange={(v) => setField('canEditSalonInfo', v)}
+          />
+        </SettingsBlock>
       </div>
 
       <SaveBar

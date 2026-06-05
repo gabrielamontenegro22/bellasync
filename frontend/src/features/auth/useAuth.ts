@@ -1,5 +1,7 @@
 import { useContext } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { AuthContext } from './AuthContext'
+import { getReceptionPermissions } from '@/api/admin'
 
 /**
  * Hook para consumir el contexto de auth.
@@ -13,13 +15,79 @@ export function useAuth() {
 
 /**
  * Atajo: ¿el user actual es SalonAdmin?
- * Lo usan páginas/cards compartidas para ocultar botones de CRUD
- * (editar/borrar/crear) que el backend solo acepta de admin.
- *
- * Devuelve false si no hay user (sesión cerrada) o si el rol es otro
- * (Receptionist, Stylist, SuperAdmin). No tira — pensado para inline.
+ * Devuelve false si no hay user o si el rol es otro.
+ * Pensado para inline en componentes que necesitan saber "admin sí/no".
  */
 export function useIsAdmin(): boolean {
   const { user } = useAuth()
   return user?.role === 'SalonAdmin'
+}
+
+/**
+ * Hook unificado de permisos. Combina rol + settings del tenant
+ * (cargados vía /api/Admin/reception-permissions) en una sola
+ * respuesta booleana por capacidad.
+ *
+ * Para admin → todos los permisos devuelven true sin necesidad de
+ * leer la BD (atajo: la admin nunca está restringida).
+ *
+ * Para recepción → consulta los toggles del tenant. Mientras carga
+ * devolvemos los defaults conservadores (todo OFF excepto cancelar
+ * con plata) para evitar flashes de UI permitida que luego se oculte.
+ *
+ * Los componentes lo usan así:
+ *   const { canEditStylists } = usePermissions()
+ *   if (canEditStylists) { ... muestra botón ... }
+ *
+ * NOTA: este hook hace un query — usalo en componentes "página", no
+ * en componentes de lista que se renderizan N veces.
+ */
+export function usePermissions() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'SalonAdmin'
+
+  // useQuery con staleTime alto: estos settings se cambian raramente.
+  // enabled: !isAdmin → la admin no necesita el query (tiene todo).
+  const permsQ = useQuery({
+    queryKey: ['receptionPermissions'],
+    queryFn: getReceptionPermissions,
+    enabled: !isAdmin && !!user,
+    staleTime: 5 * 60_000,
+  })
+
+  // Admin: todo true. Recepción: lo que diga el tenant (o defaults
+  // conservadores mientras carga). El cap se devuelve también para
+  // los componentes que necesitan validar montos en runtime.
+  if (isAdmin) {
+    return {
+      isAdmin: true,
+      expenseCap: null as number | null,  // sin cap para admin
+      canCancelWithMoney: true,
+      canCloseCash: true,
+      canEditStylists: true,
+      canEditServices: true,
+      canViewReports: true,
+      canViewCommissions: true,
+      canEditSchedule: true,
+      canEditPaymentPolicy: true,
+      canEditSalonInfo: true,
+      isLoading: false,
+    }
+  }
+
+  const p = permsQ.data
+  return {
+    isAdmin: false,
+    expenseCap: p?.expenseCapCop ?? 100_000,
+    canCancelWithMoney: p?.canCancelWithMoney ?? true,
+    canCloseCash: p?.canCloseCash ?? false,
+    canEditStylists: p?.canEditStylists ?? false,
+    canEditServices: p?.canEditServices ?? false,
+    canViewReports: p?.canViewReports ?? false,
+    canViewCommissions: p?.canViewCommissions ?? false,
+    canEditSchedule: p?.canEditSchedule ?? false,
+    canEditPaymentPolicy: p?.canEditPaymentPolicy ?? false,
+    canEditSalonInfo: p?.canEditSalonInfo ?? false,
+    isLoading: permsQ.isLoading,
+  }
 }
