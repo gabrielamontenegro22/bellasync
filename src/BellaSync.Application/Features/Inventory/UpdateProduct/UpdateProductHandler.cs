@@ -103,17 +103,28 @@ public sealed class UpdateProductHandler
             // Crear el movimiento de auditoría. Reason explica que vino del
             // form de edición (vs un Ajuste explícito desde el modal de mov).
             // Qty = newStock (convención para Adjustment: el valor final, no el delta).
-            var auditMovement = ProductMovement.Create(
-                tenantId: _currentTenant.TenantId,
-                productId: product.Id,
-                kind: ProductMovementKind.Adjustment,
-                qty: command.NewStock.Value,
-                reason: "Ajuste desde editar producto",
-                stockBefore: stockBefore,
-                stockAfter: product.Stock,
-                notes: $"Cambio manual de stock vía form de edición ({stockBefore} → {product.Stock}).",
-                registeredByUserId: _currentUser.UserId,
-                utcNow: _clock.UtcNow);
+            // Try/catch defensivo: el factory de ProductMovement valida
+            // invariantes (qty negativa, motivo vacío, etc.) y queremos
+            // devolver 400 con mensaje accionable en vez de 500.
+            ProductMovement auditMovement;
+            try
+            {
+                auditMovement = ProductMovement.Create(
+                    tenantId: _currentTenant.TenantId,
+                    productId: product.Id,
+                    kind: ProductMovementKind.Adjustment,
+                    qty: command.NewStock.Value,
+                    reason: "Ajuste desde editar producto",
+                    stockBefore: stockBefore,
+                    stockAfter: product.Stock,
+                    notes: $"Cambio manual de stock vía form de edición ({stockBefore} → {product.Stock}).",
+                    registeredByUserId: _currentUser.UserId,
+                    utcNow: _clock.UtcNow);
+            }
+            catch (DomainException ex)
+            {
+                return ApplicationError.Validation("product.audit_movement_failed", ex.Message);
+            }
 
             _db.ProductMovements.Add(auditMovement);
 

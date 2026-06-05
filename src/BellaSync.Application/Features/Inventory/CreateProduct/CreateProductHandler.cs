@@ -93,17 +93,25 @@ public sealed class CreateProductHandler
                 return ApplicationError.Validation("product.invalid_initial_stock", ex.Message);
             }
 
-            var seedMovement = ProductMovement.Create(
-                tenantId: _currentTenant.TenantId,
-                productId: product.Id,
-                kind: ProductMovementKind.Inflow,
-                qty: qty,
-                reason: "Stock inicial",
-                stockBefore: 0,
-                stockAfter: product.Stock,
-                notes: "Carga inicial al crear el producto.",
-                registeredByUserId: _currentUser.UserId,
-                utcNow: _clock.UtcNow);
+            ProductMovement seedMovement;
+            try
+            {
+                seedMovement = ProductMovement.Create(
+                    tenantId: _currentTenant.TenantId,
+                    productId: product.Id,
+                    kind: ProductMovementKind.Inflow,
+                    qty: qty,
+                    reason: "Stock inicial",
+                    stockBefore: 0,
+                    stockAfter: product.Stock,
+                    notes: "Carga inicial al crear el producto.",
+                    registeredByUserId: _currentUser.UserId,
+                    utcNow: _clock.UtcNow);
+            }
+            catch (DomainException ex)
+            {
+                return ApplicationError.Validation("product.seed_movement_failed", ex.Message);
+            }
             _db.ProductMovements.Add(seedMovement);
         }
 

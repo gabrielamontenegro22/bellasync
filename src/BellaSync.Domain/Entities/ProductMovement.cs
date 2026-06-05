@@ -37,8 +37,20 @@ public class ProductMovement : BaseEntity, ITenantEntity
             throw new DomainException("TenantId es obligatorio.");
         if (productId == Guid.Empty)
             throw new DomainException("ProductId es obligatorio.");
-        if (qty <= 0)
-            throw new DomainException("La cantidad debe ser mayor a cero.");
+        // Para Inflow/Outflow la cantidad debe ser > 0 (no se entran ni se
+        // sacan 0 unidades). Para Adjustment se permite 0 — significa
+        // "el stock total ahora es 0" (típicamente cuando se hace inventario
+        // físico y no quedó nada del producto).
+        if (kind == ProductMovementKind.Adjustment)
+        {
+            if (qty < 0)
+                throw new DomainException("El stock ajustado no puede ser negativo.");
+        }
+        else
+        {
+            if (qty <= 0)
+                throw new DomainException("La cantidad debe ser mayor a cero.");
+        }
         if (string.IsNullOrWhiteSpace(reason))
             throw new DomainException("El motivo del movimiento es obligatorio.");
         if (stockBefore < 0 || stockAfter < 0)
