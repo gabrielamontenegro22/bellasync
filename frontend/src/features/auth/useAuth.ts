@@ -46,13 +46,28 @@ export function usePermissions() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'SalonAdmin'
 
-  // useQuery con staleTime alto: estos settings se cambian raramente.
-  // enabled: !isAdmin → la admin no necesita el query (tiene todo).
+  // Política de cache pensada para que recepción vea cambios de permisos
+  // CASI inmediato (sin que admin tenga que avisarle "refrescá"):
+  //
+  // - staleTime 0       → siempre considerar stale; refetch al montar.
+  // - refetchInterval 20s → polling en background cuando hay query
+  //                        montado (sidebar siempre lo está).
+  // - refetchOnWindowFocus (default true) → si cambia de tab y vuelve,
+  //                        refetch automático.
+  // - refetchOnMount 'always' → cada vez que un componente nuevo monta
+  //                        usePermissions, refetch.
+  //
+  // Resultado: admin guarda → recepción ve el cambio en máximo 20s sin
+  // hacer nada, o instantáneo si navega/cambia de tab.
+  //
+  // enabled: !isAdmin → la admin no necesita el query (tiene todo true).
   const permsQ = useQuery({
     queryKey: ['receptionPermissions'],
     queryFn: getReceptionPermissions,
     enabled: !isAdmin && !!user,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchInterval: 20_000,
+    refetchOnMount: 'always',
   })
 
   // Admin: todo true. Recepción: lo que diga el tenant (o defaults

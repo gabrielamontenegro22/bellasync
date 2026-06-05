@@ -7,8 +7,7 @@ import {
 } from 'lucide-react'
 import { PROVIDER_COLORS, PROVIDER_FALLBACK_COLOR } from '@/features/payments/paymentCatalog'
 import { cls } from '@/lib/cls'
-import { useAuth, useIsAdmin } from '@/features/auth/useAuth'
-import { getReceptionPermissions } from '@/api/admin'
+import { useAuth, usePermissions } from '@/features/auth/useAuth'
 import { fmtCop } from '@/features/customers/lib/customerLook'
 import { extractApiError } from '@/lib/extractApiError'
 import {
@@ -44,21 +43,9 @@ import { RegisterExpenseModal } from './components/RegisterExpenseModal'
  */
 export function CashClosingPage() {
   const { user } = useAuth()
-  const isAdmin = useIsAdmin()
-  const qc = useQueryClient()
-
-  // Permisos del salón. Solo nos importa para recepción — admin no se
-  // restringe nunca. staleTime alto: la admin cambia esto raramente.
-  const permsQ = useQuery({
-    queryKey: ['receptionPermissions'],
-    queryFn: getReceptionPermissions,
-    enabled: !isAdmin,
-    staleTime: 5 * 60_000,
-  })
-  // Cierre permitido si sos admin O si la admin habilitó el toggle.
-  // Mientras carga (recepción + primer fetch), asumimos NO para evitar
-  // flicker del botón.
-  const canCloseCash = isAdmin || (permsQ.data?.canCloseCash ?? false)
+  // Hook unificado de permisos — admin siempre true, recepción según
+  // toggle del tenant. Cachea polling automático (20s) en useAuth.
+  const { canCloseCash } = usePermissions()
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy')
   const [filterMethod, setFilterMethod] = useState<string>('all')
   const [closeOpen, setCloseOpen] = useState(false)
