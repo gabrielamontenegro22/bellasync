@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Box, AlertTriangle, AlertCircle, Wallet, Plus, Search, Tag,
@@ -541,6 +542,22 @@ function ProductRow({
 // Menú "···" del row
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Menú "···" del row con posición CALCULADA + Portal.
+ *
+ * Por qué no usamos position:absolute común:
+ *   El menú vive dentro de <td> dentro de <table> dentro de un div con
+ *   overflow-x-auto (para scroll horizontal en mobile). Por especificación
+ *   CSS, cuando se setea overflow-x:auto el overflow-y pasa de visible a
+ *   auto automáticamente — así que cualquier menú absoluto que se posicione
+ *   más abajo del row queda CLIPPEADO por el contenedor. Por eso la usuaria
+ *   clickeaba "···" y no veía nada (el menú abría pero quedaba fuera del
+ *   viewport del contenedor scrolleable).
+ *
+ * Solución: position:fixed con coordenadas calculadas del bounding rect del
+ * botón + Portal al document.body. El menú renderiza FUERA de la jerarquía
+ * del overflow container, así no lo clippea nada.
+ */
 function RowMenu({
   canEdit, onMovement, onEdit, onHistory, onArchive,
 }: {
@@ -551,19 +568,42 @@ function RowMenu({
   onArchive: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+
+  // Calcula la posición del menú relativa al botón cada vez que se abre.
+  // useLayoutEffect (vs useEffect) para que el primer paint ya tenga la
+  // posición correcta — sin esto, el menú aparecería un frame en (0,0).
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    setPos({
+      top: rect.bottom + 6,                          // 6px debajo del botón
+      right: window.innerWidth - rect.right,         // alineado al borde derecho del botón
+    })
+  }, [open])
 
   return (
-    <div className="relative">
+    <>
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={buttonRef}
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
         className="p-1.5 rounded-md hover:bg-warm-100 text-warm-500"
+        aria-label="Más acciones"
       >
         <MoreHorizontal size={16}/>
       </button>
-      {open && (
+      {open && pos && createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)}/>
-          <div className="absolute right-0 mt-1.5 w-56 rounded-xl bg-white shadow-pop border border-warm-150 py-1.5 z-50 anim-fade">
+          {/* Backdrop transparente que captura clicks fuera del menú para cerrarlo. */}
+          <div
+            className="fixed inset-0 z-[60]"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="fixed w-56 rounded-xl bg-white shadow-pop border border-warm-150 py-1.5 z-[70] anim-fade"
+            style={{ top: pos.top, right: pos.right }}
+          >
             {canEdit && (
               <MenuItem icon={Plus} label="Registrar movimiento"
                 onClick={() => { setOpen(false); onMovement() }}/>
@@ -579,9 +619,10 @@ function RowMenu({
                 onClick={() => { setOpen(false); onArchive() }}/>
             )}
           </div>
-        </>
+        </>,
+        document.body,
       )}
-    </div>
+    </>
   )
 }
 
