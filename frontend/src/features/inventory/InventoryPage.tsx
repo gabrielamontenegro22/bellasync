@@ -16,6 +16,7 @@ import { ProductMovementModal } from './components/ProductMovementModal'
 import { ProductFormModal } from './components/ProductFormModal'
 import { ProductMovementsModal } from './components/ProductMovementsModal'
 import { CategoriesModal } from './components/CategoriesModal'
+import { InventoryToast } from './components/InventoryToast'
 
 /**
  * /inventario — página principal del módulo. Espeja el mockup
@@ -98,6 +99,8 @@ export function InventoryPage() {
   const [historyModal, setHistoryModal] = useState<Product | null>(null)
   // Modal de gestión de categorías custom del salón.
   const [categoriesOpen, setCategoriesOpen] = useState(false)
+  // Toast de confirmación (pill abajo-centro). Espeja al mockup.
+  const [toast, setToast] = useState<string | null>(null)
 
   // Categorías activas del tenant. La admin las gestiona vía CategoriesModal.
   const { data: categories = [] } = useQuery({
@@ -135,6 +138,7 @@ export function InventoryPage() {
     try {
       await archiveProduct(p.id)
       refreshAll()
+      setToast(`Producto archivado · ${p.name}`)
     } catch (e) {
       alert(extractApiError(e, 'No se pudo archivar el producto.'))
     }
@@ -372,7 +376,7 @@ export function InventoryPage() {
           open
           initialProduct={movementModal.initialProduct}
           onClose={() => setMovementModal(null)}
-          onSaved={() => { setMovementModal(null); refreshAll() }}
+          onSaved={(msg) => { setMovementModal(null); refreshAll(); setToast(msg) }}
         />
       )}
       {formModal && (
@@ -380,7 +384,7 @@ export function InventoryPage() {
           open
           product={formModal.product}
           onClose={() => setFormModal(null)}
-          onSaved={() => { setFormModal(null); refreshAll() }}
+          onSaved={(msg) => { setFormModal(null); refreshAll(); setToast(msg) }}
         />
       )}
       {historyModal && (
@@ -397,6 +401,9 @@ export function InventoryPage() {
           onChanged={refreshAll}
         />
       )}
+
+      {/* Toast de confirmación. Auto-cierra a los 2.6s. */}
+      <InventoryToast message={toast} onClear={() => setToast(null)} />
     </div>
   )
 }
