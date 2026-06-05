@@ -36,7 +36,6 @@ internal static class InventoryMapper
         Brand = p.Brand,
         CategoryId = p.CategoryId,
         CategoryName = p.Category?.Name ?? string.Empty,
-        Unit = p.Unit,
         Stock = p.Stock,
         MinStock = p.MinStock,
         Cost = p.Cost.Amount,

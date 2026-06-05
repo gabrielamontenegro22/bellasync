@@ -68,7 +68,6 @@ public sealed class CreateProductHandler
                 name: command.Name,
                 brand: command.Brand,
                 categoryId: command.CategoryId,
-                unit: command.Unit,
                 minStock: command.MinStock,
                 cost: cost,
                 utcNow: _clock.UtcNow);

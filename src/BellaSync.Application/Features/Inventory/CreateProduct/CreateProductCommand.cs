@@ -17,7 +17,6 @@ public sealed record CreateProductCommand(
     string Brand,
     /// <summary>Id de la categoría del tenant. La admin las gestiona en /inventario.</summary>
     Guid CategoryId,
-    string Unit,
     int MinStock,
     decimal Cost,
     /// <summary>Cantidad inicial en stock. null o 0 = arranca vacío.</summary>

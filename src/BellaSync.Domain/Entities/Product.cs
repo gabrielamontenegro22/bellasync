@@ -35,7 +35,6 @@ public class Product : BaseEntity, ITenantEntity
         string name,
         string brand,
         Guid categoryId,
-        string unit,
         int minStock,
         Money cost,
         DateTime utcNow)
@@ -48,8 +47,6 @@ public class Product : BaseEntity, ITenantEntity
             throw new DomainException("El nombre del producto es obligatorio.");
         if (string.IsNullOrWhiteSpace(brand))
             throw new DomainException("La marca del producto es obligatoria.");
-        if (string.IsNullOrWhiteSpace(unit))
-            throw new DomainException("La unidad de medida es obligatoria (ej. 'frasco', 'tubo', '500ml').");
         if (minStock < 0)
             throw new DomainException("El stock mínimo no puede ser negativo.");
         if (cost.Amount < 0m)
@@ -63,7 +60,6 @@ public class Product : BaseEntity, ITenantEntity
             Name = name.Trim(),
             Brand = brand.Trim(),
             CategoryId = categoryId,
-            Unit = unit.Trim(),
             Stock = 0,
             MinStock = minStock,
             Cost = cost,
@@ -83,10 +79,12 @@ public class Product : BaseEntity, ITenantEntity
     public ProductCategory? Category { get; private set; }
 
     /// <summary>
-    /// Unidad de medida visible (texto libre): "frasco", "tubo", "kg",
-    /// "500ml", "caja x100". No la usamos para conversión — solo display.
+    /// LEGACY — quedó nullable de cuando era obligatoria. Se removió del UI
+    /// porque confundía a las admins (no entendían qué poner). Nuevos
+    /// productos arrancan con null. La columna se mantiene en BD para no
+    /// perder los valores históricos de productos creados antes del cambio.
     /// </summary>
-    public string Unit { get; private set; } = string.Empty;
+    public string? Unit { get; private set; }
 
     /// <summary>Stock actual en unidades enteras.</summary>
     public int Stock { get; private set; }
@@ -130,7 +128,6 @@ public class Product : BaseEntity, ITenantEntity
         string name,
         string brand,
         Guid categoryId,
-        string unit,
         int minStock,
         Money cost,
         DateTime utcNow)
@@ -141,8 +138,6 @@ public class Product : BaseEntity, ITenantEntity
             throw new DomainException("El nombre del producto es obligatorio.");
         if (string.IsNullOrWhiteSpace(brand))
             throw new DomainException("La marca del producto es obligatoria.");
-        if (string.IsNullOrWhiteSpace(unit))
-            throw new DomainException("La unidad de medida es obligatoria.");
         if (minStock < 0)
             throw new DomainException("El stock mínimo no puede ser negativo.");
         if (cost.Amount < 0m)
@@ -152,9 +147,10 @@ public class Product : BaseEntity, ITenantEntity
         Name = name.Trim();
         Brand = brand.Trim();
         CategoryId = categoryId;
-        Unit = unit.Trim();
         MinStock = minStock;
         Cost = cost;
+        // Unit ya no se edita desde el dominio — quedó legacy nullable.
+        // Si en el futuro se quiere reactivar, agregar el param acá.
     }
 
     /// <summary>

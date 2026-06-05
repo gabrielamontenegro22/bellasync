@@ -22,7 +22,6 @@ public sealed class ProductResponse
     /// <summary>Nombre legible de la categoría (ej. "Cabello", "Pestañas").</summary>
     public string CategoryName { get; init; } = string.Empty;
 
-    public string Unit { get; init; } = string.Empty;
     public int Stock { get; init; }
     public int MinStock { get; init; }
     public decimal Cost { get; init; }

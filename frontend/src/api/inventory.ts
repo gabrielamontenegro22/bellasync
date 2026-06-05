@@ -33,7 +33,6 @@ export interface Product {
   brand: string
   categoryId: string
   categoryName: string
-  unit: string
   stock: number
   minStock: number
   cost: number
@@ -71,7 +70,6 @@ export interface CreateProductRequest {
   name: string
   brand: string
   categoryId: string
-  unit: string
   minStock: number
   cost: number
   /**
