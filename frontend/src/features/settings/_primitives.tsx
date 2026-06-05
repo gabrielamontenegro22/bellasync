@@ -1,3 +1,4 @@
+import type * as React from 'react'
 import { CheckCircle, Heart } from 'lucide-react'
 import { cls } from '@/lib/cls'
 
@@ -259,9 +260,15 @@ export function NumberStepper({
   )
 }
 
-/** Fila típica: label a la izquierda + NumberStepper a la derecha. */
+/**
+ * Fila típica: label a la izquierda + NumberStepper a la derecha.
+ * Soporta un `hint` opcional que se renderiza debajo del label en gris
+ * pequeño — útil para explicar en una frase qué hace ese parámetro
+ * sin agregar tooltips ni links a docs.
+ */
 export function NumberRow({
   label,
+  hint,
   suffix,
   value,
   onChange,
@@ -270,6 +277,7 @@ export function NumberRow({
   step,
 }: {
   label: string
+  hint?: React.ReactNode
   suffix?: string
   value: number
   onChange: (v: number) => void
@@ -278,8 +286,15 @@ export function NumberRow({
   step?: number
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="text-[13.5px] text-warm-800">{label}</div>
+    <div className="flex items-start justify-between gap-4 py-1">
+      <div className="flex-1 min-w-0">
+        <div className="text-[13.5px] text-warm-800">{label}</div>
+        {hint && (
+          <div className="text-[12px] text-warm-500 mt-0.5 leading-snug">
+            {hint}
+          </div>
+        )}
+      </div>
       <NumberStepper
         value={value}
         onChange={onChange}
