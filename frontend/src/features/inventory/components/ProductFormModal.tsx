@@ -13,7 +13,8 @@ interface Props {
   /** Si viene, modo edición. Si no, modo crear. */
   product?: Product
   onClose: () => void
-  onSaved: () => void
+  /** Recibe mensaje para toast. */
+  onSaved: (description: string) => void
 }
 
 /**
@@ -68,7 +69,8 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
     },
     onSuccess: () => {
       submittingRef.current = false
-      onSaved()
+      const verb = isEdit ? 'Producto actualizado' : 'Producto creado'
+      onSaved(`${verb} · ${name.trim()}`)
     },
     onError: (e) => {
       submittingRef.current = false
@@ -196,6 +198,19 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
             <div className="rounded-lg bg-warm-50 border border-warm-150 px-3 py-2.5 text-[12px] text-warm-600">
               El stock arranca en <strong className="text-warm-800">0</strong>. Para cargar inventario inicial,
               registrá una entrada después con motivo "Stock inicial".
+            </div>
+          )}
+
+          {/* Edición: aviso de que el stock NO se cambia desde este form. Es
+              error común — el user busca cambiarlo acá y no encuentra el
+              campo. Le recordamos que para eso está "Registrar movimiento". */}
+          {isEdit && product && (
+            <div className="rounded-lg bg-warm-50 border border-warm-150 px-3 py-2.5 text-[12px] text-warm-600 flex items-start gap-2">
+              <span className="text-warm-400 mt-0.5">ℹ️</span>
+              <span>
+                El stock actual (<strong className="text-warm-800">{product.stock} {product.unit}</strong>) se cambia
+                registrando un movimiento (entrada / salida / ajuste), no desde acá.
+              </span>
             </div>
           )}
 

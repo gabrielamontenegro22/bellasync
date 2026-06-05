@@ -13,7 +13,8 @@ interface Props {
   /** Si viene seteado, abre con ese producto pre-seleccionado. */
   initialProduct?: Product
   onClose: () => void
-  onSaved: () => void
+  /** Recibe descripción del mov para que el padre muestre toast. */
+  onSaved: (description: string) => void
 }
 
 /**
@@ -75,7 +76,12 @@ export function ProductMovementModal({ open, initialProduct, onClose, onSaved }:
     mutationFn: registerMovement,
     onSuccess: () => {
       submittingRef.current = false
-      onSaved()
+      // Toast con verbo + producto (espeja la convención del mockup).
+      const verb = tab === 'Inflow' ? 'Entrada'
+        : tab === 'Outflow' ? 'Salida'
+        : 'Ajuste'
+      const prodName = selected?.name ?? 'producto'
+      onSaved(`${verb} registrada · ${prodName}`)
     },
     onError: (e) => {
       submittingRef.current = false
@@ -210,38 +216,60 @@ export function ProductMovementModal({ open, initialProduct, onClose, onSaved }:
             )}
           </div>
 
-          {/* Cantidad */}
-          <div>
-            <label className="text-[11.5px] tracking-[0.12em] uppercase text-warm-500 font-medium">
-              {tab === 'Adjustment' ? 'Nuevo stock total' : 'Cantidad'}
-            </label>
-            <div className="mt-1.5 flex items-center rounded-lg border border-warm-200 bg-white focus-within:ring-2 focus-within:ring-brand-700/15 focus-within:border-brand-700 overflow-hidden">
-              {tab !== 'Adjustment' && (
-                <button
-                  type="button"
-                  onClick={() => setQty(q => String(Math.max(0, (parseInt(q, 10) || 0) - 1)))}
-                  className="px-3 py-2.5 text-warm-500 hover:bg-warm-50"
-                >
-                  −
-                </button>
+          {/* Cantidad + Fecha (display) en 2 columnas, igual al mockup */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11.5px] tracking-[0.12em] uppercase text-warm-500 font-medium">
+                {tab === 'Adjustment' ? 'Nuevo stock total' : 'Cantidad'}
+              </label>
+              <div className="mt-1.5 flex items-center rounded-lg border border-warm-200 bg-white focus-within:ring-2 focus-within:ring-brand-700/15 focus-within:border-brand-700 overflow-hidden">
+                {tab !== 'Adjustment' && (
+                  <button
+                    type="button"
+                    onClick={() => setQty(q => String(Math.max(0, (parseInt(q, 10) || 0) - 1)))}
+                    className="px-3 py-2.5 text-warm-500 hover:bg-warm-50"
+                  >
+                    −
+                  </button>
+                )}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={qty}
+                  onChange={e => setQty(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="0"
+                  className="flex-1 px-3 py-2.5 outline-none text-[14px] text-warm-800 text-center tabular-nums"
+                />
+                {tab !== 'Adjustment' && (
+                  <button
+                    type="button"
+                    onClick={() => setQty(q => String((parseInt(q, 10) || 0) + 1))}
+                    className="px-3 py-2.5 text-warm-500 hover:bg-warm-50"
+                  >
+                    +
+                  </button>
+                )}
+              </div>
+              {/* Hint específico para "marcar 0 en inventario físico" — el caso
+                  que la admin pidió clarificar. Solo se muestra en Ajuste
+                  cuando la cantidad escrita es exactamente 0. */}
+              {tab === 'Adjustment' && qty === '0' && (
+                <p className="text-[11px] text-gold-600 mt-1.5">
+                  ⚠️ El stock quedará en 0 (Agotado).
+                </p>
               )}
-              <input
-                type="text"
-                inputMode="numeric"
-                value={qty}
-                onChange={e => setQty(e.target.value.replace(/[^0-9]/g, ''))}
-                placeholder="0"
-                className="flex-1 px-3 py-2.5 outline-none text-[14px] text-warm-800 text-center tabular-nums"
-              />
-              {tab !== 'Adjustment' && (
-                <button
-                  type="button"
-                  onClick={() => setQty(q => String((parseInt(q, 10) || 0) + 1))}
-                  className="px-3 py-2.5 text-warm-500 hover:bg-warm-50"
-                >
-                  +
-                </button>
-              )}
+            </div>
+            <div>
+              <label className="text-[11.5px] tracking-[0.12em] uppercase text-warm-500 font-medium">
+                Fecha
+              </label>
+              <div className="mt-1.5 flex items-center gap-2 px-3 py-2.5 rounded-lg border border-warm-200 bg-warm-50/50">
+                <span className="text-[13.5px] text-warm-700">
+                  {new Date().toLocaleDateString('es-CO', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                  })}
+                </span>
+              </div>
             </div>
           </div>
 
