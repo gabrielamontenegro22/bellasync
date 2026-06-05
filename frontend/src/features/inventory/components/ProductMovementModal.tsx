@@ -157,6 +157,23 @@ export function ProductMovementModal({ open, initialProduct, onClose, onSaved }:
               </button>
             ))}
           </div>
+
+          {/* Helper text per tab — explica QUÉ va a hacer cada uno y si 0
+              tiene sentido. Es la diferencia más confusa para users nuevos:
+              "Entrada/Salida" son deltas (suma/resta), "Ajuste" es valor
+              absoluto. La admin preguntó "puedo poner 0 si no hay nada en
+              el conteo físico?" — la respuesta correcta es: solo con Ajuste. */}
+          <p className="text-[11.5px] text-warm-500 mt-2 leading-snug">
+            {tab === 'Inflow' && (
+              <>Compré / recibí <strong>X unidades nuevas</strong>. Se suman al stock actual.</>
+            )}
+            {tab === 'Outflow' && (
+              <>Usé / saqué <strong>X unidades</strong>. Se restan del stock actual.</>
+            )}
+            {tab === 'Adjustment' && (
+              <>Conté el stock físico — ahora hay exactamente <strong>X unidades</strong> en total. Acepta 0 (todo se acabó).</>
+            )}
+          </p>
         </div>
 
         {/* Body */}
@@ -256,6 +273,21 @@ export function ProductMovementModal({ open, initialProduct, onClose, onSaved }:
               {tab === 'Adjustment' && qty === '0' && (
                 <p className="text-[11px] text-gold-600 mt-1.5">
                   ⚠️ El stock quedará en 0 (Agotado).
+                </p>
+              )}
+              {/* Si está en Entrada/Salida con qty=0 (caso típico: quiso poner
+                  el stock a 0 y se confundió de tab) → ofrecemos saltar a Ajuste.
+                  Botón pequeño debajo del input. */}
+              {tab !== 'Adjustment' && qty === '0' && (
+                <p className="text-[11px] text-warm-500 mt-1.5">
+                  ¿Querés <strong>marcar el stock total como 0</strong>?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setTab('Adjustment'); setReason('') }}
+                    className="text-brand-700 font-medium hover:underline"
+                  >
+                    Usá Ajuste →
+                  </button>
                 </p>
               )}
             </div>
