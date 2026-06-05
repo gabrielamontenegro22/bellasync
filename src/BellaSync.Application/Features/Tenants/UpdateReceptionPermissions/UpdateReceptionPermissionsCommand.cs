@@ -16,6 +16,7 @@ public sealed record UpdateReceptionPermissionsCommand(
     // Catálogo
     bool CanEditStylists,
     bool CanEditServices,
+    bool CanEditInventory,
     // Info sensible
     bool CanViewReports,
     bool CanViewCommissions,

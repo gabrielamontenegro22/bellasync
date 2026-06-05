@@ -31,4 +31,5 @@ public sealed record ReceptionPermissionsSnapshot(
     bool CanViewCommissions,
     bool CanEditSchedule,
     bool CanEditPaymentPolicy,
-    bool CanEditSalonInfo);
+    bool CanEditSalonInfo,
+    bool CanEditInventory);

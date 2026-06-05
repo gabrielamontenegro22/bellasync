@@ -7,6 +7,7 @@ type Perm =
   | 'canCloseCash'
   | 'canEditStylists'
   | 'canEditServices'
+  | 'canEditInventory'
   | 'canViewReports'
   | 'canViewCommissions'
   | 'canEditSchedule'

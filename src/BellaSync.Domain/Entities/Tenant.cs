@@ -56,6 +56,7 @@ public class Tenant : BaseEntity
         tenant.ReceptionCanEditSchedule = false;
         tenant.ReceptionCanEditPaymentPolicy = false;
         tenant.ReceptionCanEditSalonInfo = false;
+        tenant.ReceptionCanEditInventory = false;
         return tenant;
     }
 
@@ -238,6 +239,16 @@ public class Tenant : BaseEntity
     /// </summary>
     public bool ReceptionCanEditSalonInfo { get; private set; }
 
+    /// <summary>
+    /// Si recepción puede tocar el módulo de Inventario: crear productos,
+    /// editarlos, archivarlos, y registrar movimientos (entradas, salidas,
+    /// ajustes). False por default — el inventario es trazabilidad de plata
+    /// (cuánto vale el stock, cuándo se agota algo caro), típicamente
+    /// admin lo lleva. Pero hay salones donde la recepcionista recibe
+    /// proveedores y registra entradas — ahí la admin activa este toggle.
+    /// </summary>
+    public bool ReceptionCanEditInventory { get; private set; }
+
     // Relación inversa: usuarios que pertenecen a este salón
     public ICollection<User> Users { get; private set; } = new List<User>();
 
@@ -373,6 +384,7 @@ public class Tenant : BaseEntity
         // Catálogo
         bool canEditStylists,
         bool canEditServices,
+        bool canEditInventory,
         // Info sensible
         bool canViewReports,
         bool canViewCommissions,
@@ -390,6 +402,7 @@ public class Tenant : BaseEntity
         ReceptionCanCloseCash = canCloseCash;
         ReceptionCanEditStylists = canEditStylists;
         ReceptionCanEditServices = canEditServices;
+        ReceptionCanEditInventory = canEditInventory;
         ReceptionCanViewReports = canViewReports;
         ReceptionCanViewCommissions = canViewCommissions;
         ReceptionCanEditSchedule = canEditSchedule;

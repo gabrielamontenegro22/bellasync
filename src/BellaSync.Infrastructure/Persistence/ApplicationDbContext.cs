@@ -35,6 +35,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<PaymentVoucher> PaymentVouchers => Set<PaymentVoucher>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductMovement> ProductMovements => Set<ProductMovement>();
     public DbSet<CommissionPayout> CommissionPayouts => Set<CommissionPayout>();
     public DbSet<CashClosing> CashClosings => Set<CashClosing>();
     public DbSet<SalonWeeklyHours> SalonWeeklyHours => Set<SalonWeeklyHours>();

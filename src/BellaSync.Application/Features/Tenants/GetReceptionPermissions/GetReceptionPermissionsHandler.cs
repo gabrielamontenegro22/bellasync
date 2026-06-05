@@ -37,6 +37,7 @@ public sealed class GetReceptionPermissionsHandler
                 CanCloseCash = t.ReceptionCanCloseCash,
                 CanEditStylists = t.ReceptionCanEditStylists,
                 CanEditServices = t.ReceptionCanEditServices,
+                CanEditInventory = t.ReceptionCanEditInventory,
                 CanViewReports = t.ReceptionCanViewReports,
                 CanViewCommissions = t.ReceptionCanViewCommissions,
                 CanEditSchedule = t.ReceptionCanEditSchedule,

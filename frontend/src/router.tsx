@@ -22,6 +22,7 @@ import { UsuariosPage } from '@/features/settings/UsuariosPage'
 import { PermissionsPage } from '@/features/settings/PermissionsPage'
 import { CommissionsPage } from '@/features/commissions/CommissionsPage'
 import { CashClosingPage } from '@/features/cash/CashClosingPage'
+import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SaasAdminSubscriptionsPage } from '@/features/saasAdmin/SaasAdminSubscriptionsPage'
 import { AppShell } from '@/components/layout/AppShell'
@@ -122,6 +123,20 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <AppShell><ValidationQueuePage /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Inventario — productos del salón (top-level, uso semanal).
+          Lectura abierta a ambos roles; el filtro de edición lo hace
+          la propia página (botones se ocultan si !canEditInventory).
+          El backend además rechaza con 403 si recepción intenta sin
+          permiso. */}
+      <Route
+        path="/inventario"
+        element={
+          <ProtectedRoute>
+            <AppShell><InventoryPage /></AppShell>
           </ProtectedRoute>
         }
       />

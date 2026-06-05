@@ -32,6 +32,9 @@ public sealed class ReceptionPermissionsResponse
     /// <summary>Crear/editar/borrar servicios y cambiar precios.</summary>
     public bool CanEditServices { get; init; }
 
+    /// <summary>Crear/editar/archivar productos y registrar movimientos de inventario.</summary>
+    public bool CanEditInventory { get; init; }
+
     // ---- Información sensible (KPIs financieros) ----
 
     /// <summary>Ver /reportes (facturación, KPIs, tendencias).</summary>

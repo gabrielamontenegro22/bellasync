@@ -20,6 +20,7 @@ const DEFAULTS: ReceptionPermissions = {
   canCloseCash: false,
   canEditStylists: false,
   canEditServices: false,
+  canEditInventory: false,
   canViewReports: false,
   canViewCommissions: false,
   canEditSchedule: false,
@@ -164,6 +165,13 @@ export function PermissionsPage() {
             desc="Crear servicios nuevos, editar precios, duración, política de anticipo. Activá si recepción coordina el catálogo. Cambiar precios sin admin requiere mucha confianza."
             on={form.canEditServices}
             onChange={(v) => setField('canEditServices', v)}
+          />
+
+          <ToggleRow
+            title="Puede llevar el inventario"
+            desc="Crear productos del salón (tintes, esmaltes, accesorios), editar costos y stock mínimo, y registrar entradas/salidas/ajustes. Activá si recepción recibe proveedores y descuenta uso del día."
+            on={form.canEditInventory}
+            onChange={(v) => setField('canEditInventory', v)}
           />
         </SettingsBlock>
 
