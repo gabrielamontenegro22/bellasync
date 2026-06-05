@@ -9,9 +9,12 @@ namespace BellaSync.WebApi.Controllers;
 
 /// <summary>
 /// Reportes/KPIs del salón. Endpoint único "summary" que devuelve todo
-/// lo que el dashboard de /reportes necesita para una sola petición.
-/// Por default solo admin; la admin puede delegar acceso de lectura a
-/// recepción activando Tenant.ReceptionCanViewReports.
+/// lo que el dashboard de /reportes necesita en una sola petición.
+///
+/// Autorización:
+///   - Admin: siempre puede ver.
+///   - Recepción: solo si la admin le activó CanViewReports en
+///     /configuracion/permisos. Info financiera sensible, default OFF.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]

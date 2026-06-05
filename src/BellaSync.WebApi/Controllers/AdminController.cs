@@ -20,16 +20,29 @@ using Microsoft.AspNetCore.Mvc;
 namespace BellaSync.WebApi.Controllers;
 
 /// <summary>
-/// Acciones administrativas del salón. Por ahora solo expone el seed de
-/// datos demo, pero acá viven futuras acciones tipo "exportar respaldo",
-/// "borrar todo" (con confirmación), etc.
+/// Acciones administrativas del salón: política de pagos, info pública,
+/// horario, permisos de recepción, comisiones (toggle), logo, seed demo.
 ///
-/// Restringido a SalonAdmin — las recepcionistas no deberían poder poblar
-/// con datos demo en producción.
+/// La clase está abierta a SalonAdmin + Receptionist porque varios de
+/// estos endpoints son configurables (recepción puede editarlos si la
+/// admin le activó el permiso correspondiente en /configuracion/permisos).
+/// Cada endpoint declara su propio gate:
+///   - Lectura: abierta a ambos roles (la UI necesita poder mostrar).
+///   - Escritura admin-only (seed, toggle comisiones, editar permisos):
+///     [Authorize(Roles = "SalonAdmin")] explícito.
+///   - Escritura configurable (payment policy, salon hours, tenant info,
+///     logo): [RequireReceptionPermission(Perm.CanXxx)] — admin pasa
+///     siempre, recepción pasa solo con el toggle activado.
+///
+/// IMPORTANTE: el class-level [Authorize] se combina con AND con los
+/// method-level. Si la clase exigiera "SalonAdmin", recepción nunca
+/// pasaría aunque el método dijera "SalonAdmin,Receptionist". Por eso
+/// la clase está abierta a ambos roles y los admin-only son explícitos
+/// en cada método.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "SalonAdmin")]
+[Authorize(Roles = "SalonAdmin,Receptionist")]
 public class AdminController : ControllerBase
 {
     /// <summary>
@@ -38,6 +51,10 @@ public class AdminController : ControllerBase
     /// Idempotente: si el dato ya existe (por nombre/teléfono/slot), lo salta.
     /// </summary>
     [HttpPost("seed-demo-data")]
+    // Admin-only explícito: poblar con datos demo en producción es
+    // destructivo en intención (no en datos, pero ensucia el catálogo
+    // del salón). Recepción no debería poder dispararlo.
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(SeedDemoDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -67,9 +84,9 @@ public class AdminController : ControllerBase
     /// Lee los tiempos de hold y anticipación del salón actual.
     /// </summary>
     [HttpGet("payment-policy")]
-    // Lectura abierta a recepción para que pueda ver la configuración
-    // actual (no necesita CanEditPaymentPolicy para mirarla).
-    [Authorize(Roles = "SalonAdmin,Receptionist")]
+    // Lectura abierta (clase) — recepción puede ver la configuración
+    // actual aunque no la pueda editar. Necesario para que el form en
+    // /configuracion/pagos cargue valores aunque el SaveBar quede oculto.
     [ProducesResponseType(typeof(TenantPaymentPolicyResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPaymentPolicy(
         [FromServices] IQueryHandler<GetPaymentPolicyQuery, TenantPaymentPolicyResponse> handler,
@@ -85,7 +102,6 @@ public class AdminController : ControllerBase
     /// (hold entre 1-48h, etc.) y devuelve 400 si no.
     /// </summary>
     [HttpPut("payment-policy")]
-    [Authorize(Roles = "SalonAdmin,Receptionist")]
     [RequireReceptionPermission(Perm.CanEditPaymentPolicy)]
     [ProducesResponseType(typeof(TenantPaymentPolicyResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -109,10 +125,9 @@ public class AdminController : ControllerBase
     /// (cap de egresos, cancelar con plata, cerrar caja).
     /// </summary>
     [HttpGet("reception-permissions")]
-    // Recepción necesita leer SUS permisos para que el frontend
-    // (usePermissions hook) sepa qué mostrarle. Pero EDITAR sigue
-    // siendo admin-only (no se puede dar permisos a sí misma).
-    [Authorize(Roles = "SalonAdmin,Receptionist")]
+    // Lectura abierta (clase) — recepción necesita leer SUS permisos
+    // para que el hook usePermissions del frontend sepa qué mostrarle.
+    // EDITAR sigue siendo admin-only (PUT más abajo).
     [ProducesResponseType(typeof(ReceptionPermissionsResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReceptionPermissions(
         [FromServices] IQueryHandler<GetReceptionPermissionsQuery, ReceptionPermissionsResponse> handler,
@@ -128,8 +143,14 @@ public class AdminController : ControllerBase
     /// (sin límite) o no-negativo.
     /// </summary>
     [HttpPut("reception-permissions")]
+    // Admin-only explícito: si recepción pudiera editar sus propios
+    // permisos, podría darse acceso a sí misma a TODO. Esta es la
+    // raíz de la confianza del sistema configurable — la admin es la
+    // única autoridad para conceder/quitar permisos.
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(ReceptionPermissionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UpdateReceptionPermissions(
         [FromBody] UpdateReceptionPermissionsCommand command,
         [FromServices] ICommandHandler<UpdateReceptionPermissionsCommand, ReceptionPermissionsResponse> handler,
@@ -148,6 +169,9 @@ public class AdminController : ControllerBase
     /// Lee si el módulo de comisiones está activo para este salón.
     /// </summary>
     [HttpGet("commissions-setting")]
+    // Lectura abierta (clase): el sidebar usa useCommissionsSetting()
+    // para decidir si mostrar el item /comisiones. Recepción necesita
+    // poder leerlo aunque no pueda editarlo.
     [ProducesResponseType(typeof(CommissionsSettingResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetCommissionsSetting(
         [FromServices] IQueryHandler<GetCommissionsSettingQuery, CommissionsSettingResponse> handler,
@@ -162,7 +186,12 @@ public class AdminController : ControllerBase
     /// Activa/desactiva el módulo. Idempotente.
     /// </summary>
     [HttpPut("commissions-setting")]
+    // Admin-only: activar/desactivar el módulo de comisiones afecta cómo
+    // se pagan los estilistas (cuánto sale del salón cada mes). Decisión
+    // de negocio que recepción no debería tomar.
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(CommissionsSettingResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UpdateCommissionsSetting(
         [FromBody] UpdateCommissionsSettingCommand command,
         [FromServices] ICommandHandler<UpdateCommissionsSettingCommand, CommissionsSettingResponse> handler,
@@ -181,7 +210,8 @@ public class AdminController : ControllerBase
     /// Lee la info pública/contacto del salón (nombre, dirección, etc.).
     /// </summary>
     [HttpGet("tenant-info")]
-    [Authorize(Roles = "SalonAdmin,Receptionist")]
+    // Lectura abierta (clase) — el form de /configuracion/general debe
+    // poder mostrar los datos actuales aun cuando recepción no pueda editar.
     [ProducesResponseType(typeof(TenantInfoResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTenantInfo(
         [FromServices] IQueryHandler<GetTenantInfoQuery, TenantInfoResponse> handler,
@@ -197,7 +227,6 @@ public class AdminController : ControllerBase
     /// dominio: email con @, URL http(s), maxlen por campo.
     /// </summary>
     [HttpPut("tenant-info")]
-    [Authorize(Roles = "SalonAdmin,Receptionist")]
     [RequireReceptionPermission(Perm.CanEditSalonInfo)]
     [ProducesResponseType(typeof(TenantInfoResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -220,9 +249,9 @@ public class AdminController : ControllerBase
     /// Devuelve el horario completo (días, almuerzo, festivos, cierres).
     /// </summary>
     [HttpGet("salon-hours")]
-    // Lectura abierta a recepción — useSalonHours hook del frontend
-    // necesita esto para pintar la grilla del agenda con franjas cerradas.
-    [Authorize(Roles = "SalonAdmin,Receptionist")]
+    // Lectura abierta (clase) — useSalonHours hook del frontend lo usa
+    // para pintar la grilla del agenda con franjas cerradas. Recepción
+    // SIEMPRE necesita poder leerlo (independiente de CanEditSchedule).
     [ProducesResponseType(typeof(SalonHoursResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSalonHours(
         [FromServices] IQueryHandler<GetSalonHoursQuery, SalonHoursResponse> handler,
@@ -238,7 +267,6 @@ public class AdminController : ControllerBase
     /// en una transacción.
     /// </summary>
     [HttpPut("salon-hours")]
-    [Authorize(Roles = "SalonAdmin,Receptionist")]
     [RequireReceptionPermission(Perm.CanEditSchedule)]
     [ProducesResponseType(typeof(SalonHoursResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -263,10 +291,16 @@ public class AdminController : ControllerBase
     /// Máx 5MB, formatos JPG/PNG/WebP/HEIC.
     /// </summary>
     [HttpPost("tenant/logo")]
+    // Logo es parte de "info pública del salón" (Tenant.LogoUrl). Si la
+    // admin le activó CanEditSalonInfo a recepción, debe poder cambiar
+    // el logo también — sino el form de /configuracion/general queda
+    // mocho (puede editar nombre/dirección pero no logo).
+    [RequireReceptionPermission(Perm.CanEditSalonInfo)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(FileUploadRules.MaxFileSizeBytes + 1024)]
     [ProducesResponseType(typeof(LogoUploadResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UploadLogo(
         [FromForm] LogoUploadRequest form,

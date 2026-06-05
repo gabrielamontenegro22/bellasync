@@ -17,6 +17,7 @@ public sealed class RegisterExpenseHandler
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
     private readonly ICurrentUserService _currentUser;
+    private readonly IReceptionPermissionsService _perms;
     private readonly IClock _clock;
     private readonly ILogger<RegisterExpenseHandler> _logger;
 
@@ -24,12 +25,14 @@ public sealed class RegisterExpenseHandler
         IApplicationDbContext db,
         ICurrentTenantService currentTenant,
         ICurrentUserService currentUser,
+        IReceptionPermissionsService perms,
         IClock clock,
         ILogger<RegisterExpenseHandler> logger)
     {
         _db = db;
         _currentTenant = currentTenant;
         _currentUser = currentUser;
+        _perms = perms;
         _clock = clock;
         _logger = logger;
     }
@@ -64,19 +67,18 @@ public sealed class RegisterExpenseHandler
         }
 
         // 2.5. Cap por rol — el valor se configura por salón (Tenant).
-        // Lectura mínima: solo el campo del cap, no traemos el tenant
-        // completo. La admin no tiene cap NUNCA, independiente del valor.
+        // La admin no tiene cap NUNCA, independiente del valor. El snapshot
+        // viene del IReceptionPermissionsService (cacheado scoped por
+        // request) — el mismo que usa el attribute en los controllers.
+        // Convención del cap:
+        //   - null → sin límite (admin lo configuró así para "recepción de confianza").
+        //   - 0    → recepción NO puede registrar egresos.
+        //   - X    → tope en COP; sobre este monto requiere admin.
         if (!_currentUser.IsSalonAdmin)
         {
-            var cap = await _db.Tenants
-                .AsNoTracking()
-                .Where(t => t.Id == _currentTenant.TenantId)
-                .Select(t => t.ReceptionExpenseCapCop)
-                .FirstOrDefaultAsync(ct);
+            var perms = await _perms.GetAsync(ct);
+            var cap = perms.ExpenseCapCop;
 
-            // cap = null  → sin límite (admin lo configuró así).
-            // cap = 0     → recepción no puede registrar egresos.
-            // cap > 0     → tope; sobre este monto requiere admin.
             if (cap is decimal capValue)
             {
                 if (capValue == 0m)

@@ -19,7 +19,14 @@ namespace BellaSync.WebApi.Controllers;
 
 /// <summary>
 /// CRUD de estilistas. Controller delgado: delega a handlers.
-/// Lectura: SalonAdmin + Receptionist. Escritura: solo SalonAdmin.
+///
+/// Autorización:
+///   - Lectura (GET): abierta a SalonAdmin + Receptionist.
+///   - Escritura (POST/PUT/DELETE + time-off): admin siempre; recepción
+///     solo si la admin le activó CanEditStylists en /configuracion/permisos.
+///     El attribute [RequireReceptionPermission(Perm.CanEditStylists)]
+///     consulta el toggle del tenant en tiempo real (1 query cacheada
+///     por request vía IReceptionPermissionsService).
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
