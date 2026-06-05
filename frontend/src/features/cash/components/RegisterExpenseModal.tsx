@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Banknote, Plus, X } from 'lucide-react'
 import { cls } from '@/lib/cls'
 import { extractApiError } from '@/lib/extractApiError'
 import { registerExpense, type ExpenseResponse } from '@/api/expenses'
 import type { PaymentMethod } from '@/api/payments'
 import { PaymentMethodPicker } from '@/features/payments/components/PaymentMethodPicker'
-import { useIsAdmin } from '@/features/auth/useAuth'
-import { getReceptionPermissions } from '@/api/admin'
+import { usePermissions } from '@/features/auth/useAuth'
 
 interface Props {
   open: boolean
@@ -33,16 +32,10 @@ interface Props {
  */
 export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   const qc = useQueryClient()
-  const isAdmin = useIsAdmin()
-  // Solo cargamos los permisos si NO es admin (admin no tiene cap).
-  // staleTime alto: estos settings cambian muy poco, vale la pena
-  // evitar refetch en cada apertura del modal.
-  const permsQ = useQuery({
-    queryKey: ['receptionPermissions'],
-    queryFn: getReceptionPermissions,
-    enabled: !isAdmin && open,
-    staleTime: 5 * 60_000,
-  })
+  // Hook centralizado: admin obtiene cap=null (sin tope), recepción
+  // obtiene el cap configurado por la admin. Polling de 20s en useAuth
+  // refresca los permisos sin que recepción tenga que hacer F5.
+  const { isAdmin, expenseCap } = usePermissions()
   const [concept, setConcept] = useState('')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('Cash')
@@ -89,7 +82,7 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   // - 0    = recepción no puede registrar nada.
   // - X    = tope; sobre eso requiere admin.
   // Admin no tiene cap NUNCA.
-  const cap = permsQ.data?.expenseCapCop
+  const cap = expenseCap
   const receptionBlocked = !isAdmin && cap === 0
   const overReceptionCap = !isAdmin && cap != null && cap > 0 && amountNum > cap
   const canSubmit = conceptOk && amountOk && providerOk
