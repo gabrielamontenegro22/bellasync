@@ -26,7 +26,6 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
   const [name, setName] = useState('')
   const [brand, setBrand] = useState('')
   const [categoryId, setCategoryId] = useState<string>('')
-  const [unit, setUnit] = useState('')
   const [minStock, setMinStock] = useState('5')
   const [cost, setCost] = useState('')
   // Stock actual (solo en edit). Si el user lo cambia y guarda, el backend
@@ -52,7 +51,6 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
       // Si editamos, prellenamos la categoría actual. Si creamos, pickeamos
       // la primera activa por default (la admin elige otra si quiere).
       setCategoryId(product?.categoryId ?? (categories[0]?.id ?? ''))
-      setUnit(product?.unit ?? '')
       setMinStock(String(product?.minStock ?? 5))
       setCost(product ? String(Math.round(product.cost)) : '')
       setStock(String(product?.stock ?? 0))
@@ -78,7 +76,6 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
         name: name.trim(),
         brand: brand.trim(),
         categoryId,
-        unit: unit.trim(),
         minStock: parseInt(minStock, 10) || 0,
         cost: parseInt(cost.replace(/[^0-9]/g, ''), 10) || 0,
       }
@@ -121,7 +118,6 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
 
   const canSubmit = name.trim().length > 0
     && brand.trim().length > 0
-    && unit.trim().length > 0
     && categoryId !== ''
     && !mut.isPending
 
@@ -178,29 +174,19 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Categoría" required hint="creá/editá desde el botón Categorías">
-              <select
-                value={categoryId}
-                onChange={e => setCategoryId(e.target.value)}
-                className={inputCls}
-                disabled={categories.length === 0}
-              >
-                {categories.length === 0 && <option value="">— Sin categorías —</option>}
-                {categories.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Unidad" required hint="cómo se cuenta">
-              <input
-                value={unit}
-                onChange={e => setUnit(e.target.value)}
-                placeholder="frasco, tubo, 500ml…"
-                className={inputCls}
-              />
-            </Field>
-          </div>
+          <Field label="Categoría" required hint="creá/editá desde el botón Categorías">
+            <select
+              value={categoryId}
+              onChange={e => setCategoryId(e.target.value)}
+              className={inputCls}
+              disabled={categories.length === 0}
+            >
+              {categories.length === 0 && <option value="">— Sin categorías —</option>}
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Stock mínimo" hint="alerta cuando baje de acá">
@@ -242,17 +228,14 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
               label="Stock inicial"
               hint={initialStockNum > 0 ? '✓ Se registrará como Entrada en el historial' : 'cuánto hay de este producto ahora'}
             >
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={initialStock}
-                  onChange={e => setInitialStock(e.target.value.replace(/[^0-9]/g, ''))}
-                  placeholder="0"
-                  className={cls(inputCls, 'tabular-nums max-w-[140px]', initialStockNum > 0 && 'border-brand-500 ring-2 ring-brand-100')}
-                />
-                <span className="text-[13px] text-warm-500">{unit.trim() || 'unidades'}</span>
-              </div>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={initialStock}
+                onChange={e => setInitialStock(e.target.value.replace(/[^0-9]/g, ''))}
+                placeholder="0"
+                className={cls(inputCls, 'tabular-nums max-w-[140px]', initialStockNum > 0 && 'border-brand-500 ring-2 ring-brand-100')}
+              />
               <p className="text-[11px] text-warm-500 mt-1.5 leading-snug">
                 Si recién creás el producto y todavía no tenés nada físico, dejá en 0 y cargá después con una Entrada.
               </p>
@@ -276,7 +259,6 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
                   onChange={e => setStock(e.target.value.replace(/[^0-9]/g, ''))}
                   className={cls(inputCls, 'tabular-nums max-w-[140px]', stockChanged && 'border-brand-500 ring-2 ring-brand-100')}
                 />
-                <span className="text-[13px] text-warm-500">{product.unit}</span>
                 {stockChanged && (
                   <span className="text-[11.5px] text-brand-700 font-medium tabular-nums">
                     {product.stock} → {stockNum}

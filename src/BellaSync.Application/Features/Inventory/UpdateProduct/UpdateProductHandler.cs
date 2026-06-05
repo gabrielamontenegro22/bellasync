@@ -71,7 +71,7 @@ public sealed class UpdateProductHandler
         try
         {
             product.UpdateDetails(
-                command.Name, command.Brand, command.CategoryId, command.Unit,
+                command.Name, command.Brand, command.CategoryId,
                 command.MinStock, cost, _clock.UtcNow);
         }
         catch (DomainException ex)

@@ -55,7 +55,7 @@ export function ProductMovementsModal({ open, product, onClose }: Props) {
               {product.name}
             </div>
             <div className="text-[12px] text-warm-500 mt-1">
-              {product.brand} · stock actual <strong className="text-warm-700">{product.stock} {product.unit}</strong>
+              {product.brand} · stock actual <strong className="text-warm-700">{product.stock}</strong>
             </div>
           </div>
           <button
@@ -95,7 +95,7 @@ export function ProductMovementsModal({ open, product, onClose }: Props) {
                             : delta < 0 ? 'bg-terra-100/60 text-terra-500'
                             : 'bg-warm-100 text-warm-600',
                         )}>
-                          {delta > 0 ? '+' : ''}{delta} {product.unit}
+                          {delta > 0 ? '+' : ''}{delta}
                         </span>
                       </div>
                       <div className="text-[12.5px] text-warm-600 mt-0.5">{m.reason}</div>

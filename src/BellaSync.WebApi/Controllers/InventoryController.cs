@@ -119,7 +119,7 @@ public class InventoryController : ControllerBase
         CancellationToken ct)
     {
         var command = new UpdateProductCommand(
-            id, request.Name, request.Brand, request.CategoryId, request.Unit,
+            id, request.Name, request.Brand, request.CategoryId,
             request.MinStock, request.Cost, request.NewStock);
         var result = await handler.HandleAsync(command, ct);
         return result.ToActionResult();
@@ -269,7 +269,6 @@ public sealed class UpdateProductRequest
     public string Name { get; set; } = string.Empty;
     public string Brand { get; set; } = string.Empty;
     public Guid CategoryId { get; set; }
-    public string Unit { get; set; } = string.Empty;
     public int MinStock { get; set; }
     public decimal Cost { get; set; }
 

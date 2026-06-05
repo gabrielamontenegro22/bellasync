@@ -228,7 +228,7 @@ export function ProductMovementModal({ open, initialProduct, onClose, onSaved }:
             </div>
             {selected && (
               <div className="mt-2 text-[11.5px] text-warm-500">
-                Stock actual: <strong className="text-warm-700">{selected.stock} {selected.unit}</strong> · mínimo {selected.minStock}
+                Stock actual: <strong className="text-warm-700">{selected.stock}</strong> · mínimo {selected.minStock}
               </div>
             )}
           </div>

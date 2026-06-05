@@ -489,7 +489,7 @@ function ProductRow({
           </div>
           <div className="min-w-0">
             <div className="text-[13.5px] font-medium text-warm-800 truncate leading-tight">{p.name}</div>
-            <div className="text-[11.5px] text-warm-500 mt-0.5">{p.brand} · {p.unit}</div>
+            <div className="text-[11.5px] text-warm-500 mt-0.5">{p.brand}</div>
           </div>
         </div>
       </td>

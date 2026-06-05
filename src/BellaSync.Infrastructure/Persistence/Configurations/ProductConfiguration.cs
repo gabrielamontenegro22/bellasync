@@ -28,9 +28,9 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
 
         builder.Property(p => p.CategoryId).IsRequired();
 
-        builder.Property(p => p.Unit)
-            .IsRequired()
-            .HasMaxLength(40);
+        // Unit ahora es legacy nullable — se removió del UI por confusión
+        // pero mantenemos la columna para no perder datos viejos.
+        builder.Property(p => p.Unit).HasMaxLength(40);
 
         builder.Property(p => p.Stock).IsRequired();
         builder.Property(p => p.MinStock).IsRequired();

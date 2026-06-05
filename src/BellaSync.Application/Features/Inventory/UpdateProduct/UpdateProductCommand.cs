@@ -18,7 +18,6 @@ public sealed record UpdateProductCommand(
     string Name,
     string Brand,
     Guid CategoryId,
-    string Unit,
     int MinStock,
     decimal Cost,
     /// <summary>Si null, el stock no se toca. Si viene, se ajusta y se crea movimiento.</summary>
