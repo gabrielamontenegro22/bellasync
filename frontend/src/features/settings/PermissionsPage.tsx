@@ -142,9 +142,9 @@ export function PermissionsPage() {
 
           {/* Cancelar citas con plata */}
           <ToggleRow
-            label="Puede cancelar citas con anticipo cobrado"
-            description="Cuando la cliente avisa que no puede ir y ya pagó. Recepción debe escribir un motivo obligatorio (devolver / aplicar a otra cita / política estricta) para que vos sepas qué hacer con el dinero después."
-            checked={form.canCancelWithMoney}
+            title="Puede cancelar citas con anticipo cobrado"
+            desc="Cuando la cliente avisa que no puede ir y ya pagó. Recepción debe escribir un motivo obligatorio (devolver / aplicar a otra cita / política estricta) para que vos sepas qué hacer con el dinero después."
+            on={form.canCancelWithMoney}
             onChange={(v) => {
               setForm(f => ({ ...f, canCancelWithMoney: v }))
               setSaved(false); setSubmitError(null)
@@ -153,9 +153,9 @@ export function PermissionsPage() {
 
           {/* Cerrar caja */}
           <ToggleRow
-            label="Puede firmar el cierre de caja del día"
-            description="Si pasás por el salón cada noche, dejalo OFF (vos firmás). Si no, activá para que tu recepción cierre el día (igual queda registrado 'Cerrado por X' en el historial)."
-            checked={form.canCloseCash}
+            title="Puede firmar el cierre de caja del día"
+            desc="Si pasás por el salón cada noche, dejalo OFF (vos firmás). Si no, activá para que tu recepción cierre el día (igual queda registrado 'Cerrado por X' en el historial)."
+            on={form.canCloseCash}
             onChange={(v) => {
               setForm(f => ({ ...f, canCloseCash: v }))
               setSaved(false); setSubmitError(null)
