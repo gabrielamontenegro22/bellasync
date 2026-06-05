@@ -15,6 +15,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
 {
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
+    private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly AppointmentValidator _validator;
     private readonly SalonScheduleValidator _scheduleValidator;
@@ -25,6 +26,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
     public CreateAppointmentHandler(
         IApplicationDbContext db,
         ICurrentTenantService currentTenant,
+        ICurrentUserService currentUser,
         IClock clock,
         AppointmentValidator validator,
         SalonScheduleValidator scheduleValidator,
@@ -34,6 +36,7 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
     {
         _db = db;
         _currentTenant = currentTenant;
+        _currentUser = currentUser;
         _clock = clock;
         _validator = validator;
         _scheduleValidator = scheduleValidator;
@@ -107,6 +110,17 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
 
         _db.Appointments.Add(appointment);
 
+        // Aplicar crédito si la admin/recepción lo seleccionó en el modal.
+        // Solo válido para citas que efectivamente exigen anticipo — un
+        // servicio sin requiresDeposit no tiene a qué aplicar el crédito.
+        if (command.ApplyCreditFromVoucherIds is { Count: > 0 } voucherIds
+            && appointment.DepositAmount.Amount > 0m)
+        {
+            var creditResult = await ApplyCustomerCreditsAsync(
+                appointment, customer, voucherIds, ct);
+            if (creditResult.IsFailure) return creditResult.Error!;
+        }
+
         // ConfirmCreated WhatsApp: encolar para que salga al instante en
         // el próximo tick del dispatcher (~2min). Sin esto, el dispatcher
         // solo arma Reminder24h/Ready2h por ventana de tiempo, y la
@@ -135,5 +149,119 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
 
         return Result<AppointmentResponse>.Success(
             await AppointmentMapper.ToResponseAsync(created, _db, ct));
+    }
+
+    /// <summary>
+    /// Aplica créditos pendientes del cliente al anticipo de la nueva cita.
+    /// Para v1, la regla es estricta: la suma de créditos seleccionados
+    /// DEBE cubrir el anticipo requerido. Si no alcanza, rechaza con
+    /// mensaje claro. Esto evita el caso ambiguo "cubro parcial y dejo el
+    /// resto pendiente" que requiere lógica de vouchers parciales en la
+    /// cola de validación (deferrable para v2).
+    ///
+    /// El consumo es FIFO (más antiguos primero) — protege contra que
+    /// vouchers queden estancados con saldos pequeños sin usar nunca.
+    /// El sobrante de cada voucher sigue disponible para futuras
+    /// aplicaciones (gracias a AmountApplied).
+    ///
+    /// Crea un voucher Validated nuevo en la cita por el monto del anticipo
+    /// (no por la suma de créditos consumidos — si se consumió de más, eso
+    /// queda en el saldo de los vouchers originales). Confirma la cita
+    /// automáticamente porque el anticipo queda cubierto.
+    /// </summary>
+    private async Task<Result<bool>> ApplyCustomerCreditsAsync(
+        Appointment appointment,
+        Customer customer,
+        IReadOnlyList<Guid> voucherIds,
+        CancellationToken ct)
+    {
+        var vouchers = await _db.PaymentVouchers
+            .Include(v => v.Appointment)
+            .Where(v => voucherIds.Contains(v.Id))
+            .ToListAsync(ct);
+
+        if (vouchers.Count != voucherIds.Count)
+            return ApplicationError.Validation("credit.not_found",
+                "Uno o más créditos seleccionados no existen.");
+
+        // Todos los vouchers tienen que ser del mismo cliente (no permitir
+        // aplicar créditos de otra cliente). El global filter ya restringió
+        // por tenant — acá solo validamos cliente.
+        if (vouchers.Any(v => v.Appointment is null || v.Appointment.CustomerId != customer.Id))
+            return ApplicationError.Validation("credit.wrong_customer",
+                "Alguno de los créditos no pertenece a este cliente.");
+
+        // Todos deben ser CreditPending con saldo positivo. AvailableCredit
+        // ya combina las dos verificaciones (status + decision + resolved).
+        if (vouchers.Any(v => v.AvailableCredit <= 0m))
+            return ApplicationError.Validation("credit.not_available",
+                "Alguno de los créditos seleccionados ya no está disponible.");
+
+        var totalAvailable = vouchers.Sum(v => v.AvailableCredit);
+        var depositRequired = appointment.DepositAmount.Amount;
+
+        if (totalAvailable < depositRequired)
+            return ApplicationError.Validation("credit.insufficient",
+                $"El crédito disponible (${totalAvailable:N0}) no cubre el anticipo requerido (${depositRequired:N0}). " +
+                "Agendá un servicio con anticipo menor o aplicá el crédito en sumar al pago.");
+
+        // Consumo FIFO hasta cubrir el anticipo exacto.
+        var remaining = depositRequired;
+        var now = _clock.UtcNow;
+        var userId = _currentUser.UserId ?? Guid.Empty;
+
+        foreach (var v in vouchers.OrderBy(v => v.Appointment!.CancelledAt ?? v.ReceivedAt))
+        {
+            if (remaining <= 0m) break;
+            var toApply = Math.Min(v.AvailableCredit, remaining);
+            try
+            {
+                v.ApplyCredit(toApply, now, userId);
+            }
+            catch (Domain.Common.DomainException ex)
+            {
+                return ApplicationError.Validation("credit.apply_failed", ex.Message);
+            }
+            remaining -= toApply;
+        }
+
+        // Crear voucher Validated nuevo en la cita por el monto del anticipo.
+        // Bank/referenceNumber identifican que es crédito interno para que
+        // en la cola de validación / historial se vea distinguible.
+        var creditVoucher = PaymentVoucher.Create(
+            tenantId: _currentTenant.TenantId,
+            appointmentId: appointment.Id,
+            reportedAmount: appointment.DepositAmount,
+            bank: "Crédito interno",
+            referenceNumber: $"CR-{appointment.Id.ToString()[..8].ToUpper()}",
+            senderName: customer.FullName,
+            senderPhone: customer.Phone,
+            imageUrl: null,
+            utcNow: now);
+        // Confirm inmediato — no pasa por cola de validación porque el
+        // dinero "real" entró en el voucher original que ya fue validado.
+        creditVoucher.Confirm(userId, now,
+            "Aplicación automática de crédito de cita cancelada previamente.");
+        _db.PaymentVouchers.Add(creditVoucher);
+
+        // Estado de la cita: el anticipo queda cubierto → validar deposit
+        // y confirmar la cita (libera el hold). Si la cita no requería
+        // anticipo (raro acá porque ya filtramos por DepositAmount>0), el
+        // ValidateDeposit lanza — lo capturamos por las dudas.
+        try
+        {
+            appointment.ValidateDeposit();
+            appointment.Confirm();
+        }
+        catch (Domain.Common.DomainException ex)
+        {
+            return ApplicationError.Validation("credit.confirm_failed", ex.Message);
+        }
+
+        _logger.LogInformation(
+            "Crédito aplicado a cita {AppointmentId}: ${Amount:N0} desde {VoucherCount} voucher(s) del cliente {CustomerId}",
+            appointment.Id, depositRequired, vouchers.Count, customer.Id);
+
+        return Result<bool>.Success(true);
     }
 }

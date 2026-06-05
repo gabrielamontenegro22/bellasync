@@ -14,7 +14,7 @@ public class CreateAppointmentHandlerTests
     {
         var ctx = new AppointmentTestContext();
         var handler = new CreateAppointmentHandler(
-            ctx.Base.Db, ctx.Base.CurrentTenant, ctx.Base.Clock,
+            ctx.Base.Db, ctx.Base.CurrentTenant, ctx.Base.CurrentUser, ctx.Base.Clock,
             ctx.Validator, ctx.ScheduleValidator, ctx.AppointmentSettings,
             ctx.WhatsAppEnqueuer,
             ctx.Base.Logger<CreateAppointmentHandler>());
