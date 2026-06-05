@@ -34,6 +34,13 @@ export interface PaymentPolicy {
   holdDurationHours: number
   holdMinBeforeAppointmentMinutes: number
   minAdvanceMinutes: number
+  /**
+   * Horas antes de la cita dentro de las cuales una cancelación devuelve
+   * el anticipo. Pasada esa ventana, el anticipo se considera perdido
+   * (Forfeited) salvo override de admin/recepción con permiso.
+   * Default backend: 2h. Rango válido: 0–168h (1 semana).
+   */
+  cancellationWindowHours: number
 }
 
 /** GET /api/Admin/payment-policy */
@@ -67,6 +74,12 @@ export interface ReceptionPermissions {
   expenseCapCop: number | null
   canCancelWithMoney: boolean
   canCloseCash: boolean
+  /**
+   * Si recepción puede override la decisión automática de devolución de
+   * anticipos al cancelar (elegir Refunded/CreditPending/Forfeited).
+   * Default OFF — admin lo activa cuando confía en el criterio del staff.
+   */
+  canRefundDeposit: boolean
   // Catálogo
   canEditStylists: boolean
   canEditServices: boolean

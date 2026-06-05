@@ -18,6 +18,7 @@ const DEFAULTS: ReceptionPermissions = {
   expenseCapCop: 100_000,
   canCancelWithMoney: true,
   canCloseCash: false,
+  canRefundDeposit: false,
   canEditStylists: false,
   canEditServices: false,
   canEditInventory: false,
@@ -150,6 +151,13 @@ export function PermissionsPage() {
             desc="Si pasás por el salón cada noche, dejalo OFF (vos firmás). Si no, activá para que tu recepción cierre el día (queda registrado quién firmó)."
             on={form.canCloseCash}
             onChange={(v) => setField('canCloseCash', v)}
+          />
+
+          <ToggleRow
+            title="Puede decidir devolución de anticipos"
+            desc="Cuando una cliente cancela una cita con anticipo pago, hay una ventana de tiempo (configurable en Política de pagos) en la que se devuelve. Si activás esto, recepción puede override la regla — elegir devolver, aplicar como crédito, o quedárselo aunque esté fuera de ventana. Si está OFF, la regla automática manda y solo vos podés override."
+            on={form.canRefundDeposit}
+            onChange={(v) => setField('canRefundDeposit', v)}
           />
         </SettingsBlock>
 

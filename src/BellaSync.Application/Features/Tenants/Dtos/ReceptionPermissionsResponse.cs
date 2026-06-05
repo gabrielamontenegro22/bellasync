@@ -24,6 +24,9 @@ public sealed class ReceptionPermissionsResponse
     /// <summary>Si recepción puede firmar el cierre de caja.</summary>
     public bool CanCloseCash { get; init; }
 
+    /// <summary>Si recepción puede override la regla automática de devolución de anticipos.</summary>
+    public bool CanRefundDeposit { get; init; }
+
     // ---- Catálogo del salón ----
 
     /// <summary>Crear/editar/borrar estilistas + marcar vacaciones.</summary>

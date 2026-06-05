@@ -35,6 +35,7 @@ public sealed class GetReceptionPermissionsHandler
                 ExpenseCapCop = t.ReceptionExpenseCapCop,
                 CanCancelWithMoney = t.ReceptionCanCancelWithMoney,
                 CanCloseCash = t.ReceptionCanCloseCash,
+                CanRefundDeposit = t.ReceptionCanRefundDeposit,
                 CanEditStylists = t.ReceptionCanEditStylists,
                 CanEditServices = t.ReceptionCanEditServices,
                 CanEditInventory = t.ReceptionCanEditInventory,

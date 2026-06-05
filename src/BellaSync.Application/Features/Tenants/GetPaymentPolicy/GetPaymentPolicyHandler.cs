@@ -32,6 +32,7 @@ public sealed class GetPaymentPolicyHandler
                 HoldDurationHours = t.HoldDurationHours,
                 HoldMinBeforeAppointmentMinutes = t.HoldMinBeforeAppointmentMinutes,
                 MinAdvanceMinutes = t.MinAdvanceMinutes,
+                CancellationWindowHours = t.CancellationWindowHours,
             })
             .FirstOrDefaultAsync(ct);
 

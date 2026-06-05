@@ -37,6 +37,12 @@ public class PaymentVoucherConfiguration : IEntityTypeConfiguration<PaymentVouch
         builder.Property(v => v.DecidedBy);
         builder.Property(v => v.DecisionNotes).HasMaxLength(500);
 
+        // Tracking de refund cuando la cita se cancela. Nullables hasta
+        // que la cancelación los setee.
+        builder.Property(v => v.RefundDecision).HasConversion<int>();
+        builder.Property(v => v.RefundResolvedAt);
+        builder.Property(v => v.RefundResolvedByUserId);
+
         builder.Property(v => v.CreatedAt).IsRequired();
         builder.Property(v => v.UpdatedAt);
 
