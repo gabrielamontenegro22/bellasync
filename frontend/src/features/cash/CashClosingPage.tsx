@@ -18,6 +18,11 @@ import {
   type DailyCashSummary,
   type CashClosing,
 } from '@/api/cash'
+import {
+  listPendingRefunds,
+  markRefundResolved,
+  type PendingRefund,
+} from '@/api/vouchers'
 import type { ExpenseResponse } from '@/api/expenses'
 import type { PaymentResponse } from '@/api/payments'
 import { getPaymentBadge } from '@/features/payments/paymentBadge'
@@ -425,6 +430,10 @@ function TabHoy({
             </div>
           )}
         </div>
+
+        {/* Devoluciones pendientes — anticipos a devolver/aplicar después
+            de cancelaciones. Solo aparece si hay items. */}
+        <PendingRefundsCard />
       </div>
 
       {/* DER */}
@@ -1097,4 +1106,134 @@ function formatHHmm(iso: string): string {
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
   return `${hh}:${mm}`
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Devoluciones pendientes                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Lista las devoluciones de anticipo que la admin debe accionar. Cada item
+ * es un voucher Validated cuya cita se canceló dentro de la ventana del
+ * salón (o con override) y todavía no se marcó como resuelto.
+ *
+ * - "Refunded": admin debe hacer la transferencia bancaria al cliente.
+ * - "CreditPending": admin debe coordinar nueva cita / aplicar crédito.
+ *
+ * Botón "Marcar como devuelto" solo lo ve admin. Recepción ve la lista
+ * (informativa) pero no puede cerrar el ciclo financiero.
+ */
+function PendingRefundsCard() {
+  const qc = useQueryClient()
+  const perms = usePermissions()
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['pendingRefunds'],
+    queryFn: listPendingRefunds,
+    staleTime: 30_000,
+  })
+
+  const resolveMut = useMutation({
+    mutationFn: markRefundResolved,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pendingRefunds'] })
+    },
+  })
+
+  // Loading silencioso: no mostramos el card hasta que sepamos si hay
+  // algo. Si hay error tampoco "ensuciamos" Caja con un mensaje grande.
+  if (isLoading || error) return null
+  if (!data || data.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-2xl border border-warm-150 shadow-soft overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-warm-150 flex items-center justify-between">
+        <div>
+          <h3 className="font-serif text-[18px] text-warm-800">Devoluciones pendientes</h3>
+          <p className="text-[11.5px] text-warm-500 mt-0.5">
+            Anticipos de citas canceladas que faltan resolver fuera del sistema.
+          </p>
+        </div>
+        <span className="text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-full">
+          {data.length} {data.length === 1 ? 'pendiente' : 'pendientes'}
+        </span>
+      </div>
+      <div className="divide-y divide-warm-100">
+        {data.map((r) => (
+          <PendingRefundRow
+            key={r.voucherId}
+            refund={r}
+            canResolve={perms.isAdmin}
+            onResolve={() => resolveMut.mutate(r.voucherId)}
+            resolving={resolveMut.isPending && resolveMut.variables === r.voucherId}
+          />
+        ))}
+      </div>
+      {resolveMut.error && (
+        <div className="px-5 py-2 text-[12px] text-red-700 bg-red-50 border-t border-red-100">
+          {extractApiError(resolveMut.error, 'No se pudo marcar como resuelta.')}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PendingRefundRow({
+  refund, canResolve, onResolve, resolving,
+}: {
+  refund: PendingRefund
+  canResolve: boolean
+  onResolve: () => void
+  resolving: boolean
+}) {
+  const cancelledDate = new Date(refund.cancelledAt).toLocaleDateString('es-CO', {
+    day: 'numeric', month: 'short',
+  })
+  const isCredit = refund.decision === 'CreditPending'
+  return (
+    <div className="px-5 py-3 flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-medium text-warm-800 truncate">
+            {refund.customerName}
+          </span>
+          <span className={cls(
+            'text-[10.5px] font-medium px-1.5 py-0.5 rounded',
+            isCredit
+              ? 'bg-sky-50 text-sky-700 border border-sky-200'
+              : 'bg-amber-50 text-amber-800 border border-amber-200',
+          )}>
+            {isCredit ? 'Crédito a aplicar' : 'Transferir'}
+          </span>
+        </div>
+        <div className="text-[12px] text-warm-500 mt-0.5 truncate">
+          {refund.serviceName} · cita era {new Date(refund.appointmentStartAt).toLocaleDateString('es-CO', {
+            day: 'numeric', month: 'short',
+          })}
+          {refund.bank && <> · {refund.bank}</>}
+        </div>
+        {refund.cancellationReason && (
+          <div className="text-[11.5px] text-warm-500 mt-1 italic line-clamp-1">
+            "{refund.cancellationReason}"
+          </div>
+        )}
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-[13.5px] font-semibold text-warm-800 tabular-nums">
+          {fmtCop(refund.amount)}
+        </div>
+        <div className="text-[10.5px] text-warm-400 mt-0.5">cancelada {cancelledDate}</div>
+        {canResolve && (
+          <button
+            type="button"
+            onClick={onResolve}
+            disabled={resolving}
+            className="mt-1.5 text-[11.5px] font-medium text-brand-700 hover:underline disabled:opacity-50"
+          >
+            {resolving ? 'Marcando…' : isCredit ? 'Marcar aplicado' : 'Marcar transferido'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }
