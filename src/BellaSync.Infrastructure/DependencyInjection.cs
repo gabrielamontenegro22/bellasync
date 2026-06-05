@@ -50,7 +50,31 @@ public static class DependencyInjection
         services.AddScoped<IFileStorage, LocalFileStorage>();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
-        services.AddScoped<IEmailService, LoggingEmailService>();
+
+        // Email: switch entre Logging (dev) y Resend (prod) según config.
+        // Si Provider="Resend" pero falta ApiKey, caemos a Logging con un
+        // warning para que dev no se rompa por config olvidada.
+        services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
+        var emailSettings = configuration.GetSection(EmailSettings.SectionName).Get<EmailSettings>()
+            ?? new EmailSettings();
+        var useResend = string.Equals(emailSettings.Provider, "Resend", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(emailSettings.Resend?.ApiKey);
+
+        if (useResend)
+        {
+            // HttpClient gestionado por IHttpClientFactory → reusa conexiones,
+            // respeta DNS refresh, evita socket exhaustion en alto volumen.
+            services.AddHttpClient<IEmailService, ResendEmailService>();
+        }
+        else
+        {
+            // Default dev: loguea con Serilog. Si Provider=Resend pero falta
+            // ApiKey, cae silenciosamente acá — el logger del startup ya
+            // imprime el provider seleccionado, y cada email que se "envía"
+            // imprime un warning bien visible ("DEV MODE — no se envió email").
+            services.AddScoped<IEmailService, LoggingEmailService>();
+        }
+
         services.AddScoped<IRefreshTokenGenerator, RefreshTokenGenerator>();
         // Configuración de pagos por salón — scoped para cachear durante el request.
         services.AddScoped<ITenantAppointmentSettings, TenantAppointmentSettingsService>();
