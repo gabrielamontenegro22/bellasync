@@ -193,6 +193,14 @@ public sealed class CancelAppointmentHandler
     /// <summary>
     /// Devuelve la decisión final de refund: override del comando si vino
     /// y es legal, regla automática (ventana del tenant) si no.
+    ///
+    /// Semántica de la ventana:
+    ///   - windowHours = 0  → política estricta: el anticipo nunca se
+    ///     devuelve automáticamente. La admin/recepción con permiso
+    ///     puede igual override desde el modal.
+    ///   - windowHours > 0  → si cancela con esa anticipación o más,
+    ///     devuelve (Refunded); si cancela más sobre la hora, pierde
+    ///     (Forfeited).
     /// </summary>
     private async Task<DepositRefundDecision> ResolveDecisionAsync(
         Domain.Entities.Appointment appointment,
@@ -203,6 +211,13 @@ public sealed class CancelAppointmentHandler
             return overrideDecision.Value;
 
         var windowHours = await _settings.GetCancellationWindowHoursAsync(ct);
+
+        // Ventana 0 = política estricta. Sin esta guarda, "hoursUntil >= 0"
+        // (cita aún no pasó) caería en Refunded, que es lo contrario a lo
+        // que la admin pidió al configurar 0.
+        if (windowHours <= 0)
+            return DepositRefundDecision.Forfeited;
+
         var hoursUntilAppointment = (appointment.StartAt - _clock.UtcNow).TotalHours;
 
         // >= ventana → dentro del plazo → devolver.

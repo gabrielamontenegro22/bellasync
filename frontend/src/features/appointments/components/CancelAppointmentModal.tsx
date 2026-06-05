@@ -43,6 +43,11 @@ export function CancelAppointmentModal({ appointment, onClose }: CancelAppointme
   // Carga la política del salón solo si hay anticipo Validated — si no
   // hay plata, no necesitamos ventana para mostrar nada.
   const hasValidatedDeposit = appointment.validatedDepositAmount > 0
+  const hasDirectPayments = appointment.directPaymentsTotal > 0
+  // hasMoney = "tiene dinero asociado" (cualquier tipo). Espejo del check
+  // del backend — si es true, el motivo es obligatorio.
+  const hasMoney = hasValidatedDeposit || hasDirectPayments
+
   const policyQ = useQuery({
     queryKey: ['paymentPolicy'],
     queryFn: getPaymentPolicy,
@@ -53,12 +58,18 @@ export function CancelAppointmentModal({ appointment, onClose }: CancelAppointme
   // Computa la sugerencia automática localmente (espejo de la lógica del
   // backend) para mostrarla como hint. El backend recomputa al guardar,
   // así que este valor es solo display.
+  //
+  // Reglas (mismas del backend):
+  //   - windowHours <= 0  → Forfeited siempre (política estricta).
+  //   - cita ya pasó       → Forfeited.
+  //   - dentro de ventana → Refunded.
+  //   - fuera de ventana  → Forfeited.
   const autoDecision: DepositRefundDecision | null = useMemo(() => {
     if (!hasValidatedDeposit || !policyQ.data) return null
+    const win = policyQ.data.cancellationWindowHours
+    if (win <= 0) return 'Forfeited'
     const hoursUntil = (new Date(appointment.startAt).getTime() - Date.now()) / 3_600_000
-    return hoursUntil >= policyQ.data.cancellationWindowHours
-      ? 'Refunded'
-      : 'Forfeited'
+    return hoursUntil >= win ? 'Refunded' : 'Forfeited'
   }, [hasValidatedDeposit, policyQ.data, appointment.startAt])
 
   const [reason, setReason] = useState('')
@@ -69,7 +80,10 @@ export function CancelAppointmentModal({ appointment, onClose }: CancelAppointme
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const canOverride = perms.isAdmin || perms.canRefundDeposit
-  const reasonRequired = hasValidatedDeposit
+  // Motivo obligatorio si hay cualquier tipo de dinero asociado, no solo
+  // vouchers — antes solo chequeábamos vouchers y el backend rechazaba
+  // cuando había Payment directo sin motivo.
+  const reasonRequired = hasMoney
   const reasonOk = !reasonRequired || reason.trim().length > 0
 
   async function submit() {
@@ -138,14 +152,26 @@ export function CancelAppointmentModal({ appointment, onClose }: CancelAppointme
 
             {autoDecision && (
               <div className="text-xs text-warm-600 leading-relaxed">
-                <span className="text-warm-500">Según la política del salón </span>
-                ({policyQ.data?.cancellationWindowHours}h de ventana):{' '}
-                <strong className="text-warm-800">
-                  {autoDecision === 'Refunded'
-                    ? 'devolver el anticipo'
-                    : 'el anticipo queda perdido'}
-                </strong>
-                .
+                {(policyQ.data?.cancellationWindowHours ?? 0) <= 0 ? (
+                  <>
+                    <span className="text-warm-500">Política del salón: </span>
+                    <strong className="text-warm-800">
+                      el anticipo nunca se devuelve automáticamente
+                    </strong>
+                    .
+                  </>
+                ) : (
+                  <>
+                    <span className="text-warm-500">Según la política del salón </span>
+                    ({policyQ.data?.cancellationWindowHours}h de ventana):{' '}
+                    <strong className="text-warm-800">
+                      {autoDecision === 'Refunded'
+                        ? 'devolver el anticipo'
+                        : 'el anticipo queda perdido'}
+                    </strong>
+                    .
+                  </>
+                )}
               </div>
             )}
 

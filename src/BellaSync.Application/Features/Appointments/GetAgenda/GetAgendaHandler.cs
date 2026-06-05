@@ -46,9 +46,10 @@ public sealed class GetAgendaHandler : IQueryHandler<GetAgendaQuery, AgendaRespo
             NoShow = appointments.Count(a => a.Status == AppointmentStatus.NoShow),
         };
 
-        // Batch para evitar N+1: 1 sola query agrupada por cita devuelve
-        // el total de anticipos validados de todas las citas del día.
-        var validatedAmounts = await AppointmentMapper.GetValidatedDepositAmountsAsync(
+        // Batch para evitar N+1: 2 queries (vouchers + payments) por todas
+        // las citas del día, agregadas en memoria. El frontend del modal de
+        // cancelar usa los totales para decidir si el motivo es obligatorio.
+        var moneyTotals = await AppointmentMapper.GetMoneyTotalsAsync(
             appointments.Select(a => a.Id).ToList(), _db, ct);
 
         var response = new AgendaResponse
@@ -56,8 +57,14 @@ public sealed class GetAgendaHandler : IQueryHandler<GetAgendaQuery, AgendaRespo
             Date = query.Date,
             Metrics = metrics,
             Appointments = appointments
-                .Select(a => AppointmentMapper.ToResponse(
-                    a, validatedAmounts.TryGetValue(a.Id, out var v) ? v : 0m))
+                .Select(a =>
+                {
+                    var totals = moneyTotals.GetValueOrDefault(a.Id);
+                    return AppointmentMapper.ToResponse(
+                        a,
+                        totals?.ValidatedDeposit ?? 0m,
+                        totals?.DirectPayments ?? 0m);
+                })
                 .ToList(),
         };
 

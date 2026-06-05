@@ -36,6 +36,12 @@ export interface AppointmentResponse {
    * para calcular "lo que falta cobrar en sitio" = priceSnapshot - este.
    */
   validatedDepositAmount: number
+  /**
+   * Suma de Payment registrados directamente (cobros en sitio). NO incluye
+   * anticipos online. El modal de cancelar lo usa para saber si la cita
+   * tiene dinero asociado y exigir motivo obligatorio.
+   */
+  directPaymentsTotal: number
   status: AppointmentStatus
   depositStatus: AppointmentDepositStatus
   channel: AppointmentChannel

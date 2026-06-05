@@ -221,35 +221,46 @@ function PolicySummary({ policy }: { policy: PaymentPolicy }) {
         {/* Separador visual entre reserva y cancelaciones */}
         <div className="h-px bg-warm-200/70 my-1" />
 
-        {/* CASO 4: cancelación con devolución */}
-        <ExampleRow
-          emoji="✅"
-          title={
-            <>
-              <strong>Si ya pagaron y cancelan</strong> con{' '}
-              <strong className="tabular-nums">
-                {cancelWin === 0
-                  ? 'cualquier anticipación'
-                  : `${cancelWin}h o más`}
-              </strong>{' '}
-              de anticipación → se le <strong>devuelve el anticipo</strong>.
-            </>
-          }
-        />
-
-        {/* CASO 5: cancelación tardía */}
-        {cancelWin > 0 && (
+        {cancelWin === 0 ? (
+          /* Política estricta: ventana 0 = nunca devolver */
           <ExampleRow
             emoji="❌"
             title={
               <>
-                <strong>Si cancelan más sobre la hora</strong> (menos de{' '}
-                <strong className="tabular-nums">{cancelWin}h</strong>) →
-                el anticipo <strong>se pierde</strong>. Vos o tu recepción
-                (con permiso) pueden cambiar la decisión caso por caso.
+                <strong>Política estricta:</strong> el anticipo{' '}
+                <strong>nunca se devuelve automáticamente</strong> al
+                cancelar. Vos o tu recepción (con permiso) pueden cambiar
+                la decisión caso por caso desde el modal de cancelar.
               </>
             }
           />
+        ) : (
+          <>
+            {/* CASO 4: cancelación con devolución */}
+            <ExampleRow
+              emoji="✅"
+              title={
+                <>
+                  <strong>Si ya pagaron y cancelan</strong> con{' '}
+                  <strong className="tabular-nums">{cancelWin}h o más</strong>{' '}
+                  de anticipación → se le <strong>devuelve el anticipo</strong>.
+                </>
+              }
+            />
+
+            {/* CASO 5: cancelación tardía */}
+            <ExampleRow
+              emoji="❌"
+              title={
+                <>
+                  <strong>Si cancelan más sobre la hora</strong> (menos de{' '}
+                  <strong className="tabular-nums">{cancelWin}h</strong>) →
+                  el anticipo <strong>se pierde</strong>. Vos o tu recepción
+                  (con permiso) pueden cambiar la decisión caso por caso.
+                </>
+              }
+            />
+          </>
         )}
       </div>
     </div>

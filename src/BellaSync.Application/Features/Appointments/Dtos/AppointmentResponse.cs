@@ -37,6 +37,18 @@ public class AppointmentResponse
     /// </summary>
     public decimal ValidatedDepositAmount { get; set; }
 
+    /// <summary>
+    /// Suma de los Payment registrados directamente para esta cita
+    /// (cobros en sitio: efectivo, tarjeta, transferencia manual…).
+    /// NO incluye anticipos online — esos están en
+    /// <see cref="ValidatedDepositAmount"/>.
+    ///
+    /// Sirve al modal de cancelar para saber si la cita tiene dinero
+    /// asociado y exigir motivo obligatorio sin esperar el rechazo del
+    /// backend.
+    /// </summary>
+    public decimal DirectPaymentsTotal { get; set; }
+
     /// <summary>"Pending" / "Confirmed" / "InProgress" / "Completed" / "Cancelled" / "NoShow"</summary>
     public string Status { get; set; } = string.Empty;
 
