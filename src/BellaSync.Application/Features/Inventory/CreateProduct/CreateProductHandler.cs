@@ -17,17 +17,20 @@ public sealed class CreateProductHandler
 {
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
+    private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly ILogger<CreateProductHandler> _logger;
 
     public CreateProductHandler(
         IApplicationDbContext db,
         ICurrentTenantService currentTenant,
+        ICurrentUserService currentUser,
         IClock clock,
         ILogger<CreateProductHandler> logger)
     {
         _db = db;
         _currentTenant = currentTenant;
+        _currentUser = currentUser;
         _clock = clock;
         _logger = logger;
     }
@@ -76,11 +79,40 @@ public sealed class CreateProductHandler
         }
 
         _db.Products.Add(product);
+
+        // Si la admin indicó stock inicial > 0 al crear, registramos la
+        // entrada automáticamente. Misma transacción que el create del
+        // producto — o ambos commitean o ninguno (consistency).
+        // El movimiento queda en el historial con motivo claro, así si
+        // después la admin abre "Ver historial" ve el origen del stock.
+        if (command.InitialStock.HasValue && command.InitialStock.Value > 0)
+        {
+            var qty = command.InitialStock.Value;
+            try { product.RegisterInflow(qty, _clock.UtcNow); }
+            catch (DomainException ex)
+            {
+                return ApplicationError.Validation("product.invalid_initial_stock", ex.Message);
+            }
+
+            var seedMovement = ProductMovement.Create(
+                tenantId: _currentTenant.TenantId,
+                productId: product.Id,
+                kind: ProductMovementKind.Inflow,
+                qty: qty,
+                reason: "Stock inicial",
+                stockBefore: 0,
+                stockAfter: product.Stock,
+                notes: "Carga inicial al crear el producto.",
+                registeredByUserId: _currentUser.UserId,
+                utcNow: _clock.UtcNow);
+            _db.ProductMovements.Add(seedMovement);
+        }
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Producto creado {ProductId}: {Name} ({Brand}) en categoría {CategoryName}",
-            product.Id, product.Name, product.Brand, category.Name);
+            "Producto creado {ProductId}: {Name} ({Brand}) en categoría {CategoryName}, stock inicial {Stock}",
+            product.Id, product.Name, product.Brand, category.Name, product.Stock);
 
         // Re-leer con la categoría adjunta para hidratar nombre+tono del DTO.
         var fresh = await _db.Products
