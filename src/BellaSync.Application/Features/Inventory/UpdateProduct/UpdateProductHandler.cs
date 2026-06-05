@@ -5,10 +5,8 @@ using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Inventory.Dtos;
 using BellaSync.Application.Features.Inventory.Shared;
 using BellaSync.Domain.Common;
-using BellaSync.Domain.Entities;
 using BellaSync.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace BellaSync.Application.Features.Inventory.UpdateProduct;
 
@@ -17,22 +15,11 @@ public sealed class UpdateProductHandler
 {
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
-    private readonly ICurrentTenantService _currentTenant;
-    private readonly ICurrentUserService _currentUser;
-    private readonly ILogger<UpdateProductHandler> _logger;
 
-    public UpdateProductHandler(
-        IApplicationDbContext db,
-        IClock clock,
-        ICurrentTenantService currentTenant,
-        ICurrentUserService currentUser,
-        ILogger<UpdateProductHandler> logger)
+    public UpdateProductHandler(IApplicationDbContext db, IClock clock)
     {
         _db = db;
         _clock = clock;
-        _currentTenant = currentTenant;
-        _currentUser = currentUser;
-        _logger = logger;
     }
 
     public async Task<Result<ProductResponse>> HandleAsync(
@@ -66,8 +53,11 @@ public sealed class UpdateProductHandler
             return ApplicationError.Validation("product.invalid_cost", ex.Message);
         }
 
-        // 1) Aplicar los cambios de datos básicos (nombre, marca, categoría,
-        //    unidad, mínimo, costo). NO toca stock.
+        // Actualiza metadata: nombre, marca, categoría, mínimo, costo.
+        // El stock NO se cambia desde acá por diseño — usar el modal de
+        // "Registrar movimiento" (tabs Entrada/Salida/Ajuste). Eso preserva
+        // motivos descriptivos en el historial y mantiene una sola forma de
+        // mutar stock.
         try
         {
             product.UpdateDetails(
@@ -77,60 +67,6 @@ public sealed class UpdateProductHandler
         catch (DomainException ex)
         {
             return ApplicationError.Validation("product.invalid", ex.Message);
-        }
-
-        // 2) Si se mandó NewStock distinto del actual, ajustar + crear
-        //    movimiento de auditoría. Esto soluciona el caso típico:
-        //    "hice inventario físico, conté 20 en vez de 25" — la admin
-        //    cambia el stock acá y el sistema deja registro automático.
-        var stockBefore = product.Stock;
-        if (command.NewStock.HasValue && command.NewStock.Value != stockBefore)
-        {
-            if (command.NewStock.Value < 0)
-                return ApplicationError.Validation(
-                    "product.stock_negative",
-                    "El stock no puede ser negativo.");
-
-            try
-            {
-                product.AdjustTo(command.NewStock.Value, _clock.UtcNow);
-            }
-            catch (DomainException ex)
-            {
-                return ApplicationError.Validation("product.invalid_stock", ex.Message);
-            }
-
-            // Crear el movimiento de auditoría. Reason explica que vino del
-            // form de edición (vs un Ajuste explícito desde el modal de mov).
-            // Qty = newStock (convención para Adjustment: el valor final, no el delta).
-            // Try/catch defensivo: el factory de ProductMovement valida
-            // invariantes (qty negativa, motivo vacío, etc.) y queremos
-            // devolver 400 con mensaje accionable en vez de 500.
-            ProductMovement auditMovement;
-            try
-            {
-                auditMovement = ProductMovement.Create(
-                    tenantId: _currentTenant.TenantId,
-                    productId: product.Id,
-                    kind: ProductMovementKind.Adjustment,
-                    qty: command.NewStock.Value,
-                    reason: "Ajuste desde editar producto",
-                    stockBefore: stockBefore,
-                    stockAfter: product.Stock,
-                    notes: $"Cambio manual de stock vía form de edición ({stockBefore} → {product.Stock}).",
-                    registeredByUserId: _currentUser.UserId,
-                    utcNow: _clock.UtcNow);
-            }
-            catch (DomainException ex)
-            {
-                return ApplicationError.Validation("product.audit_movement_failed", ex.Message);
-            }
-
-            _db.ProductMovements.Add(auditMovement);
-
-            _logger.LogInformation(
-                "Stock de producto {ProductId} ({Name}) cambiado desde form: {Before} → {After}",
-                product.Id, product.Name, stockBefore, product.Stock);
         }
 
         await _db.SaveChangesAsync(ct);

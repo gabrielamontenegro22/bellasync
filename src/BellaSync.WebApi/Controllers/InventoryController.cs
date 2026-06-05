@@ -120,7 +120,7 @@ public class InventoryController : ControllerBase
     {
         var command = new UpdateProductCommand(
             id, request.Name, request.Brand, request.CategoryId,
-            request.MinStock, request.Cost, request.NewStock);
+            request.MinStock, request.Cost);
         var result = await handler.HandleAsync(command, ct);
         return result.ToActionResult();
     }
@@ -271,13 +271,6 @@ public sealed class UpdateProductRequest
     public Guid CategoryId { get; set; }
     public int MinStock { get; set; }
     public decimal Cost { get; set; }
-
-    /// <summary>
-    /// Si viene y es distinto al stock actual, el backend crea automáticamente
-    /// un movimiento tipo Ajuste para mantener trazabilidad. Si null o igual
-    /// al actual, no se toca el stock.
-    /// </summary>
-    public int? NewStock { get; set; }
 }
 
 public sealed class RegisterMovementRequest

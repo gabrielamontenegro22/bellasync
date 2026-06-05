@@ -28,11 +28,10 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
   const [categoryId, setCategoryId] = useState<string>('')
   const [minStock, setMinStock] = useState('5')
   const [cost, setCost] = useState('')
-  // Stock actual (solo en edit). Si el user lo cambia y guarda, el backend
-  // ajusta el stock y crea automáticamente un movimiento tipo Ajuste.
-  const [stock, setStock] = useState('0')
   // Stock inicial (solo en create). Si > 0, el backend registra
   // automáticamente una Entrada con motivo "Stock inicial".
+  // En modo edit el stock no se toca desde acá — para cambiarlo va
+  // por el modal "Registrar movimiento" (Entrada/Salida/Ajuste).
   const [initialStock, setInitialStock] = useState('0')
   const [error, setError] = useState<string | null>(null)
   const submittingRef = useRef(false)
@@ -53,19 +52,11 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
       setCategoryId(product?.categoryId ?? (categories[0]?.id ?? ''))
       setMinStock(String(product?.minStock ?? 5))
       setCost(product ? String(Math.round(product.cost)) : '')
-      setStock(String(product?.stock ?? 0))
       setInitialStock('0')
       setError(null)
       submittingRef.current = false
     }
   }, [open, product, categories])
-
-  // Stock parseado para detectar si cambió. Solo se manda al backend si
-  // (editando) Y (es distinto al original). Si igual al original, omitimos
-  // el campo — backend lo trata como "no tocar stock".
-  const stockNum = parseInt(stock, 10)
-  const stockChanged = isEdit && product != null
-    && !Number.isNaN(stockNum) && stockNum !== product.stock
 
   // Stock inicial al crear. Si > 0, backend registra Entrada automática.
   const initialStockNum = parseInt(initialStock, 10) || 0
@@ -80,11 +71,9 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
         cost: parseInt(cost.replace(/[^0-9]/g, ''), 10) || 0,
       }
       if (product) {
-        // Update: si cambió stock, lo mandamos. null = no tocar.
-        return updateProduct(product.id, {
-          ...baseReq,
-          newStock: stockChanged ? stockNum : null,
-        })
+        // Update: solo metadata. Stock NO se toca acá — para cambiarlo va
+        // por "Registrar movimiento" con motivo apropiado (mejor auditoría).
+        return updateProduct(product.id, baseReq)
       }
       // Create: mandamos stock inicial si > 0 (backend crea Entrada auto).
       return createProduct({
@@ -94,14 +83,11 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
     },
     onSuccess: () => {
       submittingRef.current = false
-      // Toast contextual según qué pasó:
-      //   - Edit con stock cambiado: "Stock ajustado · X (Y → Z)"
-      //   - Edit sin cambio de stock: "Producto actualizado · X"
+      // Toast contextual:
+      //   - Edit: "Producto actualizado · X" (stock no se toca acá)
       //   - Create con stock inicial > 0: "Producto creado · X (stock Y)"
       //   - Create sin stock: "Producto creado · X"
-      if (isEdit && stockChanged && product) {
-        onSaved(`Stock ajustado · ${name.trim()} (${product.stock} → ${stockNum})`)
-      } else if (!isEdit && initialStockNum > 0) {
+      if (!isEdit && initialStockNum > 0) {
         onSaved(`Producto creado · ${name.trim()} (stock ${initialStockNum})`)
       } else {
         const verb = isEdit ? 'Producto actualizado' : 'Producto creado'
@@ -242,36 +228,24 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
             </Field>
           )}
 
-          {/* Edición: campo Stock editable directo. Si cambia, el backend
-              registra automáticamente un Ajuste en el historial (audit trail
-              preservado). Caso típico: la admin hace inventario físico,
-              cuenta 20 en vez de 25, cambia el número acá y guarda. */}
+          {/* Edición: solo metadata. El stock NO se cambia desde acá por
+              diseño — para cambiarlo va el modal "Registrar movimiento"
+              que tiene motivos descriptivos (mejor auditoría) y maneja los
+              3 tipos (Entrada / Salida / Ajuste). Banner informativo
+              que muestra el stock actual y redirige al modal correcto. */}
           {isEdit && product && (
-            <Field
-              label="Stock actual"
-              hint={stockChanged ? '↻ Se registrará un Ajuste en el historial' : 'inventario físico, corrección, etc.'}
-            >
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={stock}
-                  onChange={e => setStock(e.target.value.replace(/[^0-9]/g, ''))}
-                  className={cls(inputCls, 'tabular-nums max-w-[140px]', stockChanged && 'border-brand-500 ring-2 ring-brand-100')}
-                />
-                {stockChanged && (
-                  <span className="text-[11.5px] text-brand-700 font-medium tabular-nums">
-                    {product.stock} → {stockNum}
-                  </span>
-                )}
+            <div className="rounded-lg bg-warm-50 border border-warm-150 px-3 py-2.5 text-[12px] text-warm-600 flex items-start gap-2">
+              <span className="text-warm-400 mt-0.5">ℹ️</span>
+              <div className="flex-1">
+                <div>
+                  Stock actual: <strong className="text-warm-800 tabular-nums">{product.stock}</strong>.
+                </div>
+                <div className="mt-1 text-warm-500">
+                  Para cambiarlo (compras, salidas, ajustes por inventario físico)
+                  usá el botón <strong>"Registrar movimiento"</strong> arriba.
+                </div>
               </div>
-              {stockChanged && (
-                <p className="text-[11px] text-warm-500 mt-1.5 leading-snug">
-                  Quedará un movimiento en el historial con motivo{' '}
-                  <em>"Ajuste desde editar producto"</em> para que sepas cuándo se cambió.
-                </p>
-              )}
-            </Field>
+            </div>
           )}
 
           {error && (
