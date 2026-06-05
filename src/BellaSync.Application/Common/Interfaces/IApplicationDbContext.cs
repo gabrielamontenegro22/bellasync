@@ -22,6 +22,8 @@ public interface IApplicationDbContext
     DbSet<PaymentVoucher> PaymentVouchers { get; }
     DbSet<Payment> Payments { get; }
     DbSet<Expense> Expenses { get; }
+    DbSet<Product> Products { get; }
+    DbSet<ProductMovement> ProductMovements { get; }
     DbSet<CommissionPayout> CommissionPayouts { get; }
     DbSet<CashClosing> CashClosings { get; }
     DbSet<SalonWeeklyHours> SalonWeeklyHours { get; }

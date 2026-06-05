@@ -18,6 +18,7 @@ import { cls } from '@/lib/cls'
 import { useAuth, usePermissions } from '@/features/auth/useAuth'
 import { useCommissionsSetting } from '@/features/commissions/useCommissionsSetting'
 import { getDashboardSummary } from '@/api/dashboard'
+import { getInventorySummary } from '@/api/inventory'
 
 interface AppSidebarProps {
   /** En mobile, el sidebar es un drawer controlado externamente */
@@ -69,7 +70,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/clientes',                label: 'Clientes',            icon: Users                    },
   { to: '/servicios',               label: 'Servicios',           icon: Sparkles                 },
   { to: '/estilistas',              label: 'Estilistas',          icon: Scissors                 },
-  { to: '/inventario',              label: 'Inventario',          icon: Box,       disabled: true  },
+  { to: '/inventario',              label: 'Inventario',          icon: Box                      },
   { to: '/validacion',              label: 'Validación de pagos', icon: Wallet                   },
   { to: '/caja',                    label: 'Cierre de caja',      icon: Banknote                 },
   { to: '/reportes',                label: 'Reportes',            icon: BarChart3,                  adminOnly: true },
@@ -105,6 +106,17 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
     queryKey: ['dashboard'],
     queryFn: getDashboardSummary,
     refetchInterval: 60_000,
+    enabled: user?.role !== 'SuperAdmin' && !!user,
+  })
+
+  // Resumen de inventario — para el badge "X stock bajo + agotados" al
+  // costado del item Inventario. Refresca cada 90s (no necesita ser
+  // tan reactivo como Validación). Shared queryKey con InventoryPage
+  // para que ambos lean del mismo cache.
+  const { data: inventorySummary } = useQuery({
+    queryKey: ['inventorySummary'],
+    queryFn: getInventorySummary,
+    refetchInterval: 90_000,
     enabled: user?.role !== 'SuperAdmin' && !!user,
   })
 
@@ -165,6 +177,11 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
       }
       if (item.to === '/caja' && dashboard?.cashClosingPending) {
         return { ...item, badge: '!' }
+      }
+      if (item.to === '/inventario' && inventorySummary) {
+        // Sumamos stock bajo + agotados — ambos requieren acción de la admin.
+        const alerts = inventorySummary.lowStockCount + inventorySummary.outOfStockCount
+        if (alerts > 0) return { ...item, badge: alerts.toString() }
       }
       return item
     })

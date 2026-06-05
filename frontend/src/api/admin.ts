@@ -70,6 +70,7 @@ export interface ReceptionPermissions {
   // Catálogo
   canEditStylists: boolean
   canEditServices: boolean
+  canEditInventory: boolean
   // Información sensible
   canViewReports: boolean
   canViewCommissions: boolean
