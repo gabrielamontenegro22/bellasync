@@ -136,15 +136,15 @@ export function AppRouter() {
 
       {/* Configuración — sólo lo que es ajuste real (info, horario,
           política, plantillas, suscripción). Lo operativo vive arriba.
-          SalonAdmin-only: recepción no debería ver info de suscripción,
-          usuarios del salón, ni cambiar políticas de pago. */}
+          Admin siempre tiene acceso. Recepción solo entra si la admin
+          le activó algún permiso configurable (canEditSchedule,
+          canEditPaymentPolicy, canEditSalonInfo) — ConfigLayout
+          maneja el filter y muestra empty state si no hay nada. */}
       <Route
         path="/configuracion"
         element={
           <ProtectedRoute>
-            <RequireRole roles={['SalonAdmin']}>
-              <ConfigLayout />
-            </RequireRole>
+            <ConfigLayout />
           </ProtectedRoute>
         }
       >

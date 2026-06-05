@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Building2,
   CalendarClock,
@@ -77,6 +77,29 @@ export function ConfigLayout() {
   const visibleSections = CONFIG_SECTIONS.filter(
     (s) => !s.visibleFor || s.visibleFor(perms),
   )
+
+  // Si la sub-ruta actual NO está dentro de las visibles, redirigimos
+  // a la primera visible. Cubre dos casos:
+  //   1. Recepción aterrizó en /configuracion (sin subpath) y el
+  //      <Route index Navigate to="general"> la tiraba a una sección
+  //      que no tiene permiso de ver (típicamente /general).
+  //   2. Recepción intenta entrar por URL directa a una sección que
+  //      no le corresponde (ej. /configuracion/usuarios).
+  // Admin tiene todas visibles, así que para ella esto nunca dispara.
+  if (visibleSections.length > 0) {
+    const inside = location.pathname === '/configuracion'
+      || visibleSections.some((s) => location.pathname.startsWith(s.to))
+    if (!inside) {
+      return <Navigate to={visibleSections[0].to} replace />
+    }
+    // Caso raíz exacto /configuracion: si la primera visible NO es
+    // /configuracion/general (admin), mandamos a la primera de la lista
+    // del user (recepción típicamente verá /configuracion/horario).
+    if (location.pathname === '/configuracion'
+        && visibleSections[0].to !== '/configuracion/general') {
+      return <Navigate to={visibleSections[0].to} replace />
+    }
+  }
 
   return (
     <AppShell>
