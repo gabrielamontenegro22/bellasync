@@ -233,7 +233,7 @@ export function InventoryPage() {
       {/* ─── KPIs ─── */}
       <div className="px-6 lg:px-10 mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi label="Total productos" value={String(summary?.totalProducts ?? 0)} sub="en catálogo" icon={Box}/>
-        <Kpi label="Valor del inventario" value={fmtCop(summary?.totalValueCop ?? 0)} sub="al costo de compra" icon={Wallet} tone="brand"/>
+        <Kpi label="Valor del inventario" value={fmtCop(summary?.totalValueCop ?? 0)} sub="lo que pagaste por todo lo que tenés" icon={Wallet} tone="brand"/>
         <Kpi label="Stock bajo" value={String(summary?.lowStockCount ?? 0)} sub="por debajo del mínimo" tone="gold" icon={AlertTriangle}/>
         <Kpi label="Agotados" value={String(summary?.outOfStockCount ?? 0)} sub="reposición urgente" tone="terra" icon={AlertCircle}/>
       </div>
