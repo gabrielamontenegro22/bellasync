@@ -49,10 +49,19 @@ export function AppRouter() {
       {/* Portal público de booking — anónimo, sin AppShell */}
       <Route path="/booking/:tenantSlug" element={<BookingPage />} />
 
-      {/* Dashboard placeholder */}
+      {/* Dashboard — home post-login para usuarias del salón (admin,
+          recepción, stylist). SuperAdmin NO debería entrar acá: no tiene
+          tenant asociado y el dashboard se quedaría cargando para siempre.
+          RequireRole lo redirige a su panel propio /saas-admin/. */}
       <Route
         path="/dashboard"
-        element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
+        element={
+          <ProtectedRoute>
+            <RequireRole roles={['SalonAdmin', 'Receptionist', 'Stylist']}>
+              <Dashboard />
+            </RequireRole>
+          </ProtectedRoute>
+        }
       />
 
       {/* Agenda (la nueva home tras login para recepción) */}

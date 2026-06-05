@@ -6,6 +6,10 @@ import { extractApiError } from '@/lib/extractApiError'
 import { registerExpense, type ExpenseResponse } from '@/api/expenses'
 import type { PaymentMethod } from '@/api/payments'
 import { PaymentMethodPicker } from '@/features/payments/components/PaymentMethodPicker'
+import { useIsAdmin } from '@/features/auth/useAuth'
+
+/** Tope (COP) para egresos de recepción — mismo valor que el backend. */
+const RECEPTION_EXPENSE_CAP = 100_000
 
 interface Props {
   open: boolean
@@ -31,6 +35,7 @@ interface Props {
  */
 export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   const qc = useQueryClient()
+  const isAdmin = useIsAdmin()
   const [concept, setConcept] = useState('')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('Cash')
@@ -71,7 +76,11 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
   const conceptOk = concept.trim().length > 0
   const amountOk = amountNum > 0
   const providerOk = method !== 'Transfer' || !!provider
-  const canSubmit = conceptOk && amountOk && providerOk && !mut.isPending
+  // Recepción tiene cap; admin no. Pre-validamos para mostrar warning
+  // ANTES del submit y evitar el 403 silencioso (lo mostrará igual si
+  // el chequeo local falla, pero la UX queda más limpia).
+  const overReceptionCap = !isAdmin && amountNum > RECEPTION_EXPENSE_CAP
+  const canSubmit = conceptOk && amountOk && providerOk && !overReceptionCap && !mut.isPending
 
   const handleSubmit = () => {
     if (!canSubmit || submittingRef.current) return
@@ -188,6 +197,16 @@ export function RegisterExpenseModal({ open, onClose, onCreated }: Props) {
               </p>
             )}
           </div>
+
+          {/* Aviso de cap para recepción — preventivo, antes del submit.
+              Se muestra apenas el monto supera el tope, no espera al 403
+              del backend. La admin no ve este aviso. */}
+          {overReceptionCap && (
+            <div className="rounded-lg bg-gold-50 ring-1 ring-gold-200 px-3 py-2 text-[12px] text-gold-700">
+              ⚠️ Egresos sobre ${RECEPTION_EXPENSE_CAP.toLocaleString('es-CO')} requieren
+              autorización de la administradora del salón.
+            </div>
+          )}
 
           {error && (
             <div className="rounded-lg bg-terra-100/60 ring-1 ring-terra-300 px-3 py-2 text-[12.5px] text-terra-500">

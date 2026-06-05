@@ -14,19 +14,32 @@ namespace BellaSync.Application.Features.Expenses.RegisterExpense;
 public sealed class RegisterExpenseHandler
     : ICommandHandler<RegisterExpenseCommand, ExpenseResponse>
 {
+    /// <summary>
+    /// Tope (en COP) para egresos registrados por recepción sin pasar
+    /// por admin. Pensado para gastos chicos del día (almuerzo del equipo,
+    /// domicilios, insumos menores). Por encima se asume que requiere
+    /// decisión de la admin (compra grande a proveedor, propinas grandes).
+    /// Hardcoded por ahora; en una iteración futura podría vivir en
+    /// TenantSettings para que cada salón lo ajuste.
+    /// </summary>
+    private const decimal ReceptionExpenseCapCop = 100_000m;
+
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
+    private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly ILogger<RegisterExpenseHandler> _logger;
 
     public RegisterExpenseHandler(
         IApplicationDbContext db,
         ICurrentTenantService currentTenant,
+        ICurrentUserService currentUser,
         IClock clock,
         ILogger<RegisterExpenseHandler> logger)
     {
         _db = db;
         _currentTenant = currentTenant;
+        _currentUser = currentUser;
         _clock = clock;
         _logger = logger;
     }
@@ -58,6 +71,15 @@ public sealed class RegisterExpenseHandler
         catch (BellaSync.Domain.Common.DomainException ex)
         {
             return ApplicationError.Validation("expense.invalid_amount", ex.Message);
+        }
+
+        // 2.5. Cap por rol: recepción tiene tope para evitar que registre
+        // egresos enormes sin que la admin se entere. La admin no tiene cap.
+        if (!_currentUser.IsSalonAdmin && amount.Amount > ReceptionExpenseCapCop)
+        {
+            return ApplicationError.Forbidden(
+                "expense.over_reception_cap",
+                $"Egresos sobre ${ReceptionExpenseCapCop:N0} COP requieren autorización de la administradora del salón.");
         }
 
         Expense expense;
