@@ -82,6 +82,13 @@ export interface CreateAppointmentRequest {
    * Receptionist lo manda y queda silenciosamente ignorado.
    */
   bypassAdvanceWindow?: boolean
+  /**
+   * Vouchers CreditPending del cliente a aplicar como anticipo de esta
+   * cita. El backend valida que la suma cubra el anticipo requerido y
+   * consume los vouchers FIFO. Si vienen los IDs pero el crédito no
+   * alcanza, rechaza con código "credit.insufficient".
+   */
+  applyCreditFromVoucherIds?: string[]
 }
 
 /** GET /api/Appointments?date=YYYY-MM-DD[&stylistId=guid] */

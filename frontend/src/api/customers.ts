@@ -104,3 +104,26 @@ export async function getCustomerAppointments(id: string): Promise<AppointmentRe
   const { data } = await api.get<AppointmentResponse[]>(`/api/Customers/${id}/appointments`)
   return data
 }
+
+/**
+ * Espejo de CustomerCreditResponse del backend. Crédito disponible por
+ * voucher: cada item corresponde a un anticipo de cita cancelada con
+ * decisión "CreditPending" que todavía tiene saldo.
+ */
+export interface CustomerCredit {
+  voucherId: string
+  availableAmount: number
+  originalAmount: number
+  originalServiceName: string
+  originalAppointmentDate: string  // ISO
+  generatedAt: string              // ISO (= cuando se canceló la cita)
+}
+
+/**
+ * GET /api/Customers/{id}/credits — créditos disponibles del cliente
+ * para aplicar como anticipo en una nueva cita. Lista vacía si no hay.
+ */
+export async function getCustomerCredits(id: string): Promise<CustomerCredit[]> {
+  const { data } = await api.get<CustomerCredit[]>(`/api/Customers/${id}/credits`)
+  return data
+}
