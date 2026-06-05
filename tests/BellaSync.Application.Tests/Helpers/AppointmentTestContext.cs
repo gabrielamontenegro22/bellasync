@@ -62,6 +62,8 @@ public sealed class AppointmentTestContext : IDisposable
             .Returns(Task.FromResult(30));
         AppointmentSettings.GetMinAdvanceMinutesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(30));
+        AppointmentSettings.GetCancellationWindowHoursAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(2));
 
         // CurrentTenant devuelve un tenant fijo en estos tests.
         Base.CurrentTenant.HasTenant.Returns(true);

@@ -6,6 +6,7 @@ using BellaSync.Application.Features.Appointments.Dtos;
 using BellaSync.Application.Features.Appointments.Shared;
 using BellaSync.Application.Features.WhatsApp;
 using BellaSync.Domain.Common;
+using BellaSync.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +20,7 @@ public sealed class CancelAppointmentHandler
     private readonly WhatsAppEnqueuer _whatsApp;
     private readonly ICurrentUserService _currentUser;
     private readonly IReceptionPermissionsService _perms;
+    private readonly ITenantAppointmentSettings _settings;
     private readonly ILogger<CancelAppointmentHandler> _logger;
 
     public CancelAppointmentHandler(
@@ -27,6 +29,7 @@ public sealed class CancelAppointmentHandler
         WhatsAppEnqueuer whatsApp,
         ICurrentUserService currentUser,
         IReceptionPermissionsService perms,
+        ITenantAppointmentSettings settings,
         ILogger<CancelAppointmentHandler> logger)
     {
         _db = db;
@@ -34,6 +37,7 @@ public sealed class CancelAppointmentHandler
         _whatsApp = whatsApp;
         _currentUser = currentUser;
         _perms = perms;
+        _settings = settings;
         _logger = logger;
     }
 
@@ -51,6 +55,17 @@ public sealed class CancelAppointmentHandler
             return ApplicationError.NotFound("appointment.not_found",
                 $"No existe una cita con id {command.Id}.");
 
+        // Vouchers validados de esta cita: si los hay, hay anticipo cobrado
+        // y la cancelación dispara la decisión de refund. Solo cargamos
+        // los Validated — Pending/Rejected/NeedsClarification no tienen
+        // dinero "del salón" para devolver.
+        var validatedVouchers = await _db.PaymentVouchers
+            .Where(v => v.AppointmentId == appointment.Id
+                     && v.Status == PaymentVoucherStatus.Validated)
+            .ToListAsync(ct);
+
+        var hasValidatedDeposit = validatedVouchers.Count > 0;
+
         // Guard configurable: si la cita YA tiene plata cobrada (Payments
         // registrados o vouchers validados), aplicamos las reglas del salón.
         //
@@ -62,16 +77,9 @@ public sealed class CancelAppointmentHandler
         //     para que la admin sepa qué hacer con el dinero después).
         if (!_currentUser.IsSalonAdmin)
         {
-            var hasMoney = await _db.Payments
+            var hasMoney = hasValidatedDeposit || await _db.Payments
                 .AsNoTracking()
                 .AnyAsync(p => p.AppointmentId == appointment.Id, ct);
-            if (!hasMoney)
-            {
-                hasMoney = await _db.PaymentVouchers
-                    .AsNoTracking()
-                    .AnyAsync(v => v.AppointmentId == appointment.Id
-                                && v.Status == BellaSync.Domain.Entities.PaymentVoucherStatus.Validated, ct);
-            }
 
             if (hasMoney)
             {
@@ -94,6 +102,16 @@ public sealed class CancelAppointmentHandler
                         "appointment.cancel_with_money_requires_reason",
                         "Esta cita tiene dinero asociado. Tenés que escribir un motivo (qué hacer con el anticipo, si el cliente avisó, etc.) para que la administradora decida después.");
                 }
+
+                // Si recepción mandó override de la decisión de refund,
+                // necesita el permiso CanRefundDeposit. La admin nunca
+                // pasa por este branch (IsSalonAdmin = true arriba).
+                if (command.DepositOverride is not null && !perms.CanRefundDeposit)
+                {
+                    return ApplicationError.Forbidden(
+                        "appointment.refund_override_requires_permission",
+                        "No tenés permiso para elegir qué hacer con el anticipo. La administradora configuró que solo ella decide refunds.");
+                }
             }
         }
 
@@ -102,12 +120,35 @@ public sealed class CancelAppointmentHandler
         // confirmó no amerita un "lamentamos cancelar tu cita" porque la
         // cliente probablemente nunca terminó el proceso de agendamiento.
         // Solo notificamos cancelación de Confirmed (cita ya en firme).
-        var wasConfirmed = appointment.Status == BellaSync.Domain.Entities.AppointmentStatus.Confirmed;
+        var wasConfirmed = appointment.Status == AppointmentStatus.Confirmed;
 
         try { appointment.Cancel(_clock.UtcNow, command.Reason, _currentUser.UserId); }
         catch (DomainException ex)
         {
             return ApplicationError.Validation("appointment.invalid_transition", ex.Message);
+        }
+
+        // === Registrar la decisión de refund en cada voucher validado ===
+        // La regla automática: dentro de la ventana del salón → Refunded;
+        // fuera → Forfeited. El override del comando (si vino) tiene prio.
+        if (hasValidatedDeposit)
+        {
+            var decision = await ResolveDecisionAsync(appointment, command.DepositOverride, ct);
+            var decidedBy = _currentUser.UserId ?? Guid.Empty;
+            foreach (var voucher in validatedVouchers)
+            {
+                try { voucher.RecordRefundDecision(decision, _clock.UtcNow, decidedBy); }
+                catch (DomainException ex)
+                {
+                    // Caso borde: voucher ya tenía decisión registrada
+                    // (puede pasar si dos requests cancelan en paralelo).
+                    // Logueamos y seguimos — la cita ya está cancelada,
+                    // no queremos rollback por esto.
+                    _logger.LogWarning(ex,
+                        "No se pudo registrar refund decision en voucher {VoucherId}",
+                        voucher.Id);
+                }
+            }
         }
 
         // Cancelar WhatsApp Queued de esta cita: si la cancelación ocurre
@@ -124,7 +165,7 @@ public sealed class CancelAppointmentHandler
             await _whatsApp.EnqueueForAppointmentAsync(
                 tenantId: appointment.TenantId,
                 appointment: appointment,
-                kind: BellaSync.Domain.Entities.WhatsAppTemplateKind.AppointmentCancelled,
+                kind: WhatsAppTemplateKind.AppointmentCancelled,
                 ct: ct);
         }
 
@@ -147,5 +188,27 @@ public sealed class CancelAppointmentHandler
 
         return Result<AppointmentResponse>.Success(
             await AppointmentMapper.ToResponseAsync(fresh, _db, ct));
+    }
+
+    /// <summary>
+    /// Devuelve la decisión final de refund: override del comando si vino
+    /// y es legal, regla automática (ventana del tenant) si no.
+    /// </summary>
+    private async Task<DepositRefundDecision> ResolveDecisionAsync(
+        Domain.Entities.Appointment appointment,
+        DepositRefundDecision? overrideDecision,
+        CancellationToken ct)
+    {
+        if (overrideDecision is not null)
+            return overrideDecision.Value;
+
+        var windowHours = await _settings.GetCancellationWindowHoursAsync(ct);
+        var hoursUntilAppointment = (appointment.StartAt - _clock.UtcNow).TotalHours;
+
+        // >= ventana → dentro del plazo → devolver.
+        // <  ventana → fuera del plazo → perdido.
+        return hoursUntilAppointment >= windowHours
+            ? DepositRefundDecision.Refunded
+            : DepositRefundDecision.Forfeited;
     }
 }

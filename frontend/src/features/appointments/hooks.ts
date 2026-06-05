@@ -8,6 +8,7 @@ import {
   markNoShow,
   rescheduleAppointment,
   startAppointment,
+  type CancelAppointmentRequest,
   type CreateAppointmentRequest,
   type RescheduleAppointmentRequest,
 } from '@/api/appointments'
@@ -39,8 +40,10 @@ export const useConfirmAppointment = () =>
   useAppointmentMutation((id: string) => confirmAppointment(id))
 
 export const useCancelAppointment = () =>
-  useAppointmentMutation(({ id, reason }: { id: string; reason?: string }) =>
-    cancelAppointment(id, reason))
+  useAppointmentMutation(
+    ({ id, req }: { id: string; req?: CancelAppointmentRequest }) =>
+      cancelAppointment(id, req ?? {}),
+  )
 
 export const useStartAppointment = () =>
   useAppointmentMutation((id: string) => startAppointment(id))

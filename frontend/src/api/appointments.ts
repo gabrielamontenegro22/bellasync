@@ -101,8 +101,40 @@ export async function confirmAppointment(id: string): Promise<AppointmentRespons
   return data
 }
 
-export async function cancelAppointment(id: string, reason?: string): Promise<AppointmentResponse> {
-  const { data } = await api.post<AppointmentResponse>(`/api/Appointments/${id}/cancel`, { reason })
+/**
+ * Decisión sobre el anticipo cuando se cancela una cita con voucher
+ * Validado. Espejo del enum DepositRefundDecision del dominio:
+ *  - 'Refunded'      → admin va a devolver la plata (queda en pendientes
+ *                      hasta que marque la transferencia como hecha).
+ *  - 'CreditPending' → la cliente reagenda y el anticipo se aplica a la
+ *                      próxima cita.
+ *  - 'Forfeited'     → el salón se queda con el anticipo (cancelación
+ *                      tardía, política estricta).
+ *
+ * Si la admin/recepción NO manda este campo, el backend aplica la regla
+ * automática según la ventana del salón (Refunded dentro, Forfeited fuera).
+ */
+export type DepositRefundDecision = 'Refunded' | 'CreditPending' | 'Forfeited'
+
+export interface CancelAppointmentRequest {
+  reason?: string
+  /**
+   * Override explícito de la decisión de refund. Mandar undefined deja
+   * que el backend aplique la regla automática. Recepción solo puede
+   * mandarlo si la admin activó `canRefundDeposit` — si no, el backend
+   * responde 403.
+   */
+  depositOverride?: DepositRefundDecision
+}
+
+export async function cancelAppointment(
+  id: string,
+  req: CancelAppointmentRequest = {},
+): Promise<AppointmentResponse> {
+  const { data } = await api.post<AppointmentResponse>(
+    `/api/Appointments/${id}/cancel`,
+    req,
+  )
   return data
 }
 

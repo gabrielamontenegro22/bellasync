@@ -23,4 +23,10 @@ public interface ITenantAppointmentSettings
 
     /// <summary>Minutos mínimos de anticipación para agendar. Default 30.</summary>
     Task<int> GetMinAdvanceMinutesAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Horas antes de la cita en las que cancelar todavía da derecho a
+    /// devolución de anticipo. Default 2.
+    /// </summary>
+    Task<int> GetCancellationWindowHoursAsync(CancellationToken ct);
 }
