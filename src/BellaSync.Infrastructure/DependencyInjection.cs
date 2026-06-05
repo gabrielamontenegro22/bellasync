@@ -42,6 +42,9 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        // Scoped: cachea snapshot de permisos por request (1 query por
+        // request aunque varios handlers chequeen distintos permisos).
+        services.AddScoped<IReceptionPermissionsService, ReceptionPermissionsService>();
         // Storage de archivos subidos (vouchers, logos). Local en dev/on-prem.
         // Swap por S3FileStorage cuando se haga deploy a cloud.
         services.AddScoped<IFileStorage, LocalFileStorage>();

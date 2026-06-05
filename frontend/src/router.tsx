@@ -27,6 +27,7 @@ import { SaasAdminSubscriptionsPage } from '@/features/saasAdmin/SaasAdminSubscr
 import { AppShell } from '@/components/layout/AppShell'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { RequireRole } from '@/components/layout/RequireRole'
+import { RequirePermission } from '@/components/layout/RequirePermission'
 import { useAuth } from '@/features/auth/useAuth'
 
 /**
@@ -160,27 +161,30 @@ export function AppRouter() {
         <Route path="suscripcion" element={<SuscripcionPage />} />
       </Route>
 
-      {/* Comisiones de estilistas — opt-in. SalonAdmin-only: implica ver
-          ingresos por estilista y liquidar pagos, no es info para recepción. */}
+      {/* Comisiones de estilistas — opt-in. Admin siempre puede ver/
+          liquidar. La admin puede delegar SOLO la lectura a recepción
+          activando CanViewCommissions (la liquidación sigue admin-only
+          a nivel backend porque maneja plata real). */}
       <Route
         path="/comisiones"
         element={
           <ProtectedRoute>
-            <RequireRole roles={['SalonAdmin']}>
+            <RequirePermission permission="canViewCommissions">
               <AppShell><CommissionsPage /></AppShell>
-            </RequireRole>
+            </RequirePermission>
           </ProtectedRoute>
         }
       />
 
-      {/* Reportes — KPIs financieros del salón. SalonAdmin-only. */}
+      {/* Reportes — KPIs financieros del salón. Admin siempre los ve.
+          Recepción puede verlos si la admin activó CanViewReports. */}
       <Route
         path="/reportes"
         element={
           <ProtectedRoute>
-            <RequireRole roles={['SalonAdmin']}>
+            <RequirePermission permission="canViewReports">
               <AppShell><ReportsPage /></AppShell>
-            </RequireRole>
+            </RequirePermission>
           </ProtectedRoute>
         }
       />
