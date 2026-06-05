@@ -102,6 +102,32 @@ public class PaymentVoucher : BaseEntity, ITenantEntity
     /// <summary>Usuario que finalizó la acción del refund (FK a User).</summary>
     public Guid? RefundResolvedByUserId { get; private set; }
 
+    /// <summary>
+    /// Cuánto del ReportedAmount ya se aplicó como crédito a citas nuevas.
+    /// Default 0. Se incrementa cuando la admin aplica el crédito a una
+    /// cita futura desde NewAppointmentModal. El crédito disponible es:
+    ///
+    ///   <c>availableCredit = ReportedAmount - AmountApplied</c>
+    ///
+    /// Solo tiene sentido cuando RefundDecision = CreditPending. El campo
+    /// permite aplicar el crédito EN PARTES — si el cliente paga $90k de
+    /// anticipo y cancela, puede usar $45k en una cita corta y los $45k
+    /// restantes seguir disponibles para otra cita futura.
+    ///
+    /// Cuando AmountApplied alcanza ReportedAmount, el voucher se marca
+    /// como resuelto (RefundResolvedAt) automáticamente.
+    /// </summary>
+    public decimal AmountApplied { get; private set; }
+
+    /// <summary>
+    /// Crédito disponible para aplicar a una nueva cita. Solo es positivo
+    /// cuando el voucher está validado, marcado como CreditPending y aún
+    /// no se aplicó todo. Helper para queries y validaciones.
+    /// </summary>
+    public decimal AvailableCredit => RefundDecision == DepositRefundDecision.CreditPending
+        ? ReportedAmount.Amount - AmountApplied
+        : 0m;
+
     // ===== MÉTODOS VERBALES =====
 
     /// <summary>
@@ -178,6 +204,47 @@ public class PaymentVoucher : BaseEntity, ITenantEntity
             throw new DomainException("Este refund ya fue marcado como resuelto.");
         RefundResolvedAt = utcNow;
         RefundResolvedByUserId = resolvedBy;
+    }
+
+    /// <summary>
+    /// Aplica una porción del crédito disponible a una nueva cita. Solo
+    /// legal para vouchers Validated con RefundDecision = CreditPending
+    /// y todavía con saldo disponible.
+    ///
+    /// El handler de Application crea un voucher NUEVO en la cita de
+    /// destino (status Validated, sin RefundDecision) por el monto
+    /// aplicado — este método solo trackea el consumo del crédito en
+    /// el voucher original.
+    ///
+    /// Si el monto aplicado iguala el saldo total, el voucher original
+    /// se cierra automáticamente (RefundResolvedAt). Si queda saldo,
+    /// el voucher sigue apareciendo como crédito disponible para
+    /// futuras aplicaciones (saldo parcial).
+    /// </summary>
+    public void ApplyCredit(decimal amountToApply, DateTime utcNow, Guid appliedBy)
+    {
+        if (Status != PaymentVoucherStatus.Validated)
+            throw new DomainException(
+                $"Solo se puede aplicar crédito de vouchers Validated (este está en {Status}).");
+        if (RefundDecision != DepositRefundDecision.CreditPending)
+            throw new DomainException(
+                "Solo se puede aplicar crédito de vouchers marcados como CreditPending.");
+        if (RefundResolvedAt is not null)
+            throw new DomainException("Este crédito ya fue cerrado.");
+        if (amountToApply <= 0m)
+            throw new DomainException("El monto a aplicar debe ser mayor a cero.");
+        if (amountToApply > AvailableCredit)
+            throw new DomainException(
+                $"El monto a aplicar ({amountToApply:N0}) excede el crédito disponible ({AvailableCredit:N0}).");
+
+        AmountApplied += amountToApply;
+
+        // Si consumimos todo el saldo, cerramos el voucher.
+        if (AmountApplied >= ReportedAmount.Amount)
+        {
+            RefundResolvedAt = utcNow;
+            RefundResolvedByUserId = appliedBy;
+        }
     }
 
     private static string? Normalize(string? value) =>
