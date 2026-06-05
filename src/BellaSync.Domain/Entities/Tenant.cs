@@ -40,6 +40,13 @@ public class Tenant : BaseEntity
         // por comisión. La admin decide activarlo desde Configuración
         // cuando le sirve (sueldos fijos, alquiler de silla, etc.).
         tenant.CommissionsEnabled = false;
+        // Defaults conservadores de permisos para recepción. Asumen que
+        // la admin todavía no decidió, así que arrancamos restrictivo:
+        // tope chico de egresos, recepción puede cancelar con plata pero
+        // siempre con nota, y NO puede cerrar caja (la admin firma).
+        tenant.ReceptionExpenseCapCop = 100_000m;
+        tenant.ReceptionCanCancelWithMoney = true;
+        tenant.ReceptionCanCloseCash = false;
         return tenant;
     }
 
@@ -139,6 +146,40 @@ public class Tenant : BaseEntity
     /// uno por uno en SalonClosedDate).
     /// </summary>
     public bool IsHolidaysClosed { get; private set; }
+
+    // ===== PERMISOS DE RECEPCIÓN (configurables por la admin) =====
+    // Cada salón es distinto: en uno la recepcionista compra los tintes
+    // y maneja plata; en otro solo agenda y cobra. Estos toggles
+    // permiten que la admin ajuste qué puede hacer recepción sin
+    // tener que pedirle ayuda a soporte.
+
+    /// <summary>
+    /// Tope (en COP) de egresos que recepción puede registrar sin admin.
+    /// - null  → sin límite (recepción confiable, puede registrar lo que sea).
+    /// - 0     → recepción NO puede registrar egresos.
+    /// - X &gt; 0 → cap; sobre este monto requiere admin.
+    /// La admin no tiene cap NUNCA, independiente del valor.
+    /// </summary>
+    public decimal? ReceptionExpenseCapCop { get; private set; }
+
+    /// <summary>
+    /// Si recepción puede cancelar citas que tengan plata asociada
+    /// (Payments o vouchers Validados). True por default — bloquear
+    /// totalmente es excesivo, hay casos legítimos (cliente avisa
+    /// que no puede venir y pide cancelar). Cuando es true, el
+    /// frontend exige una nota explicativa obligatoria para que
+    /// admin sepa qué hacer con el dinero (devolver/crédito/perder).
+    /// Si es false, recepción ve un alert y debe pedirle a admin.
+    /// </summary>
+    public bool ReceptionCanCancelWithMoney { get; private set; } = true;
+
+    /// <summary>
+    /// Si recepción puede firmar el cierre de caja del día. False por
+    /// default — el cierre es decisión financiera de fin de día y
+    /// suele hacerlo la admin. Pero hay salones donde la admin no
+    /// pasa por el local y delega esto a una recepción de confianza.
+    /// </summary>
+    public bool ReceptionCanCloseCash { get; private set; }
 
     // Relación inversa: usuarios que pertenecen a este salón
     public ICollection<User> Users { get; private set; } = new List<User>();
@@ -259,6 +300,26 @@ public class Tenant : BaseEntity
         LunchBreakFromHour = lunchFromHour;
         LunchBreakToHour = lunchToHour;
         IsHolidaysClosed = holidaysClosed;
+    }
+
+    /// <summary>
+    /// Actualiza los permisos de recepción del salón. Valida que el cap
+    /// de egresos sea null (sin límite) o no-negativo. Los tres flags son
+    /// independientes — la admin puede mezclar (ej. permitir cancelar con
+    /// plata + cerrar caja, pero cap chico de egresos).
+    /// </summary>
+    public void UpdateReceptionPermissions(
+        decimal? expenseCapCop,
+        bool canCancelWithMoney,
+        bool canCloseCash)
+    {
+        if (expenseCapCop is not null && expenseCapCop < 0m)
+            throw new DomainException(
+                "El tope de egresos no puede ser negativo. Dejá 0 si querés bloquear o vacío si querés sin límite.");
+
+        ReceptionExpenseCapCop = expenseCapCop;
+        ReceptionCanCancelWithMoney = canCancelWithMoney;
+        ReceptionCanCloseCash = canCloseCash;
     }
 
     private static string? Normalize(string? value, int maxLen, string fieldName)

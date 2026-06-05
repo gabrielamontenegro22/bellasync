@@ -8,6 +8,8 @@ using BellaSync.Application.Features.Tenants.GetSalonHours;
 using BellaSync.Application.Features.Tenants.GetTenantInfo;
 using BellaSync.Application.Features.Tenants.UpdateCommissionsSetting;
 using BellaSync.Application.Features.Tenants.UpdatePaymentPolicy;
+using BellaSync.Application.Features.Tenants.GetReceptionPermissions;
+using BellaSync.Application.Features.Tenants.UpdateReceptionPermissions;
 using BellaSync.Application.Features.Tenants.UpdateSalonHours;
 using BellaSync.Application.Features.Tenants.UpdateTenantInfo;
 using BellaSync.Application.Features.Tenants.UploadLogo;
@@ -85,6 +87,42 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> UpdatePaymentPolicy(
         [FromBody] UpdatePaymentPolicyCommand command,
         [FromServices] ICommandHandler<UpdatePaymentPolicyCommand, TenantPaymentPolicyResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(command, ct);
+        return result.ToActionResult();
+    }
+
+    // ============================================================
+    // Permisos de recepción
+    // ============================================================
+
+    /// <summary>
+    /// GET /api/Admin/reception-permissions
+    /// Lee los permisos configurables que la admin asigna a recepción
+    /// (cap de egresos, cancelar con plata, cerrar caja).
+    /// </summary>
+    [HttpGet("reception-permissions")]
+    [ProducesResponseType(typeof(ReceptionPermissionsResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetReceptionPermissions(
+        [FromServices] IQueryHandler<GetReceptionPermissionsQuery, ReceptionPermissionsResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetReceptionPermissionsQuery(), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// PUT /api/Admin/reception-permissions
+    /// Actualiza los permisos. El dominio valida que el cap sea null
+    /// (sin límite) o no-negativo.
+    /// </summary>
+    [HttpPut("reception-permissions")]
+    [ProducesResponseType(typeof(ReceptionPermissionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateReceptionPermissions(
+        [FromBody] UpdateReceptionPermissionsCommand command,
+        [FromServices] ICommandHandler<UpdateReceptionPermissionsCommand, ReceptionPermissionsResponse> handler,
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(command, ct);

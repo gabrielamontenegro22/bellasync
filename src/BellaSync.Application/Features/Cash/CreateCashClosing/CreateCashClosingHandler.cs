@@ -17,17 +17,20 @@ public sealed class CreateCashClosingHandler
 {
     private readonly IApplicationDbContext _db;
     private readonly ICurrentTenantService _currentTenant;
+    private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly ILogger<CreateCashClosingHandler> _logger;
 
     public CreateCashClosingHandler(
         IApplicationDbContext db,
         ICurrentTenantService currentTenant,
+        ICurrentUserService currentUser,
         IClock clock,
         ILogger<CreateCashClosingHandler> logger)
     {
         _db = db;
         _currentTenant = currentTenant;
+        _currentUser = currentUser;
         _clock = clock;
         _logger = logger;
     }
@@ -35,6 +38,25 @@ public sealed class CreateCashClosingHandler
     public async Task<Result<CashClosingResponse>> HandleAsync(
         CreateCashClosingCommand command, CancellationToken ct)
     {
+        // Guard de rol — configurable por tenant.
+        // Admin: siempre puede firmar el cierre.
+        // Recepción: solo si la admin lo activó en /configuracion/permisos.
+        if (!_currentUser.IsSalonAdmin)
+        {
+            var canCloseCash = await _db.Tenants
+                .AsNoTracking()
+                .Where(t => t.Id == _currentTenant.TenantId)
+                .Select(t => t.ReceptionCanCloseCash)
+                .FirstOrDefaultAsync(ct);
+
+            if (!canCloseCash)
+            {
+                return ApplicationError.Forbidden(
+                    "cash_closing.reception_not_allowed",
+                    "El cierre de caja lo firma la administradora del salón. Pedile que pase a cerrarlo.");
+            }
+        }
+
         var todayCO = ColombiaTime.TodayFor(_clock.UtcNow);
 
         DateOnly closedDate = todayCO;

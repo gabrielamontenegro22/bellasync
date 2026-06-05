@@ -8,6 +8,7 @@ import {
 import { PROVIDER_COLORS, PROVIDER_FALLBACK_COLOR } from '@/features/payments/paymentCatalog'
 import { cls } from '@/lib/cls'
 import { useAuth, useIsAdmin } from '@/features/auth/useAuth'
+import { getReceptionPermissions } from '@/api/admin'
 import { fmtCop } from '@/features/customers/lib/customerLook'
 import { extractApiError } from '@/lib/extractApiError'
 import {
@@ -45,6 +46,19 @@ export function CashClosingPage() {
   const { user } = useAuth()
   const isAdmin = useIsAdmin()
   const qc = useQueryClient()
+
+  // Permisos del salón. Solo nos importa para recepción — admin no se
+  // restringe nunca. staleTime alto: la admin cambia esto raramente.
+  const permsQ = useQuery({
+    queryKey: ['receptionPermissions'],
+    queryFn: getReceptionPermissions,
+    enabled: !isAdmin,
+    staleTime: 5 * 60_000,
+  })
+  // Cierre permitido si sos admin O si la admin habilitó el toggle.
+  // Mientras carga (recepción + primer fetch), asumimos NO para evitar
+  // flicker del botón.
+  const canCloseCash = isAdmin || (permsQ.data?.canCloseCash ?? false)
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy')
   const [filterMethod, setFilterMethod] = useState<string>('all')
   const [closeOpen, setCloseOpen] = useState(false)
@@ -102,7 +116,7 @@ export function CashClosingPage() {
           >
             <Download size={14} strokeWidth={1.8} /> Exportar
           </button>
-          {!isClosedToday && isAdmin && (
+          {!isClosedToday && canCloseCash && (
             <button
               type="button"
               onClick={() => setCloseOpen(true)}
@@ -116,9 +130,9 @@ export function CashClosingPage() {
               <Lock size={15} strokeWidth={1.8} /> Cerrar caja
             </button>
           )}
-          {!isClosedToday && !isAdmin && (
+          {!isClosedToday && !canCloseCash && (
             <div
-              title="El cierre de caja lo firma la administradora del salón"
+              title="La administradora del salón es quien firma el cierre de caja"
               className="px-3.5 py-2 rounded-lg border border-warm-200 text-warm-500 text-[12px] italic flex items-center gap-1.5"
             >
               <Lock size={13} /> Cierre solo admin
