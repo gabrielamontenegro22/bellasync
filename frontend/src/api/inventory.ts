@@ -80,14 +80,17 @@ export interface CreateProductRequest {
   initialStock?: number | null
 }
 
-export interface UpdateProductRequest extends CreateProductRequest {
-  /**
-   * Si viene y es distinto al stock actual, el backend ajusta el stock
-   * Y crea automáticamente un movimiento tipo Ajuste para preservar el
-   * historial. Si null o igual al actual, el stock no se toca.
-   */
-  newStock?: number | null
-}
+/**
+ * Editar producto cambia solo metadata (nombre, marca, categoría,
+ * mínimo, costo). El stock NO se cambia desde acá por diseño — para
+ * eso está el modal "Registrar movimiento" (Entrada / Salida / Ajuste),
+ * que preserva auditoría completa con motivos descriptivos.
+ *
+ * NOTA: extiende de CreateProductRequest pero ignora `initialStock` (el
+ * endpoint PUT del backend no lo lee — solo está en CreateProductRequest
+ * para reusar la forma). En la práctica el form de edición nunca lo manda.
+ */
+export interface UpdateProductRequest extends Omit<CreateProductRequest, 'initialStock'> {}
 
 export interface RegisterMovementRequest {
   productId: string
