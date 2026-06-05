@@ -16,15 +16,18 @@ public sealed class ProductResponse
     public string Name { get; init; } = string.Empty;
     public string Brand { get; init; } = string.Empty;
 
-    /// <summary>"Hair" | "Nails" | "Hairremoval" | "Spa" | "Accessories"</summary>
-    public string Category { get; init; } = string.Empty;
+    /// <summary>FK a la categoría del tenant. Hidratada con el name+tone abajo.</summary>
+    public Guid CategoryId { get; init; }
+
+    /// <summary>Nombre legible de la categoría (ej. "Cabello", "Pestañas").</summary>
+    public string CategoryName { get; init; } = string.Empty;
 
     public string Unit { get; init; } = string.Empty;
     public int Stock { get; init; }
     public int MinStock { get; init; }
     public decimal Cost { get; init; }
 
-    /// <summary>"Rose" | "Amber" | "Sand" | "Olive" | "Wine" | "Mist"</summary>
+    /// <summary>"Rose" | "Amber" | "Sand" | "Olive" | "Wine" | "Mist". Heredado de la categoría.</summary>
     public string Tone { get; init; } = string.Empty;
 
     public DateTime? LastInAt { get; init; }

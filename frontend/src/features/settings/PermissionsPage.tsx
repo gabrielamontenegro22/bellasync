@@ -28,6 +28,8 @@ const DEFAULTS: ReceptionPermissions = {
   canEditSalonInfo: false,
 }
 
+
+
 /**
  * `/configuracion/permisos` — la admin decide qué puede hacer recepción
  * sin pedirle autorización para cada cosa. Cada salón es distinto: en

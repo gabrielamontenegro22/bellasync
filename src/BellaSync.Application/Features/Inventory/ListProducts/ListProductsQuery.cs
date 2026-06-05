@@ -5,13 +5,14 @@ namespace BellaSync.Application.Features.Inventory.ListProducts;
 
 /// <summary>
 /// Lista los productos del tenant actual.
-///   - category: si viene, filtra por esa categoría (Hair, Nails, etc.).
+///   - categoryId: si viene (no Guid.Empty), filtra por esa categoría.
+///                 Las categorías ahora son por tenant (no enum hardcoded).
 ///   - status: si viene, filtra por estado calculado ("ok","low","out"). "all" = todos.
 ///   - query: substring case-insensitive contra name o brand.
-///   - includeArchived: por default false (lista normal). Trueo para ver archivados.
+///   - includeArchived: por default false (lista normal). True para ver archivados.
 /// </summary>
 public sealed record ListProductsQuery(
-    string? Category,
+    Guid? CategoryId,
     string? Status,
     string? Query,
     bool IncludeArchived

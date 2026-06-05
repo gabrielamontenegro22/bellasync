@@ -10,20 +10,34 @@ import { api } from './axios'
  *  - lastInAt es ISO string o null si nunca tuvo entradas.
  */
 
-export type ProductCategory = 'Hair' | 'Nails' | 'Hairremoval' | 'Spa' | 'Accessories'
 export type ProductTone = 'Rose' | 'Amber' | 'Sand' | 'Olive' | 'Wine' | 'Mist'
 export type ProductStatus = 'ok' | 'warn' | 'low' | 'out'
 export type MovementKind = 'Inflow' | 'Outflow' | 'Adjustment'
+
+/**
+ * Categoría custom del tenant. Cada salón crea las suyas desde
+ * /inventario → "Gestionar categorías". El tono define el color visual
+ * del avatar del producto.
+ */
+export interface ProductCategory {
+  id: string
+  name: string
+  tone: ProductTone
+  isActive: boolean
+  activeProductsCount: number
+}
 
 export interface Product {
   id: string
   name: string
   brand: string
-  category: ProductCategory
+  categoryId: string
+  categoryName: string
   unit: string
   stock: number
   minStock: number
   cost: number
+  /** Heredado de la categoría — sirve para colorear el avatar en la tabla. */
   tone: ProductTone
   lastInAt: string | null
   isActive: boolean
@@ -56,11 +70,10 @@ export interface InventorySummary {
 export interface CreateProductRequest {
   name: string
   brand: string
-  category: ProductCategory
+  categoryId: string
   unit: string
   minStock: number
   cost: number
-  tone?: ProductTone
 }
 
 export interface UpdateProductRequest extends CreateProductRequest {}
@@ -73,12 +86,23 @@ export interface RegisterMovementRequest {
   notes?: string | null
 }
 
+export interface CreateCategoryRequest {
+  name: string
+  tone: ProductTone
+}
+
+export interface UpdateCategoryRequest {
+  name: string
+  tone: ProductTone
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Endpoints                                                                 */
 /* -------------------------------------------------------------------------- */
 
 export interface ListProductsParams {
-  category?: string  // 'all' | ProductCategory minúsculas? backend acepta case-insensitive
+  /** undefined = sin filtro de categoría. Pasar id de ProductCategory para restringir. */
+  categoryId?: string
   status?: 'all' | ProductStatus | 'ok' | 'low' | 'out'
   query?: string
   includeArchived?: boolean
@@ -120,4 +144,33 @@ export async function reactivateProduct(id: string): Promise<void> {
 export async function registerMovement(req: RegisterMovementRequest): Promise<ProductMovement> {
   const { data } = await api.post<ProductMovement>('/api/Inventory/movements', req)
   return data
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Categorías (CRUD custom por tenant)                                       */
+/* -------------------------------------------------------------------------- */
+
+export async function listCategories(includeArchived = false): Promise<ProductCategory[]> {
+  const { data } = await api.get<ProductCategory[]>('/api/Inventory/categories', {
+    params: { includeArchived },
+  })
+  return data
+}
+
+export async function createCategory(req: CreateCategoryRequest): Promise<ProductCategory> {
+  const { data } = await api.post<ProductCategory>('/api/Inventory/categories', req)
+  return data
+}
+
+export async function updateCategory(id: string, req: UpdateCategoryRequest): Promise<ProductCategory> {
+  const { data } = await api.put<ProductCategory>(`/api/Inventory/categories/${id}`, req)
+  return data
+}
+
+export async function archiveCategory(id: string): Promise<void> {
+  await api.post(`/api/Inventory/categories/${id}/archive`)
+}
+
+export async function reactivateCategory(id: string): Promise<void> {
+  await api.post(`/api/Inventory/categories/${id}/reactivate`)
 }

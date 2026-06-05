@@ -7,9 +7,8 @@ public sealed record UpdateProductCommand(
     Guid Id,
     string Name,
     string Brand,
-    string Category,
+    Guid CategoryId,
     string Unit,
     int MinStock,
-    decimal Cost,
-    string? Tone
+    decimal Cost
 ) : ICommand<ProductResponse>;

@@ -1,12 +1,16 @@
 using System.Security.Claims;
 using BellaSync.Application.Common.Handlers;
+using BellaSync.Application.Features.Inventory.ArchiveCategory;
 using BellaSync.Application.Features.Inventory.ArchiveProduct;
+using BellaSync.Application.Features.Inventory.CreateCategory;
 using BellaSync.Application.Features.Inventory.CreateProduct;
 using BellaSync.Application.Features.Inventory.Dtos;
 using BellaSync.Application.Features.Inventory.GetInventorySummary;
+using BellaSync.Application.Features.Inventory.ListCategories;
 using BellaSync.Application.Features.Inventory.ListMovements;
 using BellaSync.Application.Features.Inventory.ListProducts;
 using BellaSync.Application.Features.Inventory.RegisterMovement;
+using BellaSync.Application.Features.Inventory.UpdateCategory;
 using BellaSync.Application.Features.Inventory.UpdateProduct;
 using BellaSync.WebApi.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
@@ -42,14 +46,14 @@ public class InventoryController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<ProductResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(
         [FromServices] IQueryHandler<ListProductsQuery, IReadOnlyList<ProductResponse>> handler,
-        [FromQuery] string? category,
+        [FromQuery] Guid? categoryId,
         [FromQuery] string? status,
         [FromQuery] string? query,
         [FromQuery] bool includeArchived = false,
         CancellationToken ct = default)
     {
         var result = await handler.HandleAsync(
-            new ListProductsQuery(category, status, query, includeArchived), ct);
+            new ListProductsQuery(categoryId, status, query, includeArchived), ct);
         return result.ToActionResult();
     }
 
@@ -115,8 +119,8 @@ public class InventoryController : ControllerBase
         CancellationToken ct)
     {
         var command = new UpdateProductCommand(
-            id, request.Name, request.Brand, request.Category, request.Unit,
-            request.MinStock, request.Cost, request.Tone);
+            id, request.Name, request.Brand, request.CategoryId, request.Unit,
+            request.MinStock, request.Cost);
         var result = await handler.HandleAsync(command, ct);
         return result.ToActionResult();
     }
@@ -151,6 +155,88 @@ public class InventoryController : ControllerBase
         return result.ToActionResult();
     }
 
+    // ============================================================
+    // CATEGORÍAS — cada salón crea las suyas
+    // ============================================================
+
+    /// <summary>GET /api/Inventory/categories?includeArchived=false — lista categorías del tenant.</summary>
+    [HttpGet("categories")]
+    [ProducesResponseType(typeof(IReadOnlyList<ProductCategoryResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListCategories(
+        [FromServices] IQueryHandler<ListCategoriesQuery, IReadOnlyList<ProductCategoryResponse>> handler,
+        [FromQuery] bool includeArchived = false,
+        CancellationToken ct = default)
+    {
+        var result = await handler.HandleAsync(new ListCategoriesQuery(includeArchived), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>POST /api/Inventory/categories — crea categoría custom.</summary>
+    [HttpPost("categories")]
+    [RequireReceptionPermission(Perm.CanEditInventory)]
+    [ProducesResponseType(typeof(ProductCategoryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateCategory(
+        [FromBody] CreateCategoryCommand command,
+        [FromServices] ICommandHandler<CreateCategoryCommand, ProductCategoryResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(command, ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>PUT /api/Inventory/categories/{id} — renombra + cambia color.</summary>
+    [HttpPut("categories/{id:guid}")]
+    [RequireReceptionPermission(Perm.CanEditInventory)]
+    [ProducesResponseType(typeof(ProductCategoryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateCategory(
+        Guid id,
+        [FromBody] UpdateCategoryRequest request,
+        [FromServices] ICommandHandler<UpdateCategoryCommand, ProductCategoryResponse> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(
+            new UpdateCategoryCommand(id, request.Name, request.Tone), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// POST /api/Inventory/categories/{id}/archive
+    /// Idempotente. Devuelve 409 si la categoría tiene productos activos
+    /// (forzando a re-categorizar primero).
+    /// </summary>
+    [HttpPost("categories/{id:guid}/archive")]
+    [RequireReceptionPermission(Perm.CanEditInventory)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ArchiveCategory(
+        Guid id,
+        [FromServices] ICommandHandler<ArchiveCategoryCommand> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new ArchiveCategoryCommand(id, false), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>POST /api/Inventory/categories/{id}/reactivate — vuelve a activarla.</summary>
+    [HttpPost("categories/{id:guid}/reactivate")]
+    [RequireReceptionPermission(Perm.CanEditInventory)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReactivateCategory(
+        Guid id,
+        [FromServices] ICommandHandler<ArchiveCategoryCommand> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new ArchiveCategoryCommand(id, true), ct);
+        return result.ToActionResult();
+    }
+
     /// <summary>
     /// POST /api/Inventory/movements — registra entrada/salida/ajuste.
     /// El usuario que registra se toma del JWT (claim sub).
@@ -182,11 +268,10 @@ public sealed class UpdateProductRequest
 {
     public string Name { get; set; } = string.Empty;
     public string Brand { get; set; } = string.Empty;
-    public string Category { get; set; } = string.Empty;
+    public Guid CategoryId { get; set; }
     public string Unit { get; set; } = string.Empty;
     public int MinStock { get; set; }
     public decimal Cost { get; set; }
-    public string? Tone { get; set; }
 }
 
 public sealed class RegisterMovementRequest
@@ -196,4 +281,10 @@ public sealed class RegisterMovementRequest
     public int Qty { get; set; }
     public string Reason { get; set; } = string.Empty;
     public string? Notes { get; set; }
+}
+
+public sealed class UpdateCategoryRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string Tone { get; set; } = "Olive";
 }

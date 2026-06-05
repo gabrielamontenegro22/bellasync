@@ -7,6 +7,7 @@ using BellaSync.Application.Features.Inventory.Shared;
 using BellaSync.Domain.Common;
 using BellaSync.Domain.Entities;
 using BellaSync.Domain.ValueObjects;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace BellaSync.Application.Features.Inventory.CreateProduct;
@@ -34,14 +35,20 @@ public sealed class CreateProductHandler
     public async Task<Result<ProductResponse>> HandleAsync(
         CreateProductCommand command, CancellationToken ct)
     {
-        if (!Enum.TryParse<ProductCategory>(command.Category, ignoreCase: true, out var cat))
+        // La categoría tiene que existir, pertenecer al tenant actual
+        // (filtro global la limita) y estar activa.
+        var category = await _db.ProductCategories
+            .FirstOrDefaultAsync(c => c.Id == command.CategoryId, ct);
+
+        if (category is null)
             return ApplicationError.Validation(
                 "product.invalid_category",
-                "Categoría inválida. Usar: Hair, Nails, Hairremoval, Spa, Accessories.");
+                "La categoría seleccionada no existe en este salón.");
 
-        // Default de tono por categoría (espeja la convención visual del
-        // mockup donde cada categoría tiene un color predominante).
-        var tone = ResolveTone(command.Tone, cat);
+        if (!category.IsActive)
+            return ApplicationError.Validation(
+                "product.archived_category",
+                "La categoría está archivada. Reactivala o elegí otra.");
 
         Money cost;
         try { cost = Money.Create(command.Cost); }
@@ -57,11 +64,10 @@ public sealed class CreateProductHandler
                 tenantId: _currentTenant.TenantId,
                 name: command.Name,
                 brand: command.Brand,
-                category: cat,
+                categoryId: command.CategoryId,
                 unit: command.Unit,
                 minStock: command.MinStock,
                 cost: cost,
-                tone: tone,
                 utcNow: _clock.UtcNow);
         }
         catch (DomainException ex)
@@ -73,30 +79,15 @@ public sealed class CreateProductHandler
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Producto creado {ProductId}: {Name} ({Brand}) en tenant {TenantId}",
-            product.Id, product.Name, product.Brand, _currentTenant.TenantId);
+            "Producto creado {ProductId}: {Name} ({Brand}) en categoría {CategoryName}",
+            product.Id, product.Name, product.Brand, category.Name);
 
-        return Result<ProductResponse>.Success(InventoryMapper.ToResponse(product));
-    }
+        // Re-leer con la categoría adjunta para hidratar nombre+tono del DTO.
+        var fresh = await _db.Products
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .FirstAsync(p => p.Id == product.Id, ct);
 
-    /// <summary>
-    /// Si el usuario eligió un tone, lo respetamos. Si no, asignamos uno
-    /// según la categoría — coherente con el look del mockup.
-    /// </summary>
-    private static ProductTone ResolveTone(string? raw, ProductCategory cat)
-    {
-        if (!string.IsNullOrWhiteSpace(raw)
-            && Enum.TryParse<ProductTone>(raw, ignoreCase: true, out var explicitTone))
-            return explicitTone;
-
-        return cat switch
-        {
-            ProductCategory.Hair => ProductTone.Amber,
-            ProductCategory.Nails => ProductTone.Rose,
-            ProductCategory.Hairremoval => ProductTone.Sand,
-            ProductCategory.Spa => ProductTone.Wine,
-            ProductCategory.Accessories => ProductTone.Mist,
-            _ => ProductTone.Olive,
-        };
+        return Result<ProductResponse>.Success(InventoryMapper.ToResponse(fresh));
     }
 }

@@ -5,7 +5,6 @@ using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Inventory.Dtos;
 using BellaSync.Application.Features.Inventory.Shared;
 using BellaSync.Domain.Common;
-using BellaSync.Domain.Entities;
 using BellaSync.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,19 +31,20 @@ public sealed class UpdateProductHandler
         if (product is null)
             return ApplicationError.NotFound("product.not_found", "Producto no encontrado.");
 
-        if (!Enum.TryParse<ProductCategory>(command.Category, ignoreCase: true, out var cat))
-            return ApplicationError.Validation("product.invalid_category", "Categoría inválida.");
+        // Validamos categoría destino: existe en el tenant y está activa.
+        var category = await _db.ProductCategories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == command.CategoryId, ct);
 
-        ProductTone tone = ProductTone.Olive;
-        if (!string.IsNullOrWhiteSpace(command.Tone))
-        {
-            if (!Enum.TryParse<ProductTone>(command.Tone, ignoreCase: true, out tone))
-                return ApplicationError.Validation("product.invalid_tone", "Tono inválido.");
-        }
-        else
-        {
-            tone = product.Tone;  // mantener el existente si no mandan
-        }
+        if (category is null)
+            return ApplicationError.Validation(
+                "product.invalid_category",
+                "La categoría seleccionada no existe en este salón.");
+
+        if (!category.IsActive)
+            return ApplicationError.Validation(
+                "product.archived_category",
+                "La categoría está archivada. Elegí otra activa.");
 
         Money cost;
         try { cost = Money.Create(command.Cost); }
@@ -56,8 +56,8 @@ public sealed class UpdateProductHandler
         try
         {
             product.UpdateDetails(
-                command.Name, command.Brand, cat, command.Unit,
-                command.MinStock, cost, tone, _clock.UtcNow);
+                command.Name, command.Brand, command.CategoryId, command.Unit,
+                command.MinStock, cost, _clock.UtcNow);
         }
         catch (DomainException ex)
         {
@@ -66,6 +66,12 @@ public sealed class UpdateProductHandler
 
         await _db.SaveChangesAsync(ct);
 
-        return Result<ProductResponse>.Success(InventoryMapper.ToResponse(product));
+        // Re-leer con la nueva categoría adjunta.
+        var fresh = await _db.Products
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .FirstAsync(p => p.Id == product.Id, ct);
+
+        return Result<ProductResponse>.Success(InventoryMapper.ToResponse(fresh));
     }
 }

@@ -6,11 +6,9 @@ namespace BellaSync.Application.Features.Inventory.CreateProduct;
 public sealed record CreateProductCommand(
     string Name,
     string Brand,
-    /// <summary>"Hair" | "Nails" | "Hairremoval" | "Spa" | "Accessories"</summary>
-    string Category,
+    /// <summary>Id de la categoría del tenant. La admin las gestiona en /inventario.</summary>
+    Guid CategoryId,
     string Unit,
     int MinStock,
-    decimal Cost,
-    /// <summary>"Rose" | "Amber" | "Sand" | "Olive" | "Wine" | "Mist". Opcional → default por categoría.</summary>
-    string? Tone
+    decimal Cost
 ) : ICommand<ProductResponse>;
