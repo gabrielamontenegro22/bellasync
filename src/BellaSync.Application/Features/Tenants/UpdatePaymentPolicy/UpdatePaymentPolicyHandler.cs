@@ -41,7 +41,8 @@ public sealed class UpdatePaymentPolicyHandler
             tenant.UpdatePaymentPolicy(
                 command.HoldDurationHours,
                 command.HoldMinBeforeAppointmentMinutes,
-                command.MinAdvanceMinutes);
+                command.MinAdvanceMinutes,
+                command.CancellationWindowHours);
         }
         catch (DomainException ex)
         {
@@ -51,15 +52,17 @@ public sealed class UpdatePaymentPolicyHandler
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Política de pagos actualizada en tenant {TenantId}: hold={Hold}h, holdBefore={Before}min, minAdvance={Advance}min",
+            "Política de pagos actualizada en tenant {TenantId}: hold={Hold}h, holdBefore={Before}min, minAdvance={Advance}min, cancelWindow={Cancel}h",
             tenant.Id, command.HoldDurationHours,
-            command.HoldMinBeforeAppointmentMinutes, command.MinAdvanceMinutes);
+            command.HoldMinBeforeAppointmentMinutes, command.MinAdvanceMinutes,
+            command.CancellationWindowHours);
 
         return Result<TenantPaymentPolicyResponse>.Success(new TenantPaymentPolicyResponse
         {
             HoldDurationHours = tenant.HoldDurationHours,
             HoldMinBeforeAppointmentMinutes = tenant.HoldMinBeforeAppointmentMinutes,
             MinAdvanceMinutes = tenant.MinAdvanceMinutes,
+            CancellationWindowHours = tenant.CancellationWindowHours,
         });
     }
 }

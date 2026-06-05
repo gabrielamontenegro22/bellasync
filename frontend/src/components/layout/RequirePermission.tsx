@@ -5,6 +5,7 @@ import { usePermissions } from '@/features/auth/useAuth'
 type Perm =
   | 'canCancelWithMoney'
   | 'canCloseCash'
+  | 'canRefundDeposit'
   | 'canEditStylists'
   | 'canEditServices'
   | 'canEditInventory'

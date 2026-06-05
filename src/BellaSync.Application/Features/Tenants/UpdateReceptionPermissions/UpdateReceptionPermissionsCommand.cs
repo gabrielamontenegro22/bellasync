@@ -13,6 +13,7 @@ public sealed record UpdateReceptionPermissionsCommand(
     decimal? ExpenseCapCop,
     bool CanCancelWithMoney,
     bool CanCloseCash,
+    bool CanRefundDeposit,
     // Catálogo
     bool CanEditStylists,
     bool CanEditServices,

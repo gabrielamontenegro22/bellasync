@@ -79,6 +79,7 @@ export function usePermissions() {
       expenseCap: null as number | null,  // sin cap para admin
       canCancelWithMoney: true,
       canCloseCash: true,
+      canRefundDeposit: true,
       canEditStylists: true,
       canEditServices: true,
       canEditInventory: true,
@@ -97,6 +98,7 @@ export function usePermissions() {
     expenseCap: p?.expenseCapCop ?? 100_000,
     canCancelWithMoney: p?.canCancelWithMoney ?? true,
     canCloseCash: p?.canCloseCash ?? false,
+    canRefundDeposit: p?.canRefundDeposit ?? false,
     canEditStylists: p?.canEditStylists ?? false,
     canEditServices: p?.canEditServices ?? false,
     canEditInventory: p?.canEditInventory ?? false,

@@ -42,7 +42,8 @@ public class ReceptionPermissionsService : IReceptionPermissionsService
                 CanEditSchedule: false,
                 CanEditPaymentPolicy: false,
                 CanEditSalonInfo: false,
-                CanEditInventory: false);
+                CanEditInventory: false,
+                CanRefundDeposit: false);
             return _cached;
         }
 
@@ -64,10 +65,11 @@ public class ReceptionPermissionsService : IReceptionPermissionsService
                 t.ReceptionCanEditSchedule,
                 t.ReceptionCanEditPaymentPolicy,
                 t.ReceptionCanEditSalonInfo,
-                t.ReceptionCanEditInventory))
+                t.ReceptionCanEditInventory,
+                t.ReceptionCanRefundDeposit))
             .FirstOrDefaultAsync(ct)
             ?? new ReceptionPermissionsSnapshot(
-                0m, false, false, false, false, false, false, false, false, false, false);
+                0m, false, false, false, false, false, false, false, false, false, false, false);
 
         return _cached;
     }

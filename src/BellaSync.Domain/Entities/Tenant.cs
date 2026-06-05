@@ -40,6 +40,11 @@ public class Tenant : BaseEntity
         // por comisión. La admin decide activarlo desde Configuración
         // cuando le sirve (sueldos fijos, alquiler de silla, etc.).
         tenant.CommissionsEnabled = false;
+        // Ventana de cancelación con devolución de anticipo. La cliente
+        // tiene hasta N horas antes de la cita para cancelar sin perder
+        // el anticipo. Fuera de esa ventana, el anticipo se considera
+        // perdido (admin/recepción con permiso puede override).
+        tenant.CancellationWindowHours = 2;
         // Defaults conservadores de permisos para recepción. Asumen que
         // la admin todavía no decidió, así que arrancamos restrictivo:
         // tope chico de egresos, recepción puede cancelar con plata pero
@@ -57,6 +62,7 @@ public class Tenant : BaseEntity
         tenant.ReceptionCanEditPaymentPolicy = false;
         tenant.ReceptionCanEditSalonInfo = false;
         tenant.ReceptionCanEditInventory = false;
+        tenant.ReceptionCanRefundDeposit = false;
         return tenant;
     }
 
@@ -97,6 +103,18 @@ public class Tenant : BaseEntity
     /// walk-ins imprevistos.
     /// </summary>
     public int MinAdvanceMinutes { get; private set; } = 30;
+
+    /// <summary>
+    /// Horas mínimas de anticipación con que la cliente puede cancelar
+    /// para tener derecho a devolución del anticipo (o moverlo como
+    /// crédito a otra cita). Default: 2.
+    ///
+    /// Si cancela dentro de la ventana → sistema sugiere "devolver"
+    /// (o "crédito" si reagenda). Si cancela fuera de la ventana → el
+    /// anticipo se considera perdido. Admin (o recepción con el permiso
+    /// `CanRefundDeposit`) puede override la sugerencia caso por caso.
+    /// </summary>
+    public int CancellationWindowHours { get; private set; } = 2;
 
     // ===== COMISIONES (opt-in) =====
 
@@ -249,6 +267,16 @@ public class Tenant : BaseEntity
     /// </summary>
     public bool ReceptionCanEditInventory { get; private set; }
 
+    /// <summary>
+    /// Si recepción puede override la regla automática de devolución de
+    /// anticipos cuando una cita se cancela fuera de la ventana. False
+    /// por default — la regla automática protege al salón (anticipo
+    /// perdido si la cliente avisa tarde). Si es true, recepción puede
+    /// elegir cualquiera de los 3 estados (devolver / crédito / perdido)
+    /// independiente de la ventana. Admin SIEMPRE puede override.
+    /// </summary>
+    public bool ReceptionCanRefundDeposit { get; private set; }
+
     // Relación inversa: usuarios que pertenecen a este salón
     public ICollection<User> Users { get; private set; } = new List<User>();
 
@@ -278,7 +306,8 @@ public class Tenant : BaseEntity
     public void UpdatePaymentPolicy(
         int holdDurationHours,
         int holdMinBeforeAppointmentMinutes,
-        int minAdvanceMinutes)
+        int minAdvanceMinutes,
+        int cancellationWindowHours)
     {
         if (holdDurationHours < 1 || holdDurationHours > 48)
             throw new DomainException("La duración del hold debe estar entre 1 y 48 horas.");
@@ -286,10 +315,13 @@ public class Tenant : BaseEntity
             throw new DomainException("Los minutos antes de la cita deben estar entre 0 y 240.");
         if (minAdvanceMinutes < 0 || minAdvanceMinutes > 1440)
             throw new DomainException("La anticipación mínima debe estar entre 0 y 1440 minutos (24h).");
+        if (cancellationWindowHours < 0 || cancellationWindowHours > 168)
+            throw new DomainException("La ventana de cancelación debe estar entre 0 y 168 horas (7 días).");
 
         HoldDurationHours = holdDurationHours;
         HoldMinBeforeAppointmentMinutes = holdMinBeforeAppointmentMinutes;
         MinAdvanceMinutes = minAdvanceMinutes;
+        CancellationWindowHours = cancellationWindowHours;
     }
 
     /// <summary>
@@ -381,6 +413,7 @@ public class Tenant : BaseEntity
         decimal? expenseCapCop,
         bool canCancelWithMoney,
         bool canCloseCash,
+        bool canRefundDeposit,
         // Catálogo
         bool canEditStylists,
         bool canEditServices,
@@ -400,6 +433,7 @@ public class Tenant : BaseEntity
         ReceptionExpenseCapCop = expenseCapCop;
         ReceptionCanCancelWithMoney = canCancelWithMoney;
         ReceptionCanCloseCash = canCloseCash;
+        ReceptionCanRefundDeposit = canRefundDeposit;
         ReceptionCanEditStylists = canEditStylists;
         ReceptionCanEditServices = canEditServices;
         ReceptionCanEditInventory = canEditInventory;

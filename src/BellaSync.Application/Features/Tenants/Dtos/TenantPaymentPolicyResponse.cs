@@ -14,4 +14,12 @@ public class TenantPaymentPolicyResponse
 
     /// <summary>Anticipación mínima para poder agendar.</summary>
     public int MinAdvanceMinutes { get; set; }
+
+    /// <summary>
+    /// Horas antes de la cita dentro de las cuales una cancelación
+    /// devuelve el anticipo. Pasada esa ventana, el anticipo se
+    /// pierde (Forfeited) salvo override de admin.
+    /// Default: 2h. Rango válido: 0–168h (una semana).
+    /// </summary>
+    public int CancellationWindowHours { get; set; }
 }

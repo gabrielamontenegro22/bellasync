@@ -14,5 +14,6 @@ namespace BellaSync.Application.Features.Tenants.UpdatePaymentPolicy;
 public sealed record UpdatePaymentPolicyCommand(
     int HoldDurationHours,
     int HoldMinBeforeAppointmentMinutes,
-    int MinAdvanceMinutes
+    int MinAdvanceMinutes,
+    int CancellationWindowHours
 ) : ICommand<TenantPaymentPolicyResponse>;

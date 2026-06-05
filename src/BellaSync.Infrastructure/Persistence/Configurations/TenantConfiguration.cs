@@ -77,6 +77,8 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.ReceptionCanEditPaymentPolicy).IsRequired().HasDefaultValue(false);
         builder.Property(t => t.ReceptionCanEditSalonInfo).IsRequired().HasDefaultValue(false);
         builder.Property(t => t.ReceptionCanEditInventory).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.ReceptionCanRefundDeposit).IsRequired().HasDefaultValue(false);
+        builder.Property(t => t.CancellationWindowHours).IsRequired().HasDefaultValue(2);
 
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.UpdatedAt);

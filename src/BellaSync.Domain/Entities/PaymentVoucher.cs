@@ -77,6 +77,31 @@ public class PaymentVoucher : BaseEntity, ITenantEntity
     public User? DecidedByUser { get; private set; }
     public string? DecisionNotes { get; private set; }
 
+    // ===== TRACKING DE REFUND CUANDO LA CITA SE CANCELA =====
+    // Estos campos quedan null mientras el voucher está activo. Se llenan
+    // SOLO cuando la cita asociada se cancela y el voucher estaba Validated.
+
+    /// <summary>
+    /// Qué pasó con el anticipo cuando se canceló la cita. Null si la
+    /// cita sigue activa o el voucher no estaba Validated al cancelar.
+    ///
+    /// - Refunded:      admin va a transferir la plata de vuelta.
+    /// - CreditPending: cliente reagenda, anticipo aplica a nueva cita.
+    /// - Forfeited:     cancelación tardía → salón se queda con la plata.
+    /// </summary>
+    public DepositRefundDecision? RefundDecision { get; private set; }
+
+    /// <summary>
+    /// Cuándo se finalizó la acción del refund. Para Refunded =
+    /// cuándo la admin marcó la transferencia como hecha. Para
+    /// CreditPending = cuándo se aplicó a la nueva cita. Para
+    /// Forfeited = mismo momento que RefundDecision (no requiere acción).
+    /// </summary>
+    public DateTime? RefundResolvedAt { get; private set; }
+
+    /// <summary>Usuario que finalizó la acción del refund (FK a User).</summary>
+    public Guid? RefundResolvedByUserId { get; private set; }
+
     // ===== MÉTODOS VERBALES =====
 
     /// <summary>
@@ -111,6 +136,48 @@ public class PaymentVoucher : BaseEntity, ITenantEntity
         DecidedAt = utcNow;
         DecidedBy = decidedBy;
         DecisionNotes = Normalize(notes);
+    }
+
+    /// <summary>
+    /// Llamado por el handler de CancelAppointment cuando el voucher
+    /// estaba Validated. Registra la decisión sobre el anticipo:
+    ///   - Forfeited: queda resuelto inmediato (salón se quedó la plata).
+    ///   - Refunded:  queda pendiente hasta que admin marque "transferido".
+    ///   - CreditPending: queda pendiente hasta que la cliente cree una
+    ///     nueva cita y consuma el crédito.
+    /// </summary>
+    public void RecordRefundDecision(DepositRefundDecision decision, DateTime utcNow, Guid decidedBy)
+    {
+        if (Status != PaymentVoucherStatus.Validated)
+            throw new DomainException(
+                "Solo se puede registrar decisión de refund en vouchers Validados " +
+                $"(este está en {Status}).");
+        if (RefundDecision is not null)
+            throw new DomainException("Este voucher ya tiene decisión de refund registrada.");
+
+        RefundDecision = decision;
+        // Forfeited es la única decisión que se resuelve sola — no hay
+        // acción posterior. Las otras dos quedan pendientes.
+        if (decision == DepositRefundDecision.Forfeited)
+        {
+            RefundResolvedAt = utcNow;
+            RefundResolvedByUserId = decidedBy;
+        }
+    }
+
+    /// <summary>
+    /// La admin marca la transferencia de devolución como realizada
+    /// (típico flow: ve la "pendiente" en Caja, hace la transferencia
+    /// bancaria por fuera, vuelve y marca acá). Solo aplica a Refunded.
+    /// </summary>
+    public void MarkRefundResolved(DateTime utcNow, Guid resolvedBy)
+    {
+        if (RefundDecision is null)
+            throw new DomainException("Este voucher no tiene decisión de refund pendiente.");
+        if (RefundResolvedAt is not null)
+            throw new DomainException("Este refund ya fue marcado como resuelto.");
+        RefundResolvedAt = utcNow;
+        RefundResolvedByUserId = resolvedBy;
     }
 
     private static string? Normalize(string? value) =>

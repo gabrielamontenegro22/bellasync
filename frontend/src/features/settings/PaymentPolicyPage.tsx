@@ -34,6 +34,7 @@ export function PaymentPolicyPage() {
       holdDurationHours: 3,
       holdMinBeforeAppointmentMinutes: 30,
       minAdvanceMinutes: 30,
+      cancellationWindowHours: 2,
     },
     [data],
   )
@@ -110,19 +111,38 @@ export function PaymentPolicyPage() {
             max={1440}
             step={5}
           />
+          <NumberRow
+            label="Ventana para cancelar con devolución de anticipo"
+            suffix="horas antes"
+            value={form.cancellationWindowHours}
+            onChange={(v) => setField('cancellationWindowHours', v)}
+            min={0}
+            max={168}
+          />
         </SettingsBlock>
 
         {/* Resumen actual destacado */}
-        <div className="mt-2 rounded-xl border border-warm-150 bg-warm-50/60 p-4 text-[12.5px] text-warm-700 leading-relaxed">
-          <strong className="text-warm-800">Cómo va a quedar:</strong> la cliente que
-          agende un balayage hoy a las 14:00 (anticipo pendiente) tiene hasta{' '}
-          <strong className="tabular-nums">{form.holdDurationHours}h</strong> para enviar
-          el comprobante, o hasta{' '}
-          <strong className="tabular-nums">{form.holdMinBeforeAppointmentMinutes} min</strong>{' '}
-          antes de la cita (lo que llegue primero). Las clientas no pueden agendar con
-          menos de{' '}
-          <strong className="tabular-nums">{form.minAdvanceMinutes} min</strong> de
-          anticipación.
+        <div className="mt-2 rounded-xl border border-warm-150 bg-warm-50/60 p-4 text-[12.5px] text-warm-700 leading-relaxed space-y-2">
+          <p>
+            <strong className="text-warm-800">Cómo va a quedar:</strong> la cliente que
+            agende un balayage hoy a las 14:00 (anticipo pendiente) tiene hasta{' '}
+            <strong className="tabular-nums">{form.holdDurationHours}h</strong> para enviar
+            el comprobante, o hasta{' '}
+            <strong className="tabular-nums">{form.holdMinBeforeAppointmentMinutes} min</strong>{' '}
+            antes de la cita (lo que llegue primero). Las clientas no pueden agendar con
+            menos de{' '}
+            <strong className="tabular-nums">{form.minAdvanceMinutes} min</strong> de
+            anticipación.
+          </p>
+          <p>
+            <strong className="text-warm-800">Cancelación con devolución:</strong>{' '}
+            si la cliente ya pagó el anticipo y cancela{' '}
+            <strong className="tabular-nums">
+              hasta {form.cancellationWindowHours}h antes
+            </strong>{' '}
+            de la cita, se le devuelve. Si cancela dentro de esa ventana, el anticipo se
+            considera perdido (vos o tu recepción con permiso pueden override caso por caso).
+          </p>
         </div>
       </div>
 

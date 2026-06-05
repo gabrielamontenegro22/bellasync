@@ -66,6 +66,7 @@ public sealed class RequireReceptionPermissionAttribute : Attribute, IAsyncActio
             Perm.CanEditPaymentPolicy  => snapshot.CanEditPaymentPolicy,
             Perm.CanEditSalonInfo      => snapshot.CanEditSalonInfo,
             Perm.CanEditInventory      => snapshot.CanEditInventory,
+            Perm.CanRefundDeposit      => snapshot.CanRefundDeposit,
             _ => false,
         };
 
@@ -102,4 +103,5 @@ public static class Perm
     public const string CanEditPaymentPolicy  = nameof(CanEditPaymentPolicy);
     public const string CanEditSalonInfo      = nameof(CanEditSalonInfo);
     public const string CanEditInventory      = nameof(CanEditInventory);
+    public const string CanRefundDeposit      = nameof(CanRefundDeposit);
 }
