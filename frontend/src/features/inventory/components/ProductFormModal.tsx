@@ -32,6 +32,9 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
   // Stock actual (solo en edit). Si el user lo cambia y guarda, el backend
   // ajusta el stock y crea automáticamente un movimiento tipo Ajuste.
   const [stock, setStock] = useState('0')
+  // Stock inicial (solo en create). Si > 0, el backend registra
+  // automáticamente una Entrada con motivo "Stock inicial".
+  const [initialStock, setInitialStock] = useState('0')
   const [error, setError] = useState<string | null>(null)
   const submittingRef = useRef(false)
 
@@ -53,6 +56,7 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
       setMinStock(String(product?.minStock ?? 5))
       setCost(product ? String(Math.round(product.cost)) : '')
       setStock(String(product?.stock ?? 0))
+      setInitialStock('0')
       setError(null)
       submittingRef.current = false
     }
@@ -65,28 +69,43 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
   const stockChanged = isEdit && product != null
     && !Number.isNaN(stockNum) && stockNum !== product.stock
 
+  // Stock inicial al crear. Si > 0, backend registra Entrada automática.
+  const initialStockNum = parseInt(initialStock, 10) || 0
+
   const mut = useMutation({
     mutationFn: async () => {
-      const req = {
+      const baseReq = {
         name: name.trim(),
         brand: brand.trim(),
         categoryId,
         unit: unit.trim(),
         minStock: parseInt(minStock, 10) || 0,
         cost: parseInt(cost.replace(/[^0-9]/g, ''), 10) || 0,
-        // Si cambió el stock en modo edit, mandamos el nuevo valor.
-        // null = no tocar.
-        newStock: stockChanged ? stockNum : null,
       }
-      if (product) return updateProduct(product.id, req)
-      return createProduct(req)
+      if (product) {
+        // Update: si cambió stock, lo mandamos. null = no tocar.
+        return updateProduct(product.id, {
+          ...baseReq,
+          newStock: stockChanged ? stockNum : null,
+        })
+      }
+      // Create: mandamos stock inicial si > 0 (backend crea Entrada auto).
+      return createProduct({
+        ...baseReq,
+        initialStock: initialStockNum > 0 ? initialStockNum : null,
+      })
     },
     onSuccess: () => {
       submittingRef.current = false
-      // Si el stock cambió en esta edición, lo decimos en el toast para
-      // que la admin vea el cambio sin tener que abrir el historial.
+      // Toast contextual según qué pasó:
+      //   - Edit con stock cambiado: "Stock ajustado · X (Y → Z)"
+      //   - Edit sin cambio de stock: "Producto actualizado · X"
+      //   - Create con stock inicial > 0: "Producto creado · X (stock Y)"
+      //   - Create sin stock: "Producto creado · X"
       if (isEdit && stockChanged && product) {
         onSaved(`Stock ajustado · ${name.trim()} (${product.stock} → ${stockNum})`)
+      } else if (!isEdit && initialStockNum > 0) {
+        onSaved(`Producto creado · ${name.trim()} (stock ${initialStockNum})`)
       } else {
         const verb = isEdit ? 'Producto actualizado' : 'Producto creado'
         onSaved(`${verb} · ${name.trim()}`)
@@ -214,11 +233,30 @@ export function ProductFormModal({ open, product, onClose, onSaved }: Props) {
               cómo se ve un producto en la tabla, cambiá el color de su categoría
               desde el modal Categorías. */}
 
+          {/* Create: campo Stock inicial. Si > 0, el backend registra una
+              Entrada automática con motivo "Stock inicial" para dejar
+              trazabilidad en el historial — evita el flujo viejo de
+              "crear → cerrar modal → registrar movimiento → tab Entrada → ...". */}
           {!isEdit && (
-            <div className="rounded-lg bg-warm-50 border border-warm-150 px-3 py-2.5 text-[12px] text-warm-600">
-              El stock arranca en <strong className="text-warm-800">0</strong>. Para cargar inventario inicial,
-              registrá una entrada después con motivo "Stock inicial".
-            </div>
+            <Field
+              label="Stock inicial"
+              hint={initialStockNum > 0 ? '✓ Se registrará como Entrada en el historial' : 'cuánto hay de este producto ahora'}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={initialStock}
+                  onChange={e => setInitialStock(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="0"
+                  className={cls(inputCls, 'tabular-nums max-w-[140px]', initialStockNum > 0 && 'border-brand-500 ring-2 ring-brand-100')}
+                />
+                <span className="text-[13px] text-warm-500">{unit.trim() || 'unidades'}</span>
+              </div>
+              <p className="text-[11px] text-warm-500 mt-1.5 leading-snug">
+                Si recién creás el producto y todavía no tenés nada físico, dejá en 0 y cargá después con una Entrada.
+              </p>
+            </Field>
           )}
 
           {/* Edición: campo Stock editable directo. Si cambia, el backend

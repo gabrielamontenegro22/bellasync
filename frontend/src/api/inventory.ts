@@ -74,6 +74,12 @@ export interface CreateProductRequest {
   unit: string
   minStock: number
   cost: number
+  /**
+   * Stock inicial. Si > 0, el backend registra automáticamente una
+   * Entrada con motivo "Stock inicial" para dejar trazabilidad en
+   * el historial. null o 0 = el producto arranca vacío.
+   */
+  initialStock?: number | null
 }
 
 export interface UpdateProductRequest extends CreateProductRequest {

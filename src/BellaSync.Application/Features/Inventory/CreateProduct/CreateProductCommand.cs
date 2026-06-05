@@ -3,6 +3,15 @@ using BellaSync.Application.Features.Inventory.Dtos;
 
 namespace BellaSync.Application.Features.Inventory.CreateProduct;
 
+/// <summary>
+/// Crea un producto en el inventario del salón.
+///
+/// InitialStock es opcional: si viene > 0, el handler además crea
+/// automáticamente un ProductMovement tipo Inflow con motivo
+/// "Stock inicial" para que el stock arranque cargado Y quede
+/// el registro en el historial. Esto evita el flujo de 2 pasos
+/// que la admin tenía antes (crear → cerrar → registrar movimiento).
+/// </summary>
 public sealed record CreateProductCommand(
     string Name,
     string Brand,
@@ -10,5 +19,7 @@ public sealed record CreateProductCommand(
     Guid CategoryId,
     string Unit,
     int MinStock,
-    decimal Cost
+    decimal Cost,
+    /// <summary>Cantidad inicial en stock. null o 0 = arranca vacío.</summary>
+    int? InitialStock
 ) : ICommand<ProductResponse>;
