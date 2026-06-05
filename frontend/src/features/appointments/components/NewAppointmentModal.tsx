@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Sparkles } from 'lucide-react'
 import { Button, DateTimePicker, Input, Modal, ModalFooter, SearchablePicker } from '@/components/ui'
 import { listServices, type ServiceResponse } from '@/api/services'
 import { listStylists, type StylistResponse } from '@/api/stylists'
-import { createCustomer, listCustomers, type CustomerResponse } from '@/api/customers'
+import {
+  createCustomer, getCustomerCredits, listCustomers,
+  type CustomerCredit, type CustomerResponse,
+} from '@/api/customers'
 import { extractApiError } from '@/lib/extractApiError'
+import { cls } from '@/lib/cls'
 import { useAuth } from '@/features/auth/useAuth'
 import { useCreateAppointment } from '../hooks'
 
@@ -31,10 +36,41 @@ export function NewAppointmentModal({
   const [startAtLocal, setStartAtLocal] = useState(`${defaultDate}T10:00`)
   const [notes, setNotes] = useState('')
   const [bypassAdvance, setBypassAdvance] = useState(false)
+  // Crédito disponible del cliente — checkbox para aplicarlo al anticipo
+  // de esta cita nueva. null = "no aplicar"; true = "aplicar todos los
+  // créditos disponibles FIFO hasta cubrir el anticipo".
+  const [applyCredit, setApplyCredit] = useState(true)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const servicesQ = useQuery({ queryKey: ['services'], queryFn: () => listServices() })
   const stylistsQ = useQuery({ queryKey: ['stylists'], queryFn: () => listStylists() })
+
+  // Carga créditos disponibles solo cuando hay cliente seleccionado.
+  // staleTime corto para que después de cancelar una cita con CreditPending
+  // la nueva info esté disponible casi inmediato al volver a abrir el modal.
+  const creditsQ = useQuery({
+    queryKey: ['customerCredits', customer?.id],
+    queryFn: () => getCustomerCredits(customer!.id),
+    enabled: !!customer,
+    staleTime: 30_000,
+  })
+
+  // Servicio actualmente seleccionado — para calcular el anticipo requerido
+  // y mostrar si el crédito disponible alcanza o no.
+  const selectedService = useMemo(
+    () => servicesQ.data?.find(s => s.id === serviceId),
+    [servicesQ.data, serviceId],
+  )
+  const depositRequired = useMemo(() => {
+    if (!selectedService || !selectedService.requiresDeposit) return 0
+    return Math.round((selectedService.price * selectedService.depositPercentage) / 100)
+  }, [selectedService])
+
+  const totalAvailableCredit = useMemo(
+    () => (creditsQ.data ?? []).reduce((sum, c) => sum + c.availableAmount, 0),
+    [creditsQ.data],
+  )
+  const creditCoversDeposit = depositRequired > 0 && totalAvailableCredit >= depositRequired
 
   // Estilistas filtrados por el servicio seleccionado
   const availableStylists = useMemo(() => {
@@ -58,6 +94,14 @@ export function NewAppointmentModal({
     if (!customer || !serviceId || !stylistId) return
     setSubmitError(null)
     try {
+      // Si la admin/recepción dejó el checkbox de crédito marcado Y el
+      // crédito disponible cubre el anticipo requerido, mandamos los
+      // voucherIds para que el backend los consuma FIFO. Si no cubre,
+      // no los mandamos (el backend rechazaría con "insuficiente").
+      const voucherIdsToApply = applyCredit && creditCoversDeposit
+        ? (creditsQ.data ?? []).map(c => c.voucherId)
+        : undefined
+
       await create.mutateAsync({
         customerId: customer.id,
         serviceId,
@@ -67,6 +111,7 @@ export function NewAppointmentModal({
         // Solo se manda si el user es admin Y marcó el checkbox.
         // Si lo manda un Receptionist, el backend lo silencia igual.
         bypassAdvanceWindow: isAdmin && bypassAdvance,
+        applyCreditFromVoucherIds: voucherIdsToApply,
       })
       onClose()
     } catch (e) {
@@ -78,6 +123,21 @@ export function NewAppointmentModal({
     <Modal title="Nueva cita" onClose={onClose} size="md">
       <div className="space-y-4">
         <CustomerAutocomplete selected={customer} onSelect={setCustomer} />
+
+        {/* Crédito disponible — aparece solo si el cliente tiene vouchers
+            CreditPending de citas canceladas. Se renderiza arriba del
+            servicio porque la admin lo lee primero ("ah, esta clienta
+            tenía crédito") y eso puede influir en qué servicio agendar. */}
+        {customer && (creditsQ.data?.length ?? 0) > 0 && (
+          <CreditAvailableCard
+            credits={creditsQ.data!}
+            totalAvailable={totalAvailableCredit}
+            depositRequired={depositRequired}
+            applyChecked={applyCredit}
+            onToggleApply={setApplyCredit}
+            serviceSelected={!!selectedService}
+          />
+        )}
 
         <div>
           <label className="mb-1 block text-xs uppercase tracking-wide text-warm-500">Servicio</label>
@@ -338,4 +398,93 @@ function InlineCreateCustomer({
 
 function formatMoney(amount: number): string {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(amount)
+}
+
+/**
+ * Card que aparece cuando la cliente tiene crédito disponible. Muestra
+ * el total + un checkbox para aplicarlo + estado visual según si cubre
+ * el anticipo del servicio seleccionado.
+ *
+ * Estados visuales:
+ *  - Sin servicio elegido aún: solo informa "X de crédito".
+ *  - Servicio elegido + crédito >= anticipo: verde, checkbox enable.
+ *  - Servicio elegido + crédito < anticipo: amarillo, checkbox disable
+ *    con explicación de por qué no se puede aplicar este servicio.
+ */
+function CreditAvailableCard({
+  credits, totalAvailable, depositRequired, applyChecked, onToggleApply, serviceSelected,
+}: {
+  credits: CustomerCredit[]
+  totalAvailable: number
+  depositRequired: number
+  applyChecked: boolean
+  onToggleApply: (v: boolean) => void
+  serviceSelected: boolean
+}) {
+  const covers = depositRequired > 0 && totalAvailable >= depositRequired
+  const insufficient = serviceSelected && depositRequired > 0 && totalAvailable < depositRequired
+  const noDepositService = serviceSelected && depositRequired === 0
+
+  return (
+    <div className={cls(
+      'rounded-lg border p-3 space-y-2',
+      insufficient
+        ? 'border-amber-200 bg-amber-50/50'
+        : 'border-brand-200 bg-brand-50/60',
+    )}>
+      <div className="flex items-start gap-2.5">
+        <Sparkles size={16} className="shrink-0 mt-0.5 text-brand-700" />
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-medium text-warm-800">
+            Esta cliente tiene{' '}
+            <span className="tabular-nums">{formatMoney(totalAvailable)}</span>{' '}
+            de crédito disponible
+          </div>
+          <div className="text-[11.5px] text-warm-600 mt-0.5 leading-snug">
+            De {credits.length === 1 ? 'una cita cancelada' : `${credits.length} citas canceladas`} con anticipo pago.
+            {credits.length === 1 && (
+              <> Servicio: <span className="italic">{credits[0].originalServiceName}</span>.</>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Estado según servicio elegido */}
+      {!serviceSelected && (
+        <div className="text-[11.5px] text-warm-500 italic">
+          Elegí el servicio para ver si el crédito cubre el anticipo.
+        </div>
+      )}
+
+      {noDepositService && (
+        <div className="text-[11.5px] text-warm-500">
+          Este servicio no requiere anticipo, así que el crédito queda para una próxima cita.
+        </div>
+      )}
+
+      {insufficient && (
+        <div className="text-[11.5px] text-amber-800">
+          El crédito ({formatMoney(totalAvailable)}) no cubre el anticipo de este servicio ({formatMoney(depositRequired)}).
+          Elegí un servicio con anticipo menor o aplicá el crédito en otra cita.
+        </div>
+      )}
+
+      {covers && (
+        <label className="flex items-center gap-2 cursor-pointer text-[12.5px] text-warm-700 pt-1 border-t border-brand-100">
+          <input
+            type="checkbox"
+            checked={applyChecked}
+            onChange={e => onToggleApply(e.target.checked)}
+            className="accent-brand-700"
+          />
+          <span>
+            Aplicar <strong className="tabular-nums">{formatMoney(depositRequired)}</strong> como anticipo de esta cita
+            {totalAvailable > depositRequired && (
+              <span className="text-warm-500"> (sobran {formatMoney(totalAvailable - depositRequired)} para otra)</span>
+            )}
+          </span>
+        </label>
+      )}
+    </div>
+  )
 }

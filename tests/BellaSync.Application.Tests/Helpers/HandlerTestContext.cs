@@ -23,6 +23,7 @@ public sealed class HandlerTestContext : IDisposable
 {
     public ApplicationDbContext Db { get; }
     public ICurrentTenantService CurrentTenant { get; }
+    public ICurrentUserService CurrentUser { get; }
     public IPasswordHasher PasswordHasher { get; }
     public IJwtTokenService Jwt { get; }
     public IRefreshTokenGenerator RefreshTokens { get; }
@@ -35,6 +36,13 @@ public sealed class HandlerTestContext : IDisposable
         CurrentTenant = Substitute.For<ICurrentTenantService>();
         CurrentTenant.TenantId.Returns(Guid.Empty);
         CurrentTenant.HasTenant.Returns(false);
+
+        // User actual: por default uno admin con UserId fijo. Los tests
+        // que quieran simular recepción o anónimo pueden sobreescribir
+        // las propiedades del mock.
+        CurrentUser = Substitute.For<ICurrentUserService>();
+        CurrentUser.UserId.Returns(Guid.NewGuid());
+        CurrentUser.Role.Returns("SalonAdmin");
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"BellaSyncTest-{Guid.NewGuid()}")

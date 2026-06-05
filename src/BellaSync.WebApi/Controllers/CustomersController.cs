@@ -10,6 +10,8 @@ using BellaSync.Application.Features.Customers.ListCustomers;
 using BellaSync.Application.Features.Customers.UpdateCustomer;
 using BellaSync.Application.Features.Payments.Dtos;
 using BellaSync.Application.Features.Payments.GetCustomerPayments;
+using BellaSync.Application.Features.Vouchers.Dtos;
+using BellaSync.Application.Features.Vouchers.GetCustomerCredits;
 using BellaSync.WebApi.Infrastructure;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
@@ -82,6 +84,23 @@ public class CustomersController : ControllerBase
         CancellationToken ct)
     {
         var result = await handler.HandleAsync(new GetCustomerPaymentsQuery(id), ct);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Créditos disponibles del cliente — vouchers de citas canceladas
+    /// con decisión CreditPending y saldo aún sin aplicar. El frontend
+    /// del modal "Nueva cita" lo llama al elegir cliente para ofrecer
+    /// aplicar el crédito al anticipo de la cita nueva.
+    /// </summary>
+    [HttpGet("{id:guid}/credits")]
+    [ProducesResponseType(typeof(IReadOnlyList<CustomerCreditResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCredits(
+        Guid id,
+        [FromServices] IQueryHandler<GetCustomerCreditsQuery, IReadOnlyList<CustomerCreditResponse>> handler,
+        CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetCustomerCreditsQuery(id), ct);
         return result.ToActionResult();
     }
 

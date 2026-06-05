@@ -43,6 +43,18 @@ public class PaymentVoucherConfiguration : IEntityTypeConfiguration<PaymentVouch
         builder.Property(v => v.RefundResolvedAt);
         builder.Property(v => v.RefundResolvedByUserId);
 
+        // Monto del crédito ya aplicado a citas nuevas (soporta saldo
+        // parcial). Default 0 para vouchers existentes — la migración
+        // pone defaultValue 0 para que la columna no quede null en rows
+        // viejos.
+        builder.Property(v => v.AmountApplied)
+            .IsRequired()
+            .HasColumnType("numeric(12,2)")
+            .HasDefaultValue(0m);
+
+        // AvailableCredit es computed (getter), no mapeable.
+        builder.Ignore(v => v.AvailableCredit);
+
         builder.Property(v => v.CreatedAt).IsRequired();
         builder.Property(v => v.UpdatedAt);
 
