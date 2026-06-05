@@ -48,6 +48,29 @@ public sealed class CancelAppointmentHandler
             return ApplicationError.NotFound("appointment.not_found",
                 $"No existe una cita con id {command.Id}.");
 
+        // Guard de auditoría: si la cita YA tiene plata cobrada (Payments
+        // registrados o vouchers validados), recepción no puede cancelarla
+        // por su cuenta. Cancelar una cita con plata involucra decidir
+        // qué hacer con el dinero (reembolsar, aplicar a otra cita, etc.)
+        // — esa es decisión de admin, no operativa.
+        if (!_currentUser.IsSalonAdmin)
+        {
+            var hasMoney = await _db.Payments
+                .AsNoTracking()
+                .AnyAsync(p => p.AppointmentId == appointment.Id, ct);
+            if (!hasMoney)
+            {
+                hasMoney = await _db.PaymentVouchers
+                    .AsNoTracking()
+                    .AnyAsync(v => v.AppointmentId == appointment.Id
+                                && v.Status == BellaSync.Domain.Entities.PaymentVoucherStatus.Validated, ct);
+            }
+            if (hasMoney)
+                return ApplicationError.Forbidden(
+                    "appointment.cancel_with_money_requires_admin",
+                    "Esta cita ya tiene dinero asociado. Pedile a la administradora del salón que la cancele — ella decide qué hacer con el pago.");
+        }
+
         // Snapshot del status anterior — necesario para decidir si enviar
         // la notificación de cancelación. Una cita Pending que nunca se
         // confirmó no amerita un "lamentamos cancelar tu cita" porque la

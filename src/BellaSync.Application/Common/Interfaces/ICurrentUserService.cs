@@ -13,4 +13,15 @@ public interface ICurrentUserService
 {
     /// <summary>UserId del autenticado, o null si anónimo.</summary>
     Guid? UserId { get; }
+
+    /// <summary>
+    /// Rol del autenticado tal como sale del JWT ("SalonAdmin",
+    /// "Receptionist", "Stylist", "SuperAdmin"). Null si anónimo.
+    /// Sirve para guards de autorización condicional dentro de handlers
+    /// (ej. "cancelar cita pagada requiere admin").
+    /// </summary>
+    string? Role { get; }
+
+    /// <summary>Atajo común: ¿el user actual es SalonAdmin?</summary>
+    bool IsSalonAdmin => Role == "SalonAdmin";
 }

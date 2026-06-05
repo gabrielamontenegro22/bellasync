@@ -28,4 +28,14 @@ public class CurrentUserService : ICurrentUserService
             return Guid.TryParse(raw, out var id) ? id : null;
         }
     }
+
+    public string? Role
+    {
+        get
+        {
+            var user = _httpContextAccessor.HttpContext?.User;
+            // El JWT emitido por AuthTokenIssuer pone el rol en ClaimTypes.Role.
+            return user?.FindFirst(ClaimTypes.Role)?.Value;
+        }
+    }
 }

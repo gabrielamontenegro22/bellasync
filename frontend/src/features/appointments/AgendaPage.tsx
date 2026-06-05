@@ -838,9 +838,18 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
         {/* Cancelar */}
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
             const reason = window.prompt('Razón de la cancelación (opcional):') ?? undefined
-            cancel.mutate({ id: appointment.id, reason })
+            try {
+              await cancel.mutateAsync({ id: appointment.id, reason })
+            } catch (e) {
+              // Casos comunes que llegan acá:
+              //   - 403 "cancel_with_money_requires_admin" → recepción
+              //     intentando cancelar una cita con pagos. Mostramos el
+              //     mensaje claro del backend.
+              //   - 400 "invalid_transition" → estado incompatible.
+              window.alert(extractApiError(e, 'No se pudo cancelar la cita.'))
+            }
           }}
           disabled={!canCancel || cancel.isPending}
           className={cls(

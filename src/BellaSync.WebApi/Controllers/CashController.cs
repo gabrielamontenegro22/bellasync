@@ -57,10 +57,16 @@ public class CashController : ControllerBase
     /// hay cierre devuelve 409 Conflict. Snapshea ventas/egresos en
     /// efectivo desde Payments/Expenses, así que el cierre queda inmutable
     /// aunque después se agreguen/borren movimientos del día.
+    ///
+    /// SalonAdmin-only: el cierre es una decisión financiera que rinde
+    /// cuentas a fin de día. Recepción puede preparar (registrar pagos,
+    /// contar la caja) pero el "firmar" lo hace la admin.
     /// </summary>
     [HttpPost("closings")]
+    [Authorize(Roles = "SalonAdmin")]
     [ProducesResponseType(typeof(CashClosingResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateClosing(
         [FromBody] CreateCashClosingRequest request,

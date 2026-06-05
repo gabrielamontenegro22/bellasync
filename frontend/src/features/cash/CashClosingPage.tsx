@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { PROVIDER_COLORS, PROVIDER_FALLBACK_COLOR } from '@/features/payments/paymentCatalog'
 import { cls } from '@/lib/cls'
-import { useAuth } from '@/features/auth/useAuth'
+import { useAuth, useIsAdmin } from '@/features/auth/useAuth'
 import { fmtCop } from '@/features/customers/lib/customerLook'
 import { extractApiError } from '@/lib/extractApiError'
 import {
@@ -43,6 +43,7 @@ import { RegisterExpenseModal } from './components/RegisterExpenseModal'
  */
 export function CashClosingPage() {
   const { user } = useAuth()
+  const isAdmin = useIsAdmin()
   const qc = useQueryClient()
   const [tab, setTab] = useState<'hoy' | 'historial'>('hoy')
   const [filterMethod, setFilterMethod] = useState<string>('all')
@@ -101,7 +102,7 @@ export function CashClosingPage() {
           >
             <Download size={14} strokeWidth={1.8} /> Exportar
           </button>
-          {!isClosedToday && (
+          {!isClosedToday && isAdmin && (
             <button
               type="button"
               onClick={() => setCloseOpen(true)}
@@ -114,6 +115,14 @@ export function CashClosingPage() {
             >
               <Lock size={15} strokeWidth={1.8} /> Cerrar caja
             </button>
+          )}
+          {!isClosedToday && !isAdmin && (
+            <div
+              title="El cierre de caja lo firma la administradora del salón"
+              className="px-3.5 py-2 rounded-lg border border-warm-200 text-warm-500 text-[12px] italic flex items-center gap-1.5"
+            >
+              <Lock size={13} /> Cierre solo admin
+            </div>
           )}
         </div>
       </header>
