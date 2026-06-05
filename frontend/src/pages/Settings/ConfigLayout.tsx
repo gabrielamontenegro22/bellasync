@@ -13,7 +13,7 @@ import {
 import { cls } from '@/lib/cls'
 import { AppShell } from '@/components/layout/AppShell'
 import { SearchablePicker } from '@/components/ui'
-import { useAuth } from '@/features/auth/useAuth'
+import { useAuth, usePermissions } from '@/features/auth/useAuth'
 
 interface ConfigSection {
   to: string
@@ -22,6 +22,11 @@ interface ConfigSection {
   hint: string
   /** Si todavía no tiene pantalla — se muestra deshabilitado */
   disabled?: boolean
+  /**
+   * Predicado que decide si el ítem es visible. Admin siempre lo ve.
+   * Si está ausente, default es admin-only.
+   */
+  visibleFor?: (perms: ReturnType<typeof usePermissions>) => boolean
 }
 
 // Solo ajustes "verdaderos" — lo operativo (servicios, estilistas, cola
@@ -29,14 +34,29 @@ interface ConfigSection {
 // se usa día a día. Acá quedan cosas que se configuran una vez y rara
 // vez se tocan.
 const CONFIG_SECTIONS: ConfigSection[] = [
-  { to: '/configuracion/general',     label: 'Información general',       icon: Building2,      hint: 'Nombre, dirección, logo' },
-  { to: '/configuracion/horario',     label: 'Horario del salón',          icon: CalendarClock,  hint: 'Días y franjas' },
-  { to: '/configuracion/pagos',       label: 'Política de pagos',          icon: Wallet,         hint: 'Cupo reservado y anticipación' },
-  { to: '/configuracion/comisiones',  label: 'Comisiones',                 icon: Percent,        hint: 'Activar o desactivar el módulo' },
-  { to: '/configuracion/whatsapp',    label: 'Notificaciones WhatsApp',    icon: MessageCircle,  hint: 'Plantillas y envíos' },
-  { to: '/configuracion/usuarios',    label: 'Usuarios del equipo',        icon: Users,          hint: 'Recepcionistas y administradoras' },
-  { to: '/configuracion/permisos',    label: 'Permisos del equipo',        icon: Shield,         hint: 'Qué puede hacer recepción' },
-  { to: '/configuracion/suscripcion', label: 'Suscripción y facturación',  icon: CreditCard,     hint: 'Plan BellaSync' },
+  // Visibles para recepción solo si la admin le dio el permiso específico.
+  { to: '/configuracion/general',     label: 'Información general',       icon: Building2,      hint: 'Nombre, dirección, logo',
+    visibleFor: (p) => p.isAdmin || p.canEditSalonInfo },
+  { to: '/configuracion/horario',     label: 'Horario del salón',          icon: CalendarClock,  hint: 'Días y franjas',
+    visibleFor: (p) => p.isAdmin || p.canEditSchedule },
+  { to: '/configuracion/pagos',       label: 'Política de pagos',          icon: Wallet,         hint: 'Cupo reservado y anticipación',
+    visibleFor: (p) => p.isAdmin || p.canEditPaymentPolicy },
+  // Admin-only — son decisiones que recepción no debería tocar nunca:
+  //   · Activar/desactivar el módulo de Comisiones (afecta cómo se pagan estilistas)
+  //   · WhatsApp templates (mensajes que salen del salón)
+  //   · Crear/editar usuarios (incluyendo recepcionistas — sería darse permiso a sí misma)
+  //   · Permisos del equipo (idem — recepción NO puede darse permisos)
+  //   · Suscripción (plan SaaS, costo)
+  { to: '/configuracion/comisiones',  label: 'Comisiones',                 icon: Percent,        hint: 'Activar o desactivar el módulo',
+    visibleFor: (p) => p.isAdmin },
+  { to: '/configuracion/whatsapp',    label: 'Notificaciones WhatsApp',    icon: MessageCircle,  hint: 'Plantillas y envíos',
+    visibleFor: (p) => p.isAdmin },
+  { to: '/configuracion/usuarios',    label: 'Usuarios del equipo',        icon: Users,          hint: 'Recepcionistas y administradoras',
+    visibleFor: (p) => p.isAdmin },
+  { to: '/configuracion/permisos',    label: 'Permisos del equipo',        icon: Shield,         hint: 'Qué puede hacer recepción',
+    visibleFor: (p) => p.isAdmin },
+  { to: '/configuracion/suscripcion', label: 'Suscripción y facturación',  icon: CreditCard,     hint: 'Plan BellaSync',
+    visibleFor: (p) => p.isAdmin },
 ]
 
 /**
@@ -49,12 +69,22 @@ const CONFIG_SECTIONS: ConfigSection[] = [
  */
 export function ConfigLayout() {
   const { user } = useAuth()
+  const perms = usePermissions()
   const location = useLocation()
+
+  // Filtramos las secciones según permisos. Admin las ve todas;
+  // recepción solo las que la admin le habilitó.
+  const visibleSections = CONFIG_SECTIONS.filter(
+    (s) => !s.visibleFor || s.visibleFor(perms),
+  )
 
   return (
     <AppShell>
       <div className="flex-1 min-w-0 flex">
-        <ConfigSidebar tenantName={user?.tenantName ?? 'Salón'} />
+        <ConfigSidebar
+          tenantName={user?.tenantName ?? 'Salón'}
+          sections={visibleSections}
+        />
 
         {/* Columna de contenido: el switcher mobile va ENCIMA del Outlet,
             no como hermano del flex row. Si quedaba al lado, con su
@@ -62,9 +92,26 @@ export function ConfigLayout() {
             0px → la página parecía vacía (este era el bug visible en
             /configuracion/general en iPad). */}
         <div className="flex-1 min-w-0 flex flex-col">
-          <MobileSubsectionSwitcher current={location.pathname} />
+          <MobileSubsectionSwitcher
+            current={location.pathname}
+            sections={visibleSections}
+          />
           <div className="flex-1 min-w-0 min-h-0">
-            <Outlet />
+            {visibleSections.length === 0 ? (
+              <div className="px-6 lg:px-10 py-16 max-w-xl">
+                <div className="rounded-2xl border border-warm-150 bg-warm-50/60 p-6 text-[13px] text-warm-600 leading-relaxed">
+                  <strong className="text-warm-800 block mb-1.5">
+                    No tenés acceso a ninguna sección de Configuración.
+                  </strong>
+                  La administradora del salón decide qué podés tocar acá.
+                  Pedile que active alguno de los permisos en
+                  Configuración → Permisos del equipo (ej. "Puede editar
+                  el horario del salón").
+                </div>
+              </div>
+            ) : (
+              <Outlet />
+            )}
           </div>
         </div>
       </div>
@@ -76,7 +123,12 @@ export function ConfigLayout() {
 /*  Sidebar de configuración                                                  */
 /* -------------------------------------------------------------------------- */
 
-function ConfigSidebar({ tenantName }: { tenantName: string }) {
+function ConfigSidebar({
+  tenantName, sections,
+}: {
+  tenantName: string
+  sections: ConfigSection[]
+}) {
   return (
     <aside className="hidden lg:flex w-[260px] flex-shrink-0 flex-col border-r border-warm-150 bg-white">
       <div className="px-6 pt-7 pb-4">
@@ -89,7 +141,7 @@ function ConfigSidebar({ tenantName }: { tenantName: string }) {
       </div>
 
       <nav className="flex-1 px-3 pb-5 space-y-0.5 overflow-y-auto">
-        {CONFIG_SECTIONS.map((section) => {
+        {sections.map((section) => {
           if (section.disabled) {
             return (
               <button
@@ -167,8 +219,13 @@ function ConfigSidebar({ tenantName }: { tenantName: string }) {
 /*  Switcher de subsección en mobile (select dropdown)                        */
 /* -------------------------------------------------------------------------- */
 
-function MobileSubsectionSwitcher({ current }: { current: string }) {
-  const enabled = CONFIG_SECTIONS.filter((s) => !s.disabled)
+function MobileSubsectionSwitcher({
+  current, sections,
+}: {
+  current: string
+  sections: ConfigSection[]
+}) {
+  const enabled = sections.filter((s) => !s.disabled)
   const navigate = useNavigate()
 
   // Usamos SearchablePicker (no <select> nativo) por la misma razón que en
