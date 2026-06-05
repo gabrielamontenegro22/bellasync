@@ -483,10 +483,10 @@ function ProductRow({
       <td className="py-4 px-3 align-middle">
         <span className="text-[12px] text-warm-600">{p.categoryName || '—'}</span>
       </td>
-      <td className="py-4 px-3 align-middle">
+      <td className="py-4 px-3 align-middle whitespace-nowrap">
         <div className="font-serif text-[20px] tabular-nums text-warm-800 leading-none">{p.stock}</div>
       </td>
-      <td className="py-4 px-3 align-middle">
+      <td className="py-4 px-3 align-middle whitespace-nowrap">
         <div className="text-[13px] tabular-nums text-warm-500">{p.minStock}</div>
       </td>
       <td className="py-4 px-3 align-middle min-w-[180px]">
@@ -504,11 +504,11 @@ function ProductRow({
           </span>
         </div>
       </td>
-      <td className="py-4 px-3 align-middle">
+      <td className="py-4 px-3 align-middle whitespace-nowrap">
         <div className="text-[12.5px] text-warm-700 tabular-nums">{fmtDate(p.lastInAt)}</div>
         <div className="text-[11px] text-warm-400 mt-0.5">{fmtRelativeDays(p.lastInAt)}</div>
       </td>
-      <td className="py-4 px-3 align-middle text-right">
+      <td className="py-4 px-3 align-middle text-right whitespace-nowrap min-w-[120px]">
         <div className="text-[13px] tabular-nums text-warm-800 font-medium">{fmtCop(total)}</div>
         <div className="text-[11px] text-warm-400 mt-0.5">{fmtCop(p.cost)} c/u</div>
       </td>
