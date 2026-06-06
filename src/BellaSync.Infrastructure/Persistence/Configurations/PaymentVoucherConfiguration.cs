@@ -52,6 +52,14 @@ public class PaymentVoucherConfiguration : IEntityTypeConfiguration<PaymentVouch
             .HasColumnType("numeric(12,2)")
             .HasDefaultValue(0m);
 
+        // Flag explícito de "voucher creado por aplicación de crédito".
+        // Antes detectábamos por bank == "Crédito interno" (string mágico),
+        // ahora por este bool. Migración hace backfill: rows con ese bank
+        // y reference que arranca con "CR-" se marcan true.
+        builder.Property(v => v.IsInternalCredit)
+            .IsRequired()
+            .HasDefaultValue(false);
+
         // AvailableCredit es computed (getter), no mapeable.
         builder.Ignore(v => v.AvailableCredit);
 

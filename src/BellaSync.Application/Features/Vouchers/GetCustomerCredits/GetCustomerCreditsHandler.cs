@@ -25,6 +25,10 @@ public sealed class GetCustomerCreditsHandler
         //  - RefundDecision = CreditPending (admin/recepción decidió "crédito")
         //  - RefundResolvedAt = null (no se cerró todavía)
         //  - La cita asociada pertenece al cliente que pedimos
+        //  - NO es un voucher interno (un crédito interno no puede
+        //    generar a su vez otro crédito; el dominio ya bloquea
+        //    Refunded sobre internos, pero por defensa explícita
+        //    también lo filtramos acá).
         //
         // No filtramos por "AmountApplied < ReportedAmount" en SQL porque
         // ReportedAmount es Money (value converter) y no se traduce en
@@ -36,6 +40,7 @@ public sealed class GetCustomerCreditsHandler
             .Where(v => v.Status == PaymentVoucherStatus.Validated
                      && v.RefundDecision == DepositRefundDecision.CreditPending
                      && v.RefundResolvedAt == null
+                     && v.IsInternalCredit == false
                      && v.Appointment!.CustomerId == query.CustomerId)
             .OrderBy(v => v.Appointment!.CancelledAt)
             .ToListAsync(ct);

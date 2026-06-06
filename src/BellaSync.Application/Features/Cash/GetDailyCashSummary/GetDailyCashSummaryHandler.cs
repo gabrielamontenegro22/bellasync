@@ -15,11 +15,11 @@ public sealed class GetDailyCashSummaryHandler
     // BellaSync opera solo en Colombia (UTC-5 todo el año).
     private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
-    // Marcador del Bank en los vouchers que representan APLICACIÓN de
-    // crédito interno (no plata nueva). Se usa al crear el voucher en
-    // CreateAppointmentHandler.ApplyCustomerCreditsAsync.
-    // Si en el futuro queremos discriminar por enum/columna en vez de
-    // string mágico, este es el único lugar a tocar.
+    // Marcador legacy del Bank en vouchers internos viejos (antes de
+    // tener la columna IsInternalCredit). Se mantiene para compat con
+    // rows pre-backfill o futuros casos donde el flag no esté seteado
+    // pero el bank sí. La detección PRIMARIA es ahora el flag bool
+    // IsInternalCredit (más robusto).
     private const string InternalCreditBankMarker = "Crédito interno";
 
     private readonly IApplicationDbContext _db;
@@ -76,15 +76,22 @@ public sealed class GetDailyCashSummaryHandler
             .ToListAsync(ct);
 
         // Versión simplificada para los sumadores que ya estaban.
+        // Detección PRIMARIA por IsInternalCredit; OR con bank por compat
+        // legacy hasta que el backfill cubra todos los rows viejos.
         var allValidatedVouchersToday = allValidatedVouchersTodayWithRefs
-            .Select(v => new { v.ReportedAmount, v.Bank })
+            .Select(v => new
+            {
+                v.ReportedAmount,
+                v.Bank,
+                IsInternal = v.IsInternalCredit || v.Bank == InternalCreditBankMarker,
+            })
             .ToList();
 
         var externalVouchers = allValidatedVouchersToday
-            .Where(v => v.Bank != InternalCreditBankMarker)
+            .Where(v => !v.IsInternal)
             .ToList();
         var internalVouchers = allValidatedVouchersToday
-            .Where(v => v.Bank == InternalCreditBankMarker)
+            .Where(v => v.IsInternal)
             .ToList();
 
         // Lista detallada para la UI de transacciones.
@@ -99,7 +106,7 @@ public sealed class GetDailyCashSummaryHandler
                 StylistName = v.Appointment?.Stylist?.FullName ?? string.Empty,
                 Amount = v.ReportedAmount.Amount,
                 Bank = v.Bank,
-                IsInternalCredit = v.Bank == InternalCreditBankMarker,
+                IsInternalCredit = v.IsInternalCredit || v.Bank == InternalCreditBankMarker,
                 DecidedAt = v.DecidedAt ?? v.ReceivedAt,
             })
             .ToList();

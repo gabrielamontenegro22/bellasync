@@ -42,6 +42,13 @@ export interface AppointmentResponse {
    * tiene dinero asociado y exigir motivo obligatorio.
    */
   directPaymentsTotal: number
+  /**
+   * True si la cita tiene algún voucher de "crédito interno" (saldo viejo
+   * aplicado). El modal de cancelar lo usa para OCULTAR la opción
+   * "Devolver el anticipo" — esa decisión no es legal sobre internos
+   * (el backend la rechaza, y mostrarla en UI confundiría).
+   */
+  hasInternalCreditVoucher: boolean
   status: AppointmentStatus
   depositStatus: AppointmentDepositStatus
   channel: AppointmentChannel

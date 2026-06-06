@@ -47,6 +47,51 @@ public class PaymentVoucher : BaseEntity, ITenantEntity
         voucher.ImageUrl = Normalize(imageUrl);
         voucher.ReceivedAt = utcNow;
         voucher.Status = PaymentVoucherStatus.Pending;
+        voucher.IsInternalCredit = false;
+        return voucher;
+    }
+
+    /// <summary>
+    /// Factory para vouchers de "aplicación de crédito interno". Estos
+    /// representan que el anticipo de una cita fue cubierto con saldo
+    /// viejo (un voucher CreditPending de cita anterior cancelada). NO
+    /// es plata nueva entrando — solo movimiento contable de saldo.
+    ///
+    /// Diferencias vs Create():
+    ///   - IsInternalCredit = true (con todas las consecuencias documentadas en la propiedad).
+    ///   - Bank y referenceNumber se setean a defaults internos sugeridos
+    ///     ("Crédito interno" / "CR-xxxxxxxx") solo para display en historial.
+    ///   - El voucher arranca en estado Validated directo y resuelto al
+    ///     instante (NO pasa por la cola). El handler debe llamar Confirm()
+    ///     inmediatamente después para registrar quién lo aplicó.
+    /// </summary>
+    public static PaymentVoucher CreateInternalCredit(
+        Guid tenantId,
+        Guid appointmentId,
+        Money amount,
+        string customerNameForDisplay,
+        string customerPhoneForDisplay,
+        DateTime utcNow)
+    {
+        if (appointmentId == Guid.Empty)
+            throw new DomainException("AppointmentId es obligatorio.");
+        if (amount.Amount <= 0m)
+            throw new DomainException("El monto del crédito aplicado debe ser positivo.");
+
+        var voucher = new PaymentVoucher
+        {
+            TenantId = tenantId,
+        };
+        voucher.AppointmentId = appointmentId;
+        voucher.ReportedAmount = amount;
+        voucher.Bank = "Crédito interno";  // legacy compat, real flag = IsInternalCredit
+        voucher.ReferenceNumber = $"CR-{appointmentId.ToString()[..8].ToUpper()}";
+        voucher.SenderName = Normalize(customerNameForDisplay);
+        voucher.SenderPhone = Normalize(customerPhoneForDisplay);
+        voucher.ImageUrl = null;
+        voucher.ReceivedAt = utcNow;
+        voucher.Status = PaymentVoucherStatus.Pending;
+        voucher.IsInternalCredit = true;
         return voucher;
     }
 
@@ -65,6 +110,29 @@ public class PaymentVoucher : BaseEntity, ITenantEntity
 
     /// <summary>URL de la imagen del comprobante (S3, blob storage, etc.). Opcional.</summary>
     public string? ImageUrl { get; private set; }
+
+    /// <summary>
+    /// True si este voucher fue creado por aplicación de crédito interno
+    /// (saldo de cita cancelada aplicado a cita nueva). NO representa
+    /// plata nueva entrando al banco — la plata original entró cuando
+    /// se pagó el voucher de la cita cancelada original, días/semanas atrás.
+    ///
+    /// Implicaciones:
+    ///   - GetDailyCashSummary: NO se cuenta en TotalAmount (se reporta
+    ///     aparte en InternalCreditTotal).
+    ///   - CancelAppointment: NO permite decisión "Refunded" porque la
+    ///     plata no está en la caja "del día" para devolver — devolverla
+    ///     requeriría sacar de la caja real generando un Neto negativo
+    ///     artificial. Solo permite CreditPending o Forfeited.
+    ///   - MarkRefundResolved: NO crea Expense automático (la plata no
+    ///     salió en este movimiento, ya había entrado/salido antes).
+    ///   - GetCustomerCredits: vouchers internos NO aparecen como crédito
+    ///     ofrecible para reagendar.
+    ///
+    /// Default false. Se setea true únicamente desde la factory
+    /// CreateInternalCredit() y al cargar la fila desde BD.
+    /// </summary>
+    public bool IsInternalCredit { get; private set; }
 
     /// <summary>Cuándo el cliente envió el comprobante (no cuando se creó el row).</summary>
     public DateTime ReceivedAt { get; private set; }
@@ -180,6 +248,18 @@ public class PaymentVoucher : BaseEntity, ITenantEntity
                 $"(este está en {Status}).");
         if (RefundDecision is not null)
             throw new DomainException("Este voucher ya tiene decisión de refund registrada.");
+
+        // Vouchers internos NO admiten Refunded: la plata no entró ese
+        // día, era saldo viejo aplicado. Permitir Refunded crearía un
+        // Expense fantasma que dejaría el Neto del día negativo
+        // artificialmente. Si la admin realmente quiere devolver plata,
+        // debe registrar un Expense manual con concepto explícito.
+        if (IsInternalCredit && decision == DepositRefundDecision.Refunded)
+            throw new DomainException(
+                "No se puede marcar 'Devolver' un voucher de crédito interno. " +
+                "La plata original no entró en esta cita — usá CreditPending " +
+                "para mantener el saldo, Forfeited para retenerlo, o registrá " +
+                "un egreso manual desde Caja si necesitás trazar una transferencia real.");
 
         RefundDecision = decision;
         // Forfeited es la única decisión que se resuelve sola — no hay

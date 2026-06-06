@@ -18,7 +18,8 @@ internal static class AppointmentMapper
     public static AppointmentResponse ToResponse(
         Appointment a,
         decimal validatedDepositAmount = 0m,
-        decimal directPaymentsTotal = 0m) => new()
+        decimal directPaymentsTotal = 0m,
+        bool hasInternalCreditVoucher = false) => new()
     {
         Id = a.Id,
         CustomerId = a.CustomerId,
@@ -39,6 +40,7 @@ internal static class AppointmentMapper
         DepositAmount = a.DepositAmount.Amount,
         ValidatedDepositAmount = validatedDepositAmount,
         DirectPaymentsTotal = directPaymentsTotal,
+        HasInternalCreditVoucher = hasInternalCreditVoucher,
         Status = a.Status.ToString(),
         DepositStatus = a.DepositStatus.ToString(),
         Channel = a.Channel.ToString(),
@@ -74,13 +76,14 @@ internal static class AppointmentMapper
             .Where(v => v.AppointmentId == a.Id && v.Status == PaymentVoucherStatus.Validated)
             .ToListAsync(ct);
         var validatedAmount = vouchers.Sum(v => v.ReportedAmount.Amount);
+        var hasInternalCredit = vouchers.Any(v => v.IsInternalCredit);
 
         var payments = await db.Payments
             .Where(p => p.AppointmentId == a.Id)
             .ToListAsync(ct);
         var directTotal = payments.Sum(p => p.Amount.Amount);
 
-        return ToResponse(a, validatedAmount, directTotal);
+        return ToResponse(a, validatedAmount, directTotal, hasInternalCredit);
     }
 
     /// <summary>
@@ -89,7 +92,10 @@ internal static class AppointmentMapper
     /// se traduce por el HasConversion de Money, pero los registros de un
     /// día son ~30-100 filas a lo sumo — agregar en C# es trivial.
     /// </summary>
-    public record AppointmentMoneyTotals(decimal ValidatedDeposit, decimal DirectPayments);
+    public record AppointmentMoneyTotals(
+        decimal ValidatedDeposit,
+        decimal DirectPayments,
+        bool HasInternalCreditVoucher);
 
     public static async Task<Dictionary<Guid, AppointmentMoneyTotals>> GetMoneyTotalsAsync(
         IReadOnlyCollection<Guid> appointmentIds,
@@ -105,6 +111,9 @@ internal static class AppointmentMapper
         var depositByAppt = vouchers
             .GroupBy(v => v.AppointmentId)
             .ToDictionary(g => g.Key, g => g.Sum(v => v.ReportedAmount.Amount));
+        var hasInternalByAppt = vouchers
+            .GroupBy(v => v.AppointmentId)
+            .ToDictionary(g => g.Key, g => g.Any(v => v.IsInternalCredit));
 
         var payments = await db.Payments
             .Where(p => appointmentIds.Contains(p.AppointmentId))
@@ -113,14 +122,15 @@ internal static class AppointmentMapper
             .GroupBy(p => p.AppointmentId)
             .ToDictionary(g => g.Key, g => g.Sum(p => p.Amount.Amount));
 
-        // Une las dos claves (puede que una cita tenga voucher pero no
+        // Une las claves (puede que una cita tenga voucher pero no
         // payment, o viceversa).
         var allIds = depositByAppt.Keys.Union(paidByAppt.Keys);
         return allIds.ToDictionary(
             id => id,
             id => new AppointmentMoneyTotals(
                 depositByAppt.GetValueOrDefault(id, 0m),
-                paidByAppt.GetValueOrDefault(id, 0m)));
+                paidByAppt.GetValueOrDefault(id, 0m),
+                hasInternalByAppt.GetValueOrDefault(id, false)));
     }
 
     /// <summary>

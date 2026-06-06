@@ -225,18 +225,16 @@ public sealed class CreateAppointmentHandler : ICommandHandler<CreateAppointment
             remaining -= toApply;
         }
 
-        // Crear voucher Validated nuevo en la cita por el monto del anticipo.
-        // Bank/referenceNumber identifican que es crédito interno para que
-        // en la cola de validación / historial se vea distinguible.
-        var creditVoucher = PaymentVoucher.Create(
+        // Crear voucher Validated nuevo en la cita por el monto del anticipo,
+        // marcado con IsInternalCredit=true para que el resto del sistema
+        // sepa que NO representa plata nueva entrando ese día. Este flag
+        // tiene consecuencias en Caja, Cancel y MarkRefundResolved.
+        var creditVoucher = PaymentVoucher.CreateInternalCredit(
             tenantId: _currentTenant.TenantId,
             appointmentId: appointment.Id,
-            reportedAmount: appointment.DepositAmount,
-            bank: "Crédito interno",
-            referenceNumber: $"CR-{appointment.Id.ToString()[..8].ToUpper()}",
-            senderName: customer.FullName,
-            senderPhone: customer.Phone,
-            imageUrl: null,
+            amount: appointment.DepositAmount,
+            customerNameForDisplay: customer.FullName,
+            customerPhoneForDisplay: customer.Phone,
             utcNow: now);
         // Confirm inmediato — no pasa por cola de validación porque el
         // dinero "real" entró en el voucher original que ya fue validado.
