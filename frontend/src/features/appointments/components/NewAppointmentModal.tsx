@@ -5,7 +5,7 @@ import { Button, DateTimePicker, Input, Modal, ModalFooter, SearchablePicker } f
 import { listServices, type ServiceResponse } from '@/api/services'
 import { listStylists, type StylistResponse } from '@/api/stylists'
 import {
-  createCustomer, getCustomerCredits, listCustomers,
+  createCustomer, getCustomer, getCustomerCredits, listCustomers,
   type CustomerCredit, type CustomerResponse,
 } from '@/api/customers'
 import { extractApiError } from '@/lib/extractApiError'
@@ -19,18 +19,40 @@ import { useCreateAppointment } from '../hooks'
  * useCreateAppointment que invalida la agenda al persistir.
  */
 export function NewAppointmentModal({
-  defaultDate, defaultCustomer = null, onClose,
+  defaultDate, defaultCustomer = null, defaultCustomerId = null, onClose,
 }: {
   defaultDate: string
   /** Pre-selecciona un cliente (cuando se abre desde el detalle del cliente
    *  en el CRM o desde el panel de detalle de una cita). */
   defaultCustomer?: CustomerResponse | null
+  /**
+   * Versión "solo ID" — útil cuando se abre desde un flujo que solo tiene
+   * el customerId disponible (ej: post-cancel con crédito). El modal hace
+   * el fetch internamente y pre-selecciona al cliente cuando llega.
+   * Si se pasan ambos, defaultCustomer tiene prioridad.
+   */
+  defaultCustomerId?: string | null
   onClose: () => void
 }) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'SalonAdmin'
 
-  const [customer, setCustomer] = useState<CustomerResponse | null>(defaultCustomer)
+  // Si vino defaultCustomerId pero no defaultCustomer, fetch del cliente.
+  const lookupQ = useQuery({
+    queryKey: ['customer', defaultCustomerId],
+    queryFn: () => getCustomer(defaultCustomerId!),
+    enabled: !defaultCustomer && !!defaultCustomerId,
+    staleTime: 60_000,
+  })
+
+  const [customer, setCustomer] = useState<CustomerResponse | null>(
+    defaultCustomer ?? null,
+  )
+  // Cuando el lookup termina, setea el cliente seleccionado si todavía
+  // no había uno (admin podría haber elegido otro mientras tanto).
+  useEffect(() => {
+    if (!customer && lookupQ.data) setCustomer(lookupQ.data)
+  }, [lookupQ.data, customer])
   const [serviceId, setServiceId] = useState('')
   const [stylistId, setStylistId] = useState('')
   const [startAtLocal, setStartAtLocal] = useState(`${defaultDate}T10:00`)

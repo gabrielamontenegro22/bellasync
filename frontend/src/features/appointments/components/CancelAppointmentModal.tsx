@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Sparkles } from 'lucide-react'
 import { Button, Modal, ModalFooter } from '@/components/ui'
 import type {
   AppointmentResponse,
@@ -14,6 +15,16 @@ import { cls } from '@/lib/cls'
 interface CancelAppointmentModalProps {
   appointment: AppointmentResponse
   onClose: () => void
+  /**
+   * Callback opcional disparado cuando la cancelación generó un crédito
+   * (decisión CreditPending) y la admin decide reagendar inmediatamente.
+   * Recibe el customerId para que el padre abra el modal "Nueva cita"
+   * con la cliente pre-seleccionada (el card de crédito disponible
+   * aparece solo al cargar los créditos del cliente).
+   *
+   * Si no se pasa, el modal solo se cierra al elegir "Después".
+   */
+  onRescheduleAfterCredit?: (customerId: string) => void
 }
 
 /**
@@ -36,9 +47,17 @@ interface CancelAppointmentModalProps {
  *  - El "auto" se muestra como hint arriba del dropdown para que
  *    quien no tiene permiso entienda qué va a pasar.
  */
-export function CancelAppointmentModal({ appointment, onClose }: CancelAppointmentModalProps) {
+export function CancelAppointmentModal({
+  appointment, onClose, onRescheduleAfterCredit,
+}: CancelAppointmentModalProps) {
   const perms = usePermissions()
   const cancel = useCancelAppointment()
+
+  // Step interno del modal:
+  //   - 'form'             → el formulario de cancelación (default)
+  //   - 'credit-followup'  → pregunta "¿reagendar ahora?" después de
+  //                          cancelar exitosamente con decisión Credit
+  const [step, setStep] = useState<'form' | 'credit-followup'>('form')
 
   // Carga la política del salón solo si hay anticipo Validated — si no
   // hay plata, no necesitamos ventana para mostrar nada.
@@ -96,10 +115,62 @@ export function CancelAppointmentModal({ appointment, onClose }: CancelAppointme
           depositOverride: override ?? undefined,
         },
       })
+
+      // Si la decisión fue "Crédito para próxima cita", quedamos en el
+      // modal y mostramos el follow-up. La cliente avisa al toque "¿lo
+      // reagendamos?" y la admin lo hace en 1 sola interacción.
+      // El callback al padre solo se invoca si dice "Sí, reagendar".
+      if (override === 'CreditPending' && onRescheduleAfterCredit) {
+        setStep('credit-followup')
+        return
+      }
+
       onClose()
     } catch (e) {
       setSubmitError(extractApiError(e, 'No se pudo cancelar la cita.'))
     }
+  }
+
+  function handleRescheduleNow() {
+    onRescheduleAfterCredit?.(appointment.customerId)
+    onClose()
+  }
+
+  if (step === 'credit-followup') {
+    return (
+      <Modal title="Crédito guardado" onClose={onClose} size="sm">
+        <div className="space-y-4 text-center">
+          <div className="mx-auto w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center">
+            <Sparkles size={22} className="text-brand-700" />
+          </div>
+
+          <div>
+            <div className="text-[15px] font-medium text-warm-800">
+              Cita cancelada — crédito creado
+            </div>
+            <div className="text-[13px] text-warm-600 mt-1.5 leading-relaxed">
+              <strong className="text-warm-800 tabular-nums">
+                ${appointment.validatedDepositAmount.toLocaleString('es-CO')}
+              </strong>{' '}
+              quedan disponibles como crédito para{' '}
+              <strong className="text-warm-800">{appointment.customerName}</strong>.
+            </div>
+            <div className="text-[12.5px] text-warm-500 mt-2">
+              ¿Querés reagendarle ahora una cita nueva?
+            </div>
+          </div>
+
+          <ModalFooter>
+            <Button variant="secondary" onClick={onClose} fullWidth>
+              Después
+            </Button>
+            <Button fullWidth onClick={handleRescheduleNow}>
+              Sí, reagendar ahora
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+    )
   }
 
   return (
