@@ -17,6 +17,7 @@ import {
   listCashClosings,
   type DailyCashSummary,
   type CashClosing,
+  type ForfeitedItem,
 } from '@/api/cash'
 import {
   listPendingRefunds,
@@ -190,8 +191,17 @@ export function CashClosingPage() {
               {fmtCop(data?.totalAmount ?? 0)}
             </div>
             <div className="text-[11.5px] text-brand-100 mt-1.5">
-              {data?.paymentCount ?? 0} transacciones
+              {data?.paymentCount ?? 0} movimientos
+              {(data?.validatedDepositsCount ?? 0) > 0 && (
+                <> · {data!.validatedDepositsCount} anticipos</>
+              )}
             </div>
+            {(data?.internalCreditTotal ?? 0) > 0 && (
+              <div className="text-[10.5px] text-brand-200 mt-1.5 leading-snug" title="Saldo viejo aplicado a citas nuevas — no es plata nueva entrante">
+                + {fmtCop(data!.internalCreditTotal)} crédito interno aplicado
+                <span className="opacity-70"> (no cuenta como ingreso)</span>
+              </div>
+            )}
           </div>
           <Kpi
             label="Egresos del día"
@@ -434,6 +444,13 @@ function TabHoy({
         {/* Devoluciones pendientes — anticipos a devolver/aplicar después
             de cancelaciones. Solo aparece si hay items. */}
         <PendingRefundsCard />
+
+        {/* Anticipos retenidos por cancelación tardía (Forfeited).
+            Plata "ganada" por política. Solo aparece si hay items. */}
+        <ForfeitedTodayCard
+          items={data?.forfeitedToday ?? []}
+          total={data?.forfeitedTodayTotal ?? 0}
+        />
       </div>
 
       {/* DER */}
@@ -1233,6 +1250,80 @@ function PendingRefundRow({
             {resolving ? 'Marcando…' : isCredit ? 'Marcar aplicado' : 'Marcar transferido'}
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Anticipos retenidos por cancelación tardía (Forfeited)                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Card para visualizar los Forfeited del día — anticipos que el salón se
+ * quedó porque la cliente canceló muy sobre la hora. Sin esta card, la
+ * admin no ve cuánto "ganó" hoy por su política estricta.
+ *
+ * El monto ya está contado dentro del Total recaudado (es voucher Validated).
+ * Esta sección solo lo VISIBILIZA con drill-down por caso.
+ */
+function ForfeitedTodayCard({
+  items, total,
+}: {
+  items: ForfeitedItem[]
+  total: number
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-2xl border border-warm-150 shadow-soft overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-warm-150 flex items-center justify-between">
+        <div>
+          <h3 className="font-serif text-[18px] text-warm-800">
+            Anticipos retenidos por cancelación tardía
+          </h3>
+          <p className="text-[11.5px] text-warm-500 mt-0.5">
+            Clientas que avisaron sobre la hora — el salón retuvo el anticipo por política.
+            Ya está contado dentro del total recaudado.
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-[10.5px] uppercase tracking-wide text-warm-500">Total</div>
+          <div className="text-[15px] font-semibold text-warm-800 tabular-nums">
+            {fmtCop(total)}
+          </div>
+        </div>
+      </div>
+      <div className="divide-y divide-warm-100">
+        {items.map((f) => (
+          <div key={f.voucherId} className="px-5 py-3 flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-medium text-warm-800 truncate">
+                {f.customerName}
+              </div>
+              <div className="text-[12px] text-warm-500 mt-0.5 truncate">
+                {f.serviceName} · cita era {new Date(f.appointmentStartAt).toLocaleString('es-CO', {
+                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                })}
+              </div>
+              {f.cancellationReason && (
+                <div className="text-[11.5px] text-warm-500 mt-1 italic line-clamp-1">
+                  "{f.cancellationReason}"
+                </div>
+              )}
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-[13.5px] font-semibold text-warm-800 tabular-nums">
+                {fmtCop(f.amount)}
+              </div>
+              <div className="text-[10.5px] text-warm-400 mt-0.5">
+                cancelada {new Date(f.cancelledAt).toLocaleDateString('es-CO', {
+                  day: 'numeric', month: 'short',
+                })}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

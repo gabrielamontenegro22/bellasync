@@ -25,9 +25,12 @@ import { useSalonHours } from '@/features/settings/useSalonHours'
  * con `top` y `height` proporcionales a la hora de inicio y duración.
  */
 
-// Día visible: 8 AM – 9 PM
-const DAY_START_MIN = 8 * 60
-const DAY_END_MIN = 21 * 60
+// Rango default cuando no hay horario configurado para el día: 8 AM – 9 PM.
+// Cuando SÍ hay horario configurado (lo más común), el timeline se ajusta
+// dinámicamente a la apertura/cierre del día para que citas fuera del rango
+// default sigan visibles. Ver computeDayRange() abajo.
+const DEFAULT_START_MIN = 8 * 60
+const DEFAULT_END_MIN = 21 * 60
 const PX_PER_MIN = 1.7  // 1 hora = 102 px → tarjetas con más aire visual
 const RAIL_WIDTH = 72   // ancho del rail de horas (px)
 
@@ -35,13 +38,6 @@ const RAIL_WIDTH = 72   // ancho del rail de horas (px)
 // Total = TOP + BOTTOM, da el "respiro" entre citas consecutivas.
 const BLOCK_TOP_MARGIN = 4
 const BLOCK_BOTTOM_MARGIN = 4
-
-// Las horas del rail (cada hora en punto)
-const HOURS = (() => {
-  const out: number[] = []
-  for (let m = DAY_START_MIN; m <= DAY_END_MIN; m += 60) out.push(m)
-  return out
-})()
 
 interface AgendaTimelineProps {
   appointments: AppointmentResponse[]
@@ -61,10 +57,6 @@ export function AgendaTimeline({ appointments, date, selectedId, onSelect }: Age
   // Horario del salón — para pintar las franjas cerradas. Si no hay
   // configurado (opt-in), no se dibuja nada (= todos los días abiertos).
   const { data: salonHours } = useSalonHours()
-  const closedBands = useMemo(
-    () => computeClosedBands(date, salonHours),
-    [date, salonHours],
-  )
 
   // Agrupar citas por stylist para acceso O(1) por columna
   const byStylist = useMemo(() => {
@@ -75,6 +67,32 @@ export function AgendaTimeline({ appointments, date, selectedId, onSelect }: Age
     })
     return m
   }, [appointments, stylists])
+
+  // Rango visible del timeline. Se calcula dinámicamente para cubrir TANTO:
+  //   - El horario configurado del salón para este día (ej: cierra a las 12am)
+  //   - El rango de citas que existen (ej: hay cita a las 22:00 aunque el
+  //     salón "cierre" a las 21:00 — la cita igual debe verse)
+  //   - El default 8am–9pm como fallback / piso mínimo de visibilidad
+  // Sin esto, una admin que cambie su horario o cree citas fuera del default
+  // ve el timeline cortado y pensa que la cita no existe.
+  const { DAY_START_MIN, DAY_END_MIN } = useMemo(
+    () => computeDayRange(date, salonHours, appointments),
+    [date, salonHours, appointments],
+  )
+
+  // Las franjas cerradas se calculan DESPUÉS del rango — para que se clampeen
+  // al viewport visible actual.
+  const closedBands = useMemo(
+    () => computeClosedBands(date, salonHours, DAY_START_MIN, DAY_END_MIN),
+    [date, salonHours, DAY_START_MIN, DAY_END_MIN],
+  )
+
+  // Las horas del rail (cada hora en punto) — se recalculan si cambia el rango.
+  const HOURS = useMemo(() => {
+    const out: number[] = []
+    for (let m = DAY_START_MIN; m <= DAY_END_MIN; m += 60) out.push(m)
+    return out
+  }, [DAY_START_MIN, DAY_END_MIN])
 
   // Línea "ahora" si la fecha es hoy
   const today = formatLocalDate(new Date())
@@ -233,6 +251,8 @@ export function AgendaTimeline({ appointments, date, selectedId, onSelect }: Age
               onSelect={onSelect}
               selectedId={selectedId}
               railHeight={railHeight}
+              dayStartMin={DAY_START_MIN}
+              dayEndMin={DAY_END_MIN}
             />
           ))}
 
@@ -309,18 +329,20 @@ function StylistHeader({ stylist, count }: { stylist: StylistResponse; count: nu
 
 // ---------- Stylist column body ----------
 function StylistColumn({
-  appts, onSelect, selectedId, railHeight,
+  appts, onSelect, selectedId, railHeight, dayStartMin, dayEndMin,
 }: {
   appts: AppointmentResponse[]
   onSelect: (a: AppointmentResponse) => void
   selectedId: string | null
   railHeight: number
+  dayStartMin: number
+  dayEndMin: number
 }) {
   // Líneas cada 30 min — las "en hora" más visibles, las de "media hora" sutiles.
   // Generamos divs absolutos de 1px (height: 1 + bg) en lugar de border-b para
   // garantizar que el navegador renderice la línea (border en div de altura 0 a
   // veces se colapsa).
-  const totalRows = (DAY_END_MIN - DAY_START_MIN) / 30
+  const totalRows = (dayEndMin - dayStartMin) / 30
   return (
     <div className="relative border-l border-warm-150" style={{ height: railHeight }}>
       {/* grid lines horizontales */}
@@ -345,6 +367,8 @@ function StylistColumn({
           appointment={a}
           selected={selectedId === a.id}
           onClick={() => onSelect(a)}
+          dayStartMin={dayStartMin}
+          dayEndMin={dayEndMin}
         />
       ))}
     </div>
@@ -362,21 +386,23 @@ const STATUS_BLOCK: Record<AppointmentStatus, { block: string; dot: string }> = 
 }
 
 function ApptBlock({
-  appointment, selected, onClick,
+  appointment, selected, onClick, dayStartMin, dayEndMin,
 }: {
   appointment: AppointmentResponse
   selected: boolean
   onClick: () => void
+  dayStartMin: number
+  dayEndMin: number
 }) {
   const startMin = isoToLocalMinutes(appointment.startAt)
   const endMin   = isoToLocalMinutes(appointment.endAt)
 
   // Clamp dentro del día visible para que no se desborden por arriba/abajo
-  const clampedStart = Math.max(startMin, DAY_START_MIN)
-  const clampedEnd = Math.min(endMin, DAY_END_MIN)
+  const clampedStart = Math.max(startMin, dayStartMin)
+  const clampedEnd = Math.min(endMin, dayEndMin)
   if (clampedEnd <= clampedStart) return null
 
-  const top = (clampedStart - DAY_START_MIN) * PX_PER_MIN
+  const top = (clampedStart - dayStartMin) * PX_PER_MIN
   const height = (clampedEnd - clampedStart) * PX_PER_MIN
   const status = STATUS_BLOCK[appointment.status]
 
@@ -493,6 +519,8 @@ interface ClosedBand {
 function computeClosedBands(
   dateStr: string,
   hours: SalonHoursLike | null | undefined,
+  dayStartMin: number,
+  dayEndMin: number,
 ): ClosedBand[] {
   if (!hours) return []  // sin horario configurado → no dibujamos nada
 
@@ -501,8 +529,8 @@ function computeClosedBands(
   // ¿Día cerrado puntual?
   if (hours.closedDates.includes(dateStr)) {
     bands.push({
-      fromMin: DAY_START_MIN,
-      toMin: DAY_END_MIN,
+      fromMin: dayStartMin,
+      toMin: dayEndMin,
       label: 'Salón cerrado',
     })
     return bands
@@ -517,8 +545,8 @@ function computeClosedBands(
   const dayRange = hours.days[String(dayOfWeek)]
   if (!dayRange) {
     bands.push({
-      fromMin: DAY_START_MIN,
-      toMin: DAY_END_MIN,
+      fromMin: dayStartMin,
+      toMin: dayEndMin,
       label: 'Día cerrado',
     })
     return bands
@@ -526,20 +554,20 @@ function computeClosedBands(
 
   // Antes de la apertura
   const openMin = dayRange.fromHour * 60
-  if (openMin > DAY_START_MIN) {
+  if (openMin > dayStartMin) {
     bands.push({
-      fromMin: DAY_START_MIN,
-      toMin: Math.min(openMin, DAY_END_MIN),
+      fromMin: dayStartMin,
+      toMin: Math.min(openMin, dayEndMin),
       label: 'Cerrado',
     })
   }
 
   // Después del cierre
   const closeMin = dayRange.toHour * 60
-  if (closeMin < DAY_END_MIN) {
+  if (closeMin < dayEndMin) {
     bands.push({
-      fromMin: Math.max(closeMin, DAY_START_MIN),
-      toMin: DAY_END_MIN,
+      fromMin: Math.max(closeMin, dayStartMin),
+      toMin: dayEndMin,
       label: 'Cerrado',
     })
   }
@@ -548,14 +576,62 @@ function computeClosedBands(
   if (hours.lunchBreakEnabled) {
     const lunchFromMin = hours.lunchBreakFromHour * 60
     const lunchToMin = hours.lunchBreakToHour * 60
-    const from = Math.max(DAY_START_MIN, lunchFromMin)
-    const to = Math.min(DAY_END_MIN, lunchToMin)
+    const from = Math.max(dayStartMin, lunchFromMin)
+    const to = Math.min(dayEndMin, lunchToMin)
     if (to > from) {
       bands.push({ fromMin: from, toMin: to, label: 'Almuerzo' })
     }
   }
 
   return bands
+}
+
+/**
+ * Calcula el rango visible del timeline para un día. Combina 3 fuentes:
+ *   1. Default 8am–9pm (mínimo histórico).
+ *   2. Horario configurado del salón para ese día de la semana (si existe).
+ *      Esto cubre el caso "viernes hasta 12am" o "spa abre desde las 7am".
+ *   3. Rango de citas del día — si hay citas fuera del horario del salón
+ *      (ej. una cancelada que quedó tarde, o un walk-in fuera de horario)
+ *      las queremos visibles igual para no esconder data.
+ *
+ * El resultado se redondea a horas en punto para que el rail visual sea
+ * limpio (no "9:23pm").
+ */
+function computeDayRange(
+  dateStr: string,
+  hours: SalonHoursLike | null | undefined,
+  appointments: AppointmentResponse[],
+): { DAY_START_MIN: number; DAY_END_MIN: number } {
+  let startMin = DEFAULT_START_MIN
+  let endMin = DEFAULT_END_MIN
+
+  // Expandir según horario del salón para este día de la semana.
+  if (hours) {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const jsDate = new Date(y, m - 1, d)
+    const jsDow = jsDate.getDay()
+    const dayOfWeek = (jsDow + 6) % 7
+    const dayRange = hours.days[String(dayOfWeek)]
+    if (dayRange) {
+      startMin = Math.min(startMin, dayRange.fromHour * 60)
+      endMin = Math.max(endMin, dayRange.toHour * 60)
+    }
+  }
+
+  // Expandir según citas — solo las del día actual.
+  for (const a of appointments) {
+    const startA = isoToLocalMinutes(a.startAt)
+    const endA = isoToLocalMinutes(a.endAt)
+    if (startA < startMin) startMin = Math.floor(startA / 60) * 60       // redondeo abajo a la hora
+    if (endA > endMin) endMin = Math.ceil(endA / 60) * 60                  // redondeo arriba a la hora
+  }
+
+  // Tope: 0–24h. Algunas configs raras podrían intentar pasarse.
+  startMin = Math.max(0, startMin)
+  endMin = Math.min(24 * 60, endMin)
+
+  return { DAY_START_MIN: startMin, DAY_END_MIN: endMin }
 }
 
 /** Subset de SalonHoursDto que usa computeClosedBands — evita acoplar

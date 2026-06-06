@@ -18,11 +18,40 @@ export interface MethodBreakdownItem {
   byProvider: ProviderBreakdownItem[]
 }
 
+/**
+ * Item de "Anticipos retenidos por cancelación tardía" — un voucher cuya
+ * cita se canceló con decisión Forfeited (No devolver). El salón se quedó
+ * con esa plata por política.
+ */
+export interface ForfeitedItem {
+  voucherId: string
+  customerName: string
+  serviceName: string
+  amount: number
+  /** Cuándo era la cita cancelada (ISO). */
+  appointmentStartAt: string
+  /** Cuándo se canceló la cita (ISO). */
+  cancelledAt: string
+  cancellationReason: string | null
+}
+
 export interface DailyCashSummary {
   date: string  // YYYY-MM-DD
+  /** Plata REAL que entró hoy (Payments + vouchers externos). Excluye crédito interno. */
   totalAmount: number
   totalTips: number
+  /** Cantidad de movimientos visibles (pagos + vouchers externos). */
   paymentCount: number
+  /** Sub-total de anticipos validados hoy. */
+  validatedDepositsTotal: number
+  validatedDepositsCount: number
+  /** Crédito interno aplicado hoy (saldo viejo consumido). NO es plata nueva. */
+  internalCreditTotal: number
+  internalCreditCount: number
+  /** Anticipos retenidos hoy por cancelación tardía. Ingreso "ganado" por política. */
+  forfeitedTodayTotal: number
+  forfeitedTodayCount: number
+  forfeitedToday: ForfeitedItem[]
   byMethod: MethodBreakdownItem[]
   payments: PaymentResponse[]
   totalExpenses: number

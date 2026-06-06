@@ -15,6 +15,13 @@ public sealed class GetDailyCashSummaryHandler
     // BellaSync opera solo en Colombia (UTC-5 todo el año).
     private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
+    // Marcador del Bank en los vouchers que representan APLICACIÓN de
+    // crédito interno (no plata nueva). Se usa al crear el voucher en
+    // CreateAppointmentHandler.ApplyCustomerCreditsAsync.
+    // Si en el futuro queremos discriminar por enum/columna en vez de
+    // string mágico, este es el único lugar a tocar.
+    private const string InternalCreditBankMarker = "Crédito interno";
+
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
 
@@ -48,12 +55,13 @@ public sealed class GetDailyCashSummaryHandler
             .OrderBy(p => p.RegisteredAt)
             .ToListAsync(ct);
 
-        // Vouchers validados HOY (por DecidedAt). Son anticipos que la
-        // admin aprobó en este día — para la caja del día son revenue
-        // que entró por transferencia con su banco. Se mergean al
-        // breakdown por método para que la admin vea el TOTAL de plata
-        // que entró hoy, no solo los pagos finales.
-        var validatedVouchers = await _db.PaymentVouchers
+        // Vouchers validados HOY (por DecidedAt). Separamos en 2 grupos:
+        //   1. "Externos" — plata real que entró por transferencia bancaria.
+        //      Se cuentan al TotalAmount y al breakdown por método.
+        //   2. "Internos" — aplicación de crédito viejo (Bank = "Crédito interno").
+        //      NO se cuentan al TotalAmount porque la plata ya había entrado
+        //      antes; lo que pasa hoy es solo consumo de saldo.
+        var allValidatedVouchersToday = await _db.PaymentVouchers
             .AsNoTracking()
             .Where(v => v.Status == PaymentVoucherStatus.Validated
                      && v.DecidedAt != null
@@ -62,27 +70,56 @@ public sealed class GetDailyCashSummaryHandler
             .Select(v => new { v.ReportedAmount, v.Bank })
             .ToListAsync(ct);
 
-        var depositsTotal = validatedVouchers.Sum(v => v.ReportedAmount.Amount);
-        var depositsCount = validatedVouchers.Count;
+        var externalVouchers = allValidatedVouchersToday
+            .Where(v => v.Bank != InternalCreditBankMarker)
+            .ToList();
+        var internalVouchers = allValidatedVouchersToday
+            .Where(v => v.Bank == InternalCreditBankMarker)
+            .ToList();
 
-        // Agregados en C# — los Money están con HasConversion y EF no
-        // los traduce bien dentro de agrupaciones SQL (mismo problema
-        // que tuvimos con vouchers). En memoria es trivial.
-        // Total incluye TODO lo que entró: pagos finales + anticipos validados.
+        var depositsTotal = externalVouchers.Sum(v => v.ReportedAmount.Amount);
+        var depositsCount = externalVouchers.Count;
+
+        var internalCreditTotal = internalVouchers.Sum(v => v.ReportedAmount.Amount);
+        var internalCreditCount = internalVouchers.Count;
+
+        // Total del día = pagos directos + anticipos externos validados hoy.
+        // EXCLUYE explícitamente los créditos internos (los muestra aparte).
         var paymentsTotal = payments.Sum(p => p.Amount.Amount + p.Tip.Amount);
         var totalAmount = paymentsTotal + depositsTotal;
         var totalTips = payments.Sum(p => p.Tip.Amount);
+
+        // Forfeited HOY: cancelaciones tardías donde el salón retuvo el anticipo.
+        // RefundResolvedAt es la hora de la cancelación (Forfeited se autoresuelve
+        // al instante). Filtramos por ese campo dentro del rango del día.
+        var forfeitedVouchers = await _db.PaymentVouchers
+            .AsNoTracking()
+            .Include(v => v.Appointment).ThenInclude(a => a!.Customer)
+            .Include(v => v.Appointment).ThenInclude(a => a!.Service)
+            .Where(v => v.RefundDecision == DepositRefundDecision.Forfeited
+                     && v.RefundResolvedAt != null
+                     && v.RefundResolvedAt >= dayStartUtc
+                     && v.RefundResolvedAt < dayEndUtc)
+            .ToListAsync(ct);
+
+        var forfeitedItems = forfeitedVouchers.Select(v => new ForfeitedItem
+        {
+            VoucherId = v.Id,
+            CustomerName = v.Appointment?.Customer?.FullName ?? string.Empty,
+            ServiceName = v.Appointment?.Service?.Name ?? string.Empty,
+            Amount = v.ReportedAmount.Amount,
+            AppointmentStartAt = v.Appointment?.StartAt ?? default,
+            CancelledAt = v.Appointment?.CancelledAt ?? v.RefundResolvedAt ?? default,
+            CancellationReason = v.Appointment?.CancellationReason,
+        }).ToList();
+
+        var forfeitedTotal = forfeitedItems.Sum(f => f.Amount);
+        var forfeitedCount = forfeitedItems.Count;
 
         // Agrupar payments por método para el breakdown base.
         var paymentMethodGroups = payments
             .GroupBy(p => p.Method)
             .ToDictionary(g => g.Key, g => g.ToList());
-
-        // Mergear vouchers en el grupo Transfer (anticipos por
-        // transferencia son el caso casi universal en CO).
-        var transferList = paymentMethodGroups.GetValueOrDefault(
-            BellaSync.Domain.Entities.PaymentMethod.Transfer,
-            new List<BellaSync.Domain.Entities.Payment>());
 
         var byMethod = new List<MethodBreakdownItem>();
 
@@ -91,14 +128,14 @@ public sealed class GetDailyCashSummaryHandler
             var methodTotal = payList.Sum(p => p.Amount.Amount + p.Tip.Amount);
             var methodCount = payList.Count;
 
-            // Si es Transfer, sumamos también los vouchers a este método.
+            // Si es Transfer, sumamos también los vouchers EXTERNOS a este método.
+            // Los internos NO se mergean acá porque no representan plata bancaria.
             var voucherProviderRows = new List<ProviderBreakdownItem>();
-            if (method == BellaSync.Domain.Entities.PaymentMethod.Transfer
-                && validatedVouchers.Count > 0)
+            if (method == PaymentMethod.Transfer && externalVouchers.Count > 0)
             {
                 methodTotal += depositsTotal;
                 methodCount += depositsCount;
-                voucherProviderRows = validatedVouchers
+                voucherProviderRows = externalVouchers
                     .GroupBy(v => string.IsNullOrWhiteSpace(v.Bank) ? null : v.Bank)
                     .Select(vg => new ProviderBreakdownItem
                     {
@@ -109,7 +146,7 @@ public sealed class GetDailyCashSummaryHandler
                     .ToList();
             }
 
-            var paymentProviderRows = method == BellaSync.Domain.Entities.PaymentMethod.Cash
+            var paymentProviderRows = method == PaymentMethod.Cash
                 ? new List<ProviderBreakdownItem>()
                 : payList.GroupBy(p => p.Provider)
                     .Select(pg => new ProviderBreakdownItem
@@ -142,17 +179,17 @@ public sealed class GetDailyCashSummaryHandler
             });
         }
 
-        // Si HAY vouchers pero NO había payments por Transfer todavía,
+        // Si HAY vouchers externos pero NO había payments por Transfer todavía,
         // hay que crear la entrada de Transfer ex-nihilo.
-        if (validatedVouchers.Count > 0
-            && !paymentMethodGroups.ContainsKey(BellaSync.Domain.Entities.PaymentMethod.Transfer))
+        if (externalVouchers.Count > 0
+            && !paymentMethodGroups.ContainsKey(PaymentMethod.Transfer))
         {
             byMethod.Add(new MethodBreakdownItem
             {
-                Method = BellaSync.Domain.Entities.PaymentMethod.Transfer.ToString(),
+                Method = PaymentMethod.Transfer.ToString(),
                 Count = depositsCount,
                 Total = depositsTotal,
-                ByProvider = validatedVouchers
+                ByProvider = externalVouchers
                     .GroupBy(v => string.IsNullOrWhiteSpace(v.Bank) ? null : v.Bank)
                     .Select(vg => new ProviderBreakdownItem
                     {
@@ -186,9 +223,16 @@ public sealed class GetDailyCashSummaryHandler
             Date = date.ToString("yyyy-MM-dd"),
             TotalAmount = totalAmount,
             TotalTips = totalTips,
-            PaymentCount = payments.Count,
+            // Conteo de movimientos visibles: pagos + vouchers externos.
+            // Internos NO porque no son movimientos de plata.
+            PaymentCount = payments.Count + depositsCount,
             ValidatedDepositsTotal = depositsTotal,
             ValidatedDepositsCount = depositsCount,
+            InternalCreditTotal = internalCreditTotal,
+            InternalCreditCount = internalCreditCount,
+            ForfeitedTodayTotal = forfeitedTotal,
+            ForfeitedTodayCount = forfeitedCount,
+            ForfeitedToday = forfeitedItems,
             ByMethod = byMethod,
             Payments = payments.Select(PaymentMapper.ToResponse).ToList(),
             TotalExpenses = totalExpenses,
