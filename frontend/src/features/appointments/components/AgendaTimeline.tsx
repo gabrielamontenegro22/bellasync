@@ -403,14 +403,24 @@ function ApptBlock({
   if (clampedEnd <= clampedStart) return null
 
   const top = (clampedStart - dayStartMin) * PX_PER_MIN
-  const height = (clampedEnd - clampedStart) * PX_PER_MIN
+  const fullHeight = (clampedEnd - clampedStart) * PX_PER_MIN
   const status = STATUS_BLOCK[appointment.status]
 
-  // Altura útil = altura del slot menos el margen top+bottom para crear gap visual
-  // entre tarjetas consecutivas (evita que se vean "tocando" verticalmente).
-  const usableHeight = height - BLOCK_TOP_MARGIN - BLOCK_BOTTOM_MARGIN
-  const isTiny = usableHeight < 38
-  const isXL = usableHeight >= 96
+  // Las canceladas y no-shows COLAPSAN a una franja fina de 22px en vez de
+  // ocupar todo su slot temporal. Sin esto, una cita cancelada de 2h
+  // bloquea visualmente el slot completo y cuando se agenda una nueva
+  // sobre ese horario, la nueva queda "metida adentro" del bloque viejo
+  // (UX terrible: parece que coexisten cuando en realidad la vieja no
+  // ocupa el cupo). Con colapso, la cancelada queda como referencia
+  // visual ("acá hubo una cita que se canceló") sin estorbar.
+  const isInactive = appointment.status === 'Cancelled' || appointment.status === 'NoShow'
+  const COLLAPSED_HEIGHT = 22
+  const usableHeight = isInactive
+    ? COLLAPSED_HEIGHT
+    : fullHeight - BLOCK_TOP_MARGIN - BLOCK_BOTTOM_MARGIN
+
+  const isTiny = isInactive || usableHeight < 38
+  const isXL = !isInactive && usableHeight >= 96
 
   return (
     <button
@@ -419,9 +429,11 @@ function ApptBlock({
       className={cls(
         // left-2/right-2 = más margen horizontal vs el borde de la columna
         'absolute left-2 right-2 text-left rounded-lg border shadow-softer transition-all',
-        isTiny ? 'px-2.5 py-1.5' : 'px-3 py-2',
+        isTiny ? 'px-2.5 py-1' : 'px-3 py-2',
         'hover:shadow-pop hover:-translate-y-[1px] hover:z-20',
         status.block,
+        // Las inactivas van debajo de las activas en z para no robar foco.
+        isInactive ? 'z-0 opacity-75' : 'z-10',
         selected && 'ring-2 ring-brand-700 ring-offset-1 ring-offset-white z-20',
       )}
       style={{
