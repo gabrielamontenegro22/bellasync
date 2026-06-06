@@ -54,6 +54,13 @@ export function AgendaPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
+  /**
+   * Cliente pre-seleccionado al abrir el modal "Nueva cita". Se usa
+   * cuando el flujo viene de "post-cancel con crédito" para que la
+   * admin no tenga que volver a buscar al cliente.
+   * null = abrir modal normal sin pre-selección.
+   */
+  const [newModalCustomerId, setNewModalCustomerId] = useState<string | null>(null)
   const [bannerDismissed, setBannerDismissed] = useState(false)
   /**
    * Filtro activo en las cards de stats. 'all' = mostrar todas;
@@ -182,7 +189,20 @@ export function AgendaPage() {
               'lg:static lg:w-[420px] lg:flex-shrink-0 lg:z-auto',
             )}
           >
-            <DetailPanel appointment={selected} onClose={() => setSelectedId(null)} />
+            <DetailPanel
+              appointment={selected}
+              onClose={() => setSelectedId(null)}
+              onRescheduleAfterCredit={(customerId) => {
+                // Cliente acaba de cancelar con crédito y dijo "reagendar
+                // ahora". Cerramos el panel detalle (la cita está cancelada,
+                // no sirve verlo más) y abrimos Nueva cita con cliente
+                // pre-cargado. El card de crédito aparecerá solo cuando
+                // el modal traiga los créditos del customer.
+                setSelectedId(null)
+                setNewModalCustomerId(customerId)
+                setShowNewModal(true)
+              }}
+            />
           </aside>
         </>
       )}
@@ -205,7 +225,14 @@ export function AgendaPage() {
       </button>
 
       {showNewModal && (
-        <NewAppointmentModal defaultDate={date} onClose={() => setShowNewModal(false)} />
+        <NewAppointmentModal
+          defaultDate={date}
+          defaultCustomerId={newModalCustomerId}
+          onClose={() => {
+            setShowNewModal(false)
+            setNewModalCustomerId(null)
+          }}
+        />
       )}
     </div>
   )
@@ -481,7 +508,13 @@ const STATUS_LOOK = {
   NoShow:     { label: 'No asistió', dot: 'bg-terra-500', tag: 'bg-terra-100 text-terra-500 border-terra-300' },
 } as const
 
-function DetailPanel({ appointment, onClose }: { appointment: AppointmentResponse; onClose: () => void }) {
+function DetailPanel({
+  appointment, onClose, onRescheduleAfterCredit,
+}: {
+  appointment: AppointmentResponse
+  onClose: () => void
+  onRescheduleAfterCredit?: (customerId: string) => void
+}) {
   const confirm = useConfirmAppointment()
   const start = useStartAppointment()
   const complete = useCompleteAppointment()
@@ -952,6 +985,7 @@ function DetailPanel({ appointment, onClose }: { appointment: AppointmentRespons
         <CancelAppointmentModal
           appointment={appointment}
           onClose={() => setShowCancel(false)}
+          onRescheduleAfterCredit={onRescheduleAfterCredit}
         />
       )}
       {showPayment && (
