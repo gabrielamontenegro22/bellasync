@@ -49,6 +49,16 @@ public class AppointmentResponse
     /// </summary>
     public decimal DirectPaymentsTotal { get; set; }
 
+    /// <summary>
+    /// True si alguno de los vouchers Validated de esta cita es interno
+    /// (IsInternalCredit = true), es decir fue creado por aplicación de
+    /// crédito viejo. El frontend del modal de cancelar lo usa para
+    /// OCULTAR la opción "Devolver el anticipo" — esa decisión no es
+    /// legal sobre internos (el dominio la rechaza) y mostrarla en la
+    /// UI confundiría a la admin.
+    /// </summary>
+    public bool HasInternalCreditVoucher { get; set; }
+
     /// <summary>"Pending" / "Confirmed" / "InProgress" / "Completed" / "Cancelled" / "NoShow"</summary>
     public string Status { get; set; } = string.Empty;
 

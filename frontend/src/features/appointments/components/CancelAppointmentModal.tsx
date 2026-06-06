@@ -67,6 +67,13 @@ export function CancelAppointmentModal({
   // del backend — si es true, el motivo es obligatorio.
   const hasMoney = hasValidatedDeposit || hasDirectPayments
 
+  // Si la cita usa un voucher de crédito interno (anticipo cubierto con
+  // saldo viejo de cita cancelada), la decisión "Devolver" no es legal:
+  // la plata no entró en esta cita, era saldo aplicado. Forzar Refunded
+  // crearía un Expense fantasma que dejaría el Neto del día negativo.
+  // Por eso ocultamos el chip y mostramos una nota explicativa.
+  const isInternalCreditCita = appointment.hasInternalCreditVoucher
+
   const policyQ = useQuery({
     queryKey: ['paymentPolicy'],
     queryFn: getPaymentPolicy,
@@ -85,11 +92,21 @@ export function CancelAppointmentModal({
   //   - fuera de ventana  → Forfeited.
   const autoDecision: DepositRefundDecision | null = useMemo(() => {
     if (!hasValidatedDeposit || !policyQ.data) return null
+    // Si es crédito interno, la decisión auto NO puede ser Refunded.
+    // En esos casos el "auto" representa "lo más equivalente": dentro de
+    // ventana → CreditPending (el saldo vuelve a estar disponible),
+    // fuera de ventana → Forfeited (el salón lo retiene).
+    if (isInternalCreditCita) {
+      const win = policyQ.data.cancellationWindowHours
+      if (win <= 0) return 'Forfeited'
+      const hoursUntil = (new Date(appointment.startAt).getTime() - Date.now()) / 3_600_000
+      return hoursUntil >= win ? 'CreditPending' : 'Forfeited'
+    }
     const win = policyQ.data.cancellationWindowHours
     if (win <= 0) return 'Forfeited'
     const hoursUntil = (new Date(appointment.startAt).getTime() - Date.now()) / 3_600_000
     return hoursUntil >= win ? 'Refunded' : 'Forfeited'
-  }, [hasValidatedDeposit, policyQ.data, appointment.startAt])
+  }, [hasValidatedDeposit, policyQ.data, appointment.startAt, isInternalCreditCita])
 
   const [reason, setReason] = useState('')
   // Override seleccionado por el usuario. null = "usar la sugerencia auto".
@@ -250,28 +267,52 @@ export function CancelAppointmentModal({
               <label className="mb-1.5 block text-[11px] uppercase tracking-wide text-warm-500">
                 ¿Qué hacer con el anticipo?
               </label>
+
+              {isInternalCreditCita && (
+                <div className="text-[11.5px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-2 leading-snug">
+                  <strong>Cita pagada con crédito interno.</strong> No se puede
+                  devolver porque esa plata no entró hoy a la caja — era saldo
+                  viejo de una cita anterior aplicado a ésta. Las opciones son
+                  mantener el crédito disponible o retenerlo definitivamente.
+                  Si necesitás transferir plata real a la cliente, registrá un
+                  egreso manual desde <em>Caja → Registrar egreso</em>.
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-1.5">
                 <DecisionChip
                   label="Usar la sugerencia automática"
-                  desc={autoDecision === 'Refunded'
-                    ? 'Marcar como pendiente de devolución.'
-                    : autoDecision === 'Forfeited'
-                      ? 'El salón se queda con el anticipo.'
-                      : 'Decisión por defecto del backend.'}
+                  desc={isInternalCreditCita
+                    ? (autoDecision === 'Forfeited'
+                        ? 'Retener el saldo (cancelación tardía).'
+                        : 'Devolver el saldo a crédito disponible.')
+                    : (autoDecision === 'Refunded'
+                        ? 'Marcar como pendiente de devolución.'
+                        : autoDecision === 'Forfeited'
+                          ? 'El salón se queda con el anticipo.'
+                          : 'Decisión por defecto del backend.')}
                   selected={override === null}
                   onClick={() => setOverride(null)}
                   disabled={false}
                 />
+                {/* "Devolver el anticipo" SOLO visible cuando NO es crédito interno.
+                    En internos, el dominio rechaza Refunded — mostrarlo confunde. */}
+                {!isInternalCreditCita && (
+                  <DecisionChip
+                    label="Devolver el anticipo"
+                    desc="Queda pendiente hasta que marques la transferencia en Caja."
+                    selected={override === 'Refunded'}
+                    onClick={() => setOverride('Refunded')}
+                    disabled={!canOverride}
+                  />
+                )}
                 <DecisionChip
-                  label="Devolver el anticipo"
-                  desc="Queda pendiente hasta que marques la transferencia en Caja."
-                  selected={override === 'Refunded'}
-                  onClick={() => setOverride('Refunded')}
-                  disabled={!canOverride}
-                />
-                <DecisionChip
-                  label="Crédito para la próxima cita"
-                  desc="La cliente reagenda y el anticipo se aplica al nuevo turno."
+                  label={isInternalCreditCita
+                    ? 'Mantener crédito disponible'
+                    : 'Crédito para la próxima cita'}
+                  desc={isInternalCreditCita
+                    ? 'El saldo vuelve a quedar disponible para que la cliente lo use en una próxima cita.'
+                    : 'La cliente reagenda y el anticipo se aplica al nuevo turno.'}
                   selected={override === 'CreditPending'}
                   onClick={() => setOverride('CreditPending')}
                   disabled={!canOverride}

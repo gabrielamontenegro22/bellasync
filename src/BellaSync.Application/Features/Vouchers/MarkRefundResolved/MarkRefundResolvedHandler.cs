@@ -52,6 +52,23 @@ public sealed class MarkRefundResolvedHandler
             return ApplicationError.Validation("voucher.forfeited",
                 "Este anticipo se marcó como perdido — no requiere acción.");
 
+        // Guarda contra cerrar un CreditPending con saldo parcial sin
+        // consumir. Si tiene AmountApplied > 0 pero < ReportedAmount,
+        // el saldo restante desaparecería sin trazabilidad — preferimos
+        // bloquear y obligar a la admin a tomar acción consciente:
+        // o usar el saldo en otra cita o cambiar a Forfeited.
+        if (voucher.RefundDecision == DepositRefundDecision.CreditPending
+            && voucher.AmountApplied > 0m
+            && voucher.AmountApplied < voucher.ReportedAmount.Amount)
+        {
+            var remaining = voucher.ReportedAmount.Amount - voucher.AmountApplied;
+            return ApplicationError.Validation("voucher.partial_credit",
+                $"Este crédito tiene ${remaining:N0} sin aplicar todavía. " +
+                "Aplicalo en una cita nueva (te lo va a ofrecer al elegir " +
+                "la cliente) o cambiá la decisión a 'No devolver' desde " +
+                "el modal de cancelar la cita original si querés cerrarlo.");
+        }
+
         // Idempotente: si ya estaba resuelto, no reescribimos la fecha
         // (preservar la real). Solo mapeamos y devolvemos.
         if (voucher.RefundResolvedAt is null)
@@ -67,13 +84,18 @@ public sealed class MarkRefundResolvedHandler
 
             // Si la decisión es Refunded (devolución real al cliente),
             // crear automáticamente un Expense para que el cierre de caja
-            // refleje la salida de plata. Sin esto, el total recaudado del
-            // día queda inflado (el voucher cuenta como ingreso pero la
-            // devolución no se ve en ningún lado).
+            // refleje la salida de plata.
             //
-            // Para CreditPending NO creamos expense — la plata no salió,
-            // solo se reservó como saldo para una cita futura.
-            if (voucher.RefundDecision == DepositRefundDecision.Refunded)
+            // EXCEPCIÓN crítica: si el voucher es interno (creado por
+            // aplicación de crédito de otra cita cancelada), la plata NO
+            // está en la caja del día — entró históricamente cuando se
+            // pagó el voucher externo original. Crear un Expense ahora
+            // generaría un Neto negativo artificial. En ese caso, el
+            // dominio (RecordRefundDecision) YA bloquea Refunded para
+            // internos, así que este branch no debería ejecutarse. Pero
+            // defensa en profundidad: doble guarda acá.
+            if (voucher.RefundDecision == DepositRefundDecision.Refunded
+                && !voucher.IsInternalCredit)
             {
                 var concept = $"Devolución anticipo: {voucher.Appointment?.Customer?.FullName ?? "cliente"}" +
                               (voucher.Appointment?.Service?.Name is { } svc ? $" — {svc}" : "");
@@ -93,9 +115,10 @@ public sealed class MarkRefundResolvedHandler
             await _db.SaveChangesAsync(ct);
 
             _logger.LogInformation(
-                "Refund del voucher {VoucherId} marcado como resuelto por user {UserId}. Decision={Decision}, expense_auto={ExpenseAuto}",
+                "Refund del voucher {VoucherId} marcado como resuelto por user {UserId}. Decision={Decision}, internal={Internal}, expense_auto={ExpenseAuto}",
                 voucher.Id, _currentUser.UserId, voucher.RefundDecision,
-                voucher.RefundDecision == DepositRefundDecision.Refunded);
+                voucher.IsInternalCredit,
+                voucher.RefundDecision == DepositRefundDecision.Refunded && !voucher.IsInternalCredit);
         }
 
         return Result<PendingRefundResponse>.Success(new PendingRefundResponse

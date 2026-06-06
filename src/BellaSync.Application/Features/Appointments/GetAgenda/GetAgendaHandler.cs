@@ -63,7 +63,8 @@ public sealed class GetAgendaHandler : IQueryHandler<GetAgendaQuery, AgendaRespo
                     return AppointmentMapper.ToResponse(
                         a,
                         totals?.ValidatedDeposit ?? 0m,
-                        totals?.DirectPayments ?? 0m);
+                        totals?.DirectPayments ?? 0m,
+                        totals?.HasInternalCreditVoucher ?? false);
                 })
                 .ToList(),
         };
