@@ -17,6 +17,8 @@ import {
   listCashClosings,
   type DailyCashSummary,
   type CashClosing,
+  type ForfeitedItem,
+  type ValidatedVoucherItem,
 } from '@/api/cash'
 import {
   listPendingRefunds,
@@ -190,8 +192,17 @@ export function CashClosingPage() {
               {fmtCop(data?.totalAmount ?? 0)}
             </div>
             <div className="text-[11.5px] text-brand-100 mt-1.5">
-              {data?.paymentCount ?? 0} transacciones
+              {data?.paymentCount ?? 0} movimientos
+              {(data?.validatedDepositsCount ?? 0) > 0 && (
+                <> · {data!.validatedDepositsCount} anticipos</>
+              )}
             </div>
+            {(data?.internalCreditTotal ?? 0) > 0 && (
+              <div className="text-[10.5px] text-brand-200 mt-1.5 leading-snug" title="Saldo viejo aplicado a citas nuevas — no es plata nueva entrante">
+                + {fmtCop(data!.internalCreditTotal)} crédito interno aplicado
+                <span className="opacity-70"> (no cuenta como ingreso)</span>
+              </div>
+            )}
           </div>
           <Kpi
             label="Egresos del día"
@@ -310,29 +321,65 @@ function TabHoy({
   onOpenExpense: () => void
   closed: boolean
 }) {
-  const txns = data?.payments ?? []
+  const payments = data?.payments ?? []
+  const vouchers = data?.validatedVouchersToday ?? []
   const totalAmount = data?.totalAmount ?? 0
 
-  // Conteo por método para los pills.
+  // Lista UNIFICADA de movimientos: Payments (cobros en sitio) +
+  // Vouchers Validated (anticipos online). Discriminator en el campo
+  // 'kind' para que el renderizador elija el row correcto.
+  // Se ordena por hora descendente — lo más reciente arriba.
+  type Movement =
+    | { kind: 'payment'; at: string; data: PaymentResponse }
+    | { kind: 'voucher'; at: string; data: ValidatedVoucherItem }
+
+  const movements: Movement[] = useMemo(() => {
+    const all: Movement[] = [
+      ...payments.map(p => ({ kind: 'payment' as const, at: p.registeredAt, data: p })),
+      ...vouchers.map(v => ({ kind: 'voucher' as const, at: v.decidedAt, data: v })),
+    ]
+    return all.sort((a, b) => b.at.localeCompare(a.at))
+  }, [payments, vouchers])
+
+  // Conteo por método para los pills. Vouchers cuentan como "Transfer"
+  // excepto los internos que tienen su propia categoría "Crédito".
   const countByMethod = useMemo(() => {
     const m: Record<string, number> = {}
-    txns.forEach((t) => {
-      m[t.method] = (m[t.method] ?? 0) + 1
+    payments.forEach((p) => {
+      m[p.method] = (m[p.method] ?? 0) + 1
+    })
+    vouchers.forEach((v) => {
+      const key = v.isInternalCredit ? 'Credit' : 'Transfer'
+      m[key] = (m[key] ?? 0) + 1
     })
     return m
-  }, [txns])
+  }, [payments, vouchers])
 
-  const filteredTxns =
-    filterMethod === 'all' ? txns : txns.filter((t) => t.method === filterMethod)
+  // Filtro aplicado a la lista unificada.
+  const filteredMovements = useMemo(() => {
+    if (filterMethod === 'all') return movements
+    return movements.filter(m => {
+      if (m.kind === 'payment') return m.data.method === filterMethod
+      // voucher
+      if (filterMethod === 'Credit') return m.data.isInternalCredit
+      if (filterMethod === 'Transfer') return !m.data.isInternalCredit
+      return false
+    })
+  }, [movements, filterMethod])
 
-  // Ventas por estilista (ordenado descendente).
+  // Ventas por estilista — combinando payments + vouchers EXTERNOS
+  // (los internos no son plata nueva, no cuentan a la venta del día).
   const byStylist = useMemo(() => {
     const m: Record<string, number> = {}
-    txns.forEach((t) => {
+    payments.forEach((t) => {
       m[t.stylistName] = (m[t.stylistName] ?? 0) + t.total
     })
+    vouchers.forEach((v) => {
+      if (v.isInternalCredit) return
+      m[v.stylistName] = (m[v.stylistName] ?? 0) + v.amount
+    })
     return Object.entries(m).sort((a, b) => b[1] - a[1])
-  }, [txns])
+  }, [payments, vouchers])
 
   // byMethod del backend ya viene ordenado descendente.
   const breakdown = data?.byMethod ?? []
@@ -353,7 +400,7 @@ function TabHoy({
                 : 'bg-white border border-warm-200 text-warm-600 hover:border-warm-300',
             )}
           >
-            Todas <span className="tabular-nums opacity-70">{txns.length}</span>
+            Todas <span className="tabular-nums opacity-70">{movements.length}</span>
           </button>
           {Object.entries(countByMethod).map(([method, count]) => {
             const m = METHOD_LOOK[method] ?? METHOD_LOOK.Other
@@ -381,7 +428,7 @@ function TabHoy({
           <div className="px-5 py-3.5 border-b border-warm-150 flex items-center justify-between">
             <h3 className="font-serif text-[18px] text-warm-800">Transacciones</h3>
             <span className="text-[11.5px] text-warm-500">
-              {filteredTxns.length} cobros
+              {filteredMovements.length} movimientos
             </span>
           </div>
           <div className="divide-y divide-warm-100 max-h-[420px] overflow-y-auto">
@@ -395,14 +442,16 @@ function TabHoy({
                 Cargando…
               </div>
             )}
-            {!isLoading && !error && filteredTxns.length === 0 && (
+            {!isLoading && !error && filteredMovements.length === 0 && (
               <div className="px-5 py-10 text-center text-[13px] text-warm-500">
-                Aún no hay pagos registrados {filterMethod === 'all' ? 'hoy' : 'de ese método'}.
+                Aún no hay movimientos {filterMethod === 'all' ? 'hoy' : 'de ese método'}.
               </div>
             )}
-            {filteredTxns.map((t) => (
-              <TxnRow key={t.id} txn={t} />
-            ))}
+            {filteredMovements.map((m) =>
+              m.kind === 'payment'
+                ? <TxnRow key={'p-' + m.data.id} txn={m.data} />
+                : <VoucherRow key={'v-' + m.data.voucherId} voucher={m.data} />,
+            )}
           </div>
         </div>
 
@@ -434,6 +483,13 @@ function TabHoy({
         {/* Devoluciones pendientes — anticipos a devolver/aplicar después
             de cancelaciones. Solo aparece si hay items. */}
         <PendingRefundsCard />
+
+        {/* Anticipos retenidos por cancelación tardía (Forfeited).
+            Plata "ganada" por política. Solo aparece si hay items. */}
+        <ForfeitedTodayCard
+          items={data?.forfeitedToday ?? []}
+          total={data?.forfeitedTodayTotal ?? 0}
+        />
       </div>
 
       {/* DER */}
@@ -614,7 +670,7 @@ function TxnRow({ txn }: { txn: PaymentResponse }) {
           {txn.customerName}
         </div>
         <div className="text-[11.5px] text-warm-500 truncate">
-          {txn.serviceName} · {txn.stylistName}
+          Cobro · {txn.serviceName} · {txn.stylistName}
           {txn.registeredByUserName && (
             <> · Cobró <span className="text-warm-700">{txn.registeredByUserName}</span></>
           )}
@@ -630,6 +686,52 @@ function TxnRow({ txn }: { txn: PaymentResponse }) {
       </div>
       <div className="text-[13.5px] font-medium text-warm-800 tabular-nums w-24 text-right">
         {fmtCop(txn.total)}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Row para un voucher Validated. Muestra "de dónde llega" (banco o
+ * indicador de crédito interno). Los internos se ven con badge gris
+ * y monto en gris claro para distinguir que no es plata nueva.
+ */
+function VoucherRow({ voucher }: { voucher: ValidatedVoucherItem }) {
+  const isInternal = voucher.isInternalCredit
+  return (
+    <div className="px-5 py-3 flex items-center gap-3 hover:bg-warm-50/50 transition">
+      <div className="text-[11.5px] tabular-nums text-warm-400 w-10">
+        {formatHHmm(voucher.decidedAt)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium text-warm-800 truncate">
+          {voucher.customerName}
+        </div>
+        <div className="text-[11.5px] text-warm-500 truncate">
+          {isInternal ? 'Crédito aplicado' : 'Anticipo'} · {voucher.serviceName} · {voucher.stylistName}
+          {voucher.bank && !isInternal && (
+            <> · Desde <span className="text-warm-700">{voucher.bank}</span></>
+          )}
+        </div>
+      </div>
+      <div
+        className={cls(
+          'text-[10.5px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1',
+          isInternal
+            ? 'bg-warm-100 text-warm-600 border border-warm-200'
+            : 'bg-sky-50 text-sky-700 border border-sky-200',
+        )}
+      >
+        {isInternal ? 'Crédito' : 'Anticipo'}
+      </div>
+      <div
+        className={cls(
+          'text-[13.5px] font-medium tabular-nums w-24 text-right',
+          isInternal ? 'text-warm-400 line-through decoration-1' : 'text-warm-800',
+        )}
+        title={isInternal ? 'No es plata nueva — es saldo viejo aplicado' : undefined}
+      >
+        {fmtCop(voucher.amount)}
       </div>
     </div>
   )
@@ -1053,6 +1155,12 @@ const METHOD_LOOK: Record<string, MethodLook> = {
     tone: 'text-warm-700 bg-warm-100',
     dot: 'bg-warm-500',
   },
+  Credit: {
+    label: 'Crédito',
+    icon: <span className="text-[10px] leading-none">★</span>,
+    tone: 'text-warm-600 bg-warm-100',
+    dot: 'bg-warm-400',
+  },
   Other: {
     label: 'Otro',
     icon: <span className="text-[10px] leading-none">•••</span>,
@@ -1233,6 +1341,80 @@ function PendingRefundRow({
             {resolving ? 'Marcando…' : isCredit ? 'Marcar aplicado' : 'Marcar transferido'}
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Anticipos retenidos por cancelación tardía (Forfeited)                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Card para visualizar los Forfeited del día — anticipos que el salón se
+ * quedó porque la cliente canceló muy sobre la hora. Sin esta card, la
+ * admin no ve cuánto "ganó" hoy por su política estricta.
+ *
+ * El monto ya está contado dentro del Total recaudado (es voucher Validated).
+ * Esta sección solo lo VISIBILIZA con drill-down por caso.
+ */
+function ForfeitedTodayCard({
+  items, total,
+}: {
+  items: ForfeitedItem[]
+  total: number
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-2xl border border-warm-150 shadow-soft overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-warm-150 flex items-center justify-between">
+        <div>
+          <h3 className="font-serif text-[18px] text-warm-800">
+            Anticipos retenidos por cancelación tardía
+          </h3>
+          <p className="text-[11.5px] text-warm-500 mt-0.5">
+            Clientas que avisaron sobre la hora — el salón retuvo el anticipo por política.
+            Ya está contado dentro del total recaudado.
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-[10.5px] uppercase tracking-wide text-warm-500">Total</div>
+          <div className="text-[15px] font-semibold text-warm-800 tabular-nums">
+            {fmtCop(total)}
+          </div>
+        </div>
+      </div>
+      <div className="divide-y divide-warm-100">
+        {items.map((f) => (
+          <div key={f.voucherId} className="px-5 py-3 flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-medium text-warm-800 truncate">
+                {f.customerName}
+              </div>
+              <div className="text-[12px] text-warm-500 mt-0.5 truncate">
+                {f.serviceName} · cita era {new Date(f.appointmentStartAt).toLocaleString('es-CO', {
+                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                })}
+              </div>
+              {f.cancellationReason && (
+                <div className="text-[11.5px] text-warm-500 mt-1 italic line-clamp-1">
+                  "{f.cancellationReason}"
+                </div>
+              )}
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-[13.5px] font-semibold text-warm-800 tabular-nums">
+                {fmtCop(f.amount)}
+              </div>
+              <div className="text-[10.5px] text-warm-400 mt-0.5">
+                cancelada {new Date(f.cancelledAt).toLocaleDateString('es-CO', {
+                  day: 'numeric', month: 'short',
+                })}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

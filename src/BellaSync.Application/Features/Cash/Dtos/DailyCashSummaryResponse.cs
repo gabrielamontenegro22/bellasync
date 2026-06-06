@@ -14,28 +14,60 @@ public class DailyCashSummaryResponse
     public string Date { get; set; } = string.Empty;
 
     /// <summary>
-    /// Total recibido en el día: Amount + Tip de los Payments + monto
-    /// de los Vouchers Validados ese día (anticipos validados cuentan
-    /// como plata recibida, vienen del banco igual que los demás
-    /// pagos por transferencia).
+    /// Total de PLATA REAL que entró al banco/caja en el día:
+    ///   = sum(Payments.Amount + Tip) + sum(Vouchers Validated externos)
+    /// EXCLUYE explícitamente los "Vouchers de Crédito interno", que
+    /// representan aplicación de crédito existente (saldo viejo
+    /// consumido), no plata nueva entrando.
     /// </summary>
     public decimal TotalAmount { get; set; }
 
     /// <summary>Solo propinas — info para auditoría.</summary>
     public decimal TotalTips { get; set; }
 
-    /// <summary>Cantidad de pagos registrados ese día.</summary>
+    /// <summary>
+    /// Total de movimientos del día (pagos + vouchers validados externos).
+    /// Coincide con la cantidad de filas que se ven en "Transacciones".
+    /// </summary>
     public int PaymentCount { get; set; }
 
     /// <summary>
     /// Total de anticipos validados ese día (sub-total dentro de
-    /// TotalAmount). Útil para mostrarlo como métrica separada en la UI:
-    /// "Cobrado: $X · Anticipos validados: $Y".
+    /// TotalAmount). EXCLUYE los créditos internos. Útil para mostrarlo
+    /// como métrica separada en la UI: "Cobrado: $X · Anticipos: $Y".
     /// </summary>
     public decimal ValidatedDepositsTotal { get; set; }
 
-    /// <summary>Cantidad de vouchers validados ese día.</summary>
+    /// <summary>Cantidad de vouchers validados ese día (sin créditos internos).</summary>
     public int ValidatedDepositsCount { get; set; }
+
+    /// <summary>
+    /// Total de "crédito interno" aplicado hoy: anticipos viejos que se
+    /// usaron como pago de citas nuevas. NO es plata real entrante (la
+    /// plata ya entró antes, cuando se pagó el voucher original).
+    /// Se muestra aparte para que la admin entienda qué porción del
+    /// "ingreso aparente" del día es saldo viejo aplicado.
+    /// </summary>
+    public decimal InternalCreditTotal { get; set; }
+
+    /// <summary>Cantidad de aplicaciones de crédito interno hoy.</summary>
+    public int InternalCreditCount { get; set; }
+
+    /// <summary>
+    /// Anticipos retenidos hoy por cancelación tardía (decisión Forfeited).
+    /// El salón se quedó con esta plata por política de cancelación —
+    /// es ingreso "ganado" pero invisible si no se reporta.
+    /// </summary>
+    public decimal ForfeitedTodayTotal { get; set; }
+
+    /// <summary>Cantidad de Forfeited hoy.</summary>
+    public int ForfeitedTodayCount { get; set; }
+
+    /// <summary>
+    /// Items individuales de Forfeited del día para drill-down.
+    /// Cada uno = un voucher cuya cita se canceló con decisión "No devolver".
+    /// </summary>
+    public List<ForfeitedItem> ForfeitedToday { get; set; } = new();
 
     /// <summary>
     /// Breakdown por método de pago. Sirve para cruzar contra los
@@ -46,6 +78,18 @@ public class DailyCashSummaryResponse
 
     /// <summary>Lista completa de pagos para drill-down.</summary>
     public List<PaymentResponse> Payments { get; set; } = new();
+
+    /// <summary>
+    /// Vouchers validados HOY (anticipos online). El frontend los muestra
+    /// en la misma lista de "Transacciones" intercalados con los Payments
+    /// por hora, para que la admin vea TODO lo que entró hoy en un mismo
+    /// lugar (no solo cobros en sitio).
+    ///
+    /// Incluye TAMBIÉN los vouchers internos (Bank = "Crédito interno")
+    /// para que el frontend los pueda mostrar con etiqueta distinta
+    /// ("Aplicación de crédito" vs "Anticipo recibido").
+    /// </summary>
+    public List<ValidatedVoucherItem> ValidatedVouchersToday { get; set; } = new();
 
     /// <summary>
     /// Total de egresos del día (todos los métodos). Útil para el KPI
@@ -86,4 +130,43 @@ public class ProviderBreakdownItem
     public string? Provider { get; set; }
     public int Count { get; set; }
     public decimal Total { get; set; }
+}
+
+/// <summary>
+/// Voucher validado del día, formateado para mostrarse junto a los
+/// Payments en la lista de "Transacciones". Permite ver de un vistazo
+/// quién pagó qué (cliente + servicio + banco) sin tener que cruzar
+/// con la cola de validación.
+/// </summary>
+public class ValidatedVoucherItem
+{
+    public Guid VoucherId { get; set; }
+    public Guid AppointmentId { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string ServiceName { get; set; } = string.Empty;
+    public string StylistName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    /// <summary>Banco que reportó la cliente. "Crédito interno" si es aplicación de saldo.</summary>
+    public string? Bank { get; set; }
+    /// <summary>True si Bank == "Crédito interno" — el frontend lo muestra distinto.</summary>
+    public bool IsInternalCredit { get; set; }
+    /// <summary>Cuándo se aprobó el voucher (= cuándo entró al cierre del día).</summary>
+    public DateTime DecidedAt { get; set; }
+}
+
+/// <summary>
+/// Item de la sección "Anticipos retenidos por cancelación tardía".
+/// La admin ve quién canceló tarde y cuánto retuvo el salón.
+/// </summary>
+public class ForfeitedItem
+{
+    public Guid VoucherId { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string ServiceName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    /// <summary>Cuándo era la cita cancelada (display).</summary>
+    public DateTime AppointmentStartAt { get; set; }
+    /// <summary>Cuándo se canceló la cita (= cuándo se decidió Forfeited).</summary>
+    public DateTime CancelledAt { get; set; }
+    public string? CancellationReason { get; set; }
 }

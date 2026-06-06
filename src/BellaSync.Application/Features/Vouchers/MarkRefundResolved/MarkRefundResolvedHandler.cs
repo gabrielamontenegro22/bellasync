@@ -5,6 +5,7 @@ using BellaSync.Application.Common.Results;
 using BellaSync.Application.Features.Vouchers.Dtos;
 using BellaSync.Domain.Common;
 using BellaSync.Domain.Entities;
+using BellaSync.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -64,11 +65,37 @@ public sealed class MarkRefundResolvedHandler
                 return ApplicationError.Validation("voucher.invalid_state", ex.Message);
             }
 
+            // Si la decisión es Refunded (devolución real al cliente),
+            // crear automáticamente un Expense para que el cierre de caja
+            // refleje la salida de plata. Sin esto, el total recaudado del
+            // día queda inflado (el voucher cuenta como ingreso pero la
+            // devolución no se ve en ningún lado).
+            //
+            // Para CreditPending NO creamos expense — la plata no salió,
+            // solo se reservó como saldo para una cita futura.
+            if (voucher.RefundDecision == DepositRefundDecision.Refunded)
+            {
+                var concept = $"Devolución anticipo: {voucher.Appointment?.Customer?.FullName ?? "cliente"}" +
+                              (voucher.Appointment?.Service?.Name is { } svc ? $" — {svc}" : "");
+
+                var refundExpense = Expense.Create(
+                    tenantId: voucher.TenantId,
+                    concept: concept,
+                    amount: voucher.ReportedAmount,
+                    method: PaymentMethod.Transfer,
+                    provider: voucher.Bank ?? "Transferencia",
+                    registeredByUserId: _currentUser.UserId,
+                    utcNow: _clock.UtcNow);
+
+                _db.Expenses.Add(refundExpense);
+            }
+
             await _db.SaveChangesAsync(ct);
 
             _logger.LogInformation(
-                "Refund del voucher {VoucherId} marcado como resuelto por user {UserId}",
-                voucher.Id, _currentUser.UserId);
+                "Refund del voucher {VoucherId} marcado como resuelto por user {UserId}. Decision={Decision}, expense_auto={ExpenseAuto}",
+                voucher.Id, _currentUser.UserId, voucher.RefundDecision,
+                voucher.RefundDecision == DepositRefundDecision.Refunded);
         }
 
         return Result<PendingRefundResponse>.Success(new PendingRefundResponse
