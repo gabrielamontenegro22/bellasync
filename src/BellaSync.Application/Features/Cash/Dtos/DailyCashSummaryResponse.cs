@@ -80,6 +80,18 @@ public class DailyCashSummaryResponse
     public List<PaymentResponse> Payments { get; set; } = new();
 
     /// <summary>
+    /// Vouchers validados HOY (anticipos online). El frontend los muestra
+    /// en la misma lista de "Transacciones" intercalados con los Payments
+    /// por hora, para que la admin vea TODO lo que entró hoy en un mismo
+    /// lugar (no solo cobros en sitio).
+    ///
+    /// Incluye TAMBIÉN los vouchers internos (Bank = "Crédito interno")
+    /// para que el frontend los pueda mostrar con etiqueta distinta
+    /// ("Aplicación de crédito" vs "Anticipo recibido").
+    /// </summary>
+    public List<ValidatedVoucherItem> ValidatedVouchersToday { get; set; } = new();
+
+    /// <summary>
     /// Total de egresos del día (todos los métodos). Útil para el KPI
     /// "Egresos del día".
     /// </summary>
@@ -118,6 +130,28 @@ public class ProviderBreakdownItem
     public string? Provider { get; set; }
     public int Count { get; set; }
     public decimal Total { get; set; }
+}
+
+/// <summary>
+/// Voucher validado del día, formateado para mostrarse junto a los
+/// Payments en la lista de "Transacciones". Permite ver de un vistazo
+/// quién pagó qué (cliente + servicio + banco) sin tener que cruzar
+/// con la cola de validación.
+/// </summary>
+public class ValidatedVoucherItem
+{
+    public Guid VoucherId { get; set; }
+    public Guid AppointmentId { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string ServiceName { get; set; } = string.Empty;
+    public string StylistName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    /// <summary>Banco que reportó la cliente. "Crédito interno" si es aplicación de saldo.</summary>
+    public string? Bank { get; set; }
+    /// <summary>True si Bank == "Crédito interno" — el frontend lo muestra distinto.</summary>
+    public bool IsInternalCredit { get; set; }
+    /// <summary>Cuándo se aprobó el voucher (= cuándo entró al cierre del día).</summary>
+    public DateTime DecidedAt { get; set; }
 }
 
 /// <summary>

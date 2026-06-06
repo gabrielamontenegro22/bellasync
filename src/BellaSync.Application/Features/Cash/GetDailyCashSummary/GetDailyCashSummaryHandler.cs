@@ -61,20 +61,47 @@ public sealed class GetDailyCashSummaryHandler
         //   2. "Internos" — aplicación de crédito viejo (Bank = "Crédito interno").
         //      NO se cuentan al TotalAmount porque la plata ya había entrado
         //      antes; lo que pasa hoy es solo consumo de saldo.
-        var allValidatedVouchersToday = await _db.PaymentVouchers
+        //
+        // Cargamos con includes para poder exponer la lista completa en
+        // ValidatedVouchersToday (drill-down en la UI de "Transacciones").
+        var allValidatedVouchersTodayWithRefs = await _db.PaymentVouchers
             .AsNoTracking()
+            .Include(v => v.Appointment).ThenInclude(a => a!.Customer)
+            .Include(v => v.Appointment).ThenInclude(a => a!.Service)
+            .Include(v => v.Appointment).ThenInclude(a => a!.Stylist)
             .Where(v => v.Status == PaymentVoucherStatus.Validated
                      && v.DecidedAt != null
                      && v.DecidedAt >= dayStartUtc
                      && v.DecidedAt < dayEndUtc)
-            .Select(v => new { v.ReportedAmount, v.Bank })
             .ToListAsync(ct);
+
+        // Versión simplificada para los sumadores que ya estaban.
+        var allValidatedVouchersToday = allValidatedVouchersTodayWithRefs
+            .Select(v => new { v.ReportedAmount, v.Bank })
+            .ToList();
 
         var externalVouchers = allValidatedVouchersToday
             .Where(v => v.Bank != InternalCreditBankMarker)
             .ToList();
         var internalVouchers = allValidatedVouchersToday
             .Where(v => v.Bank == InternalCreditBankMarker)
+            .ToList();
+
+        // Lista detallada para la UI de transacciones.
+        var validatedVoucherItems = allValidatedVouchersTodayWithRefs
+            .OrderBy(v => v.DecidedAt)
+            .Select(v => new ValidatedVoucherItem
+            {
+                VoucherId = v.Id,
+                AppointmentId = v.AppointmentId,
+                CustomerName = v.Appointment?.Customer?.FullName ?? string.Empty,
+                ServiceName = v.Appointment?.Service?.Name ?? string.Empty,
+                StylistName = v.Appointment?.Stylist?.FullName ?? string.Empty,
+                Amount = v.ReportedAmount.Amount,
+                Bank = v.Bank,
+                IsInternalCredit = v.Bank == InternalCreditBankMarker,
+                DecidedAt = v.DecidedAt ?? v.ReceivedAt,
+            })
             .ToList();
 
         var depositsTotal = externalVouchers.Sum(v => v.ReportedAmount.Amount);
@@ -235,6 +262,7 @@ public sealed class GetDailyCashSummaryHandler
             ForfeitedToday = forfeitedItems,
             ByMethod = byMethod,
             Payments = payments.Select(PaymentMapper.ToResponse).ToList(),
+            ValidatedVouchersToday = validatedVoucherItems,
             TotalExpenses = totalExpenses,
             CashExpenses = cashExpenses,
             Expenses = expenses.Select(ExpenseMapper.ToResponse).ToList(),

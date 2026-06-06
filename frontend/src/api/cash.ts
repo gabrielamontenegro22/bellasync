@@ -19,6 +19,25 @@ export interface MethodBreakdownItem {
 }
 
 /**
+ * Voucher validado del día — se muestra junto a los Payments en la lista
+ * de "Transacciones" para que la admin vea TODO lo que entró hoy.
+ */
+export interface ValidatedVoucherItem {
+  voucherId: string
+  appointmentId: string
+  customerName: string
+  serviceName: string
+  stylistName: string
+  amount: number
+  /** Banco que reportó la cliente. "Crédito interno" si es aplicación de saldo. */
+  bank: string | null
+  /** Si es aplicación de crédito (no plata nueva). Frontend lo muestra distinto. */
+  isInternalCredit: boolean
+  /** Cuándo se aprobó (ISO). */
+  decidedAt: string
+}
+
+/**
  * Item de "Anticipos retenidos por cancelación tardía" — un voucher cuya
  * cita se canceló con decisión Forfeited (No devolver). El salón se quedó
  * con esa plata por política.
@@ -54,6 +73,8 @@ export interface DailyCashSummary {
   forfeitedToday: ForfeitedItem[]
   byMethod: MethodBreakdownItem[]
   payments: PaymentResponse[]
+  /** Vouchers validados hoy — se muestran junto a payments en "Transacciones". */
+  validatedVouchersToday: ValidatedVoucherItem[]
   totalExpenses: number
   cashExpenses: number
   expenses: ExpenseResponse[]
