@@ -18,17 +18,23 @@ public sealed class ValidateVoucherHandler
     private readonly IApplicationDbContext _db;
     private readonly IClock _clock;
     private readonly WhatsAppEnqueuer _whatsApp;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IReceptionPermissionsService _perms;
     private readonly ILogger<ValidateVoucherHandler> _logger;
 
     public ValidateVoucherHandler(
         IApplicationDbContext db,
         IClock clock,
         WhatsAppEnqueuer whatsApp,
+        ICurrentUserService currentUser,
+        IReceptionPermissionsService perms,
         ILogger<ValidateVoucherHandler> logger)
     {
         _db = db;
         _clock = clock;
         _whatsApp = whatsApp;
+        _currentUser = currentUser;
+        _perms = perms;
         _logger = logger;
     }
 
@@ -93,6 +99,37 @@ public sealed class ValidateVoucherHandler
                         else if (rejectedAppt.Status == AppointmentStatus.Pending
                             || rejectedAppt.Status == AppointmentStatus.Confirmed)
                         {
+                            // Bug 2026-06 (auditoría #3): si recepción rechaza este
+                            // voucher y la cita tiene OTROS pagos confirmados (otro
+                            // voucher Validated o un Payment directo), la cancelación
+                            // derivada implica "cancelar cita con plata". Eso requiere
+                            // el permiso CanCancelWithMoney del tenant.
+                            // Sin este chequeo, recepción sin el permiso podía bypassear
+                            // la política rechazando un voucher de una cita ya cobrada.
+                            // Admin siempre pasa.
+                            if (!_currentUser.IsSalonAdmin)
+                            {
+                                var hasOtherMoney = await _db.PaymentVouchers
+                                    .AsNoTracking()
+                                    .AnyAsync(v => v.AppointmentId == rejectedAppt.Id
+                                                && v.Id != voucher.Id
+                                                && v.Status == PaymentVoucherStatus.Validated, ct)
+                                    || await _db.Payments
+                                        .AsNoTracking()
+                                        .AnyAsync(p => p.AppointmentId == rejectedAppt.Id, ct);
+
+                                if (hasOtherMoney)
+                                {
+                                    var p = await _perms.GetAsync(ct);
+                                    if (!p.CanCancelWithMoney)
+                                    {
+                                        return ApplicationError.Forbidden(
+                                            "voucher.reject_cancels_with_money_requires_admin",
+                                            "Esta cita tiene otros pagos confirmados. Rechazar este voucher la cancelaría — y la administradora configuró que solo ella puede cancelar citas con dinero asociado.");
+                                    }
+                                }
+                            }
+
                             var wasConfirmed = rejectedAppt.Status == AppointmentStatus.Confirmed;
                             // El user que rechaza el voucher es el responsable
                             // de la cancelación derivada — pasamos su id para que

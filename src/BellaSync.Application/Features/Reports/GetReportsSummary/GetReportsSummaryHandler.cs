@@ -362,10 +362,16 @@ public sealed class GetReportsSummaryHandler
 
         // Vouchers Validated: de TODAS las citas del período. Anticipos
         // no reembolsables → cuentan independiente del status final.
+        //
+        // EXCLUIR vouchers internos: representan aplicación de crédito viejo,
+        // la plata ya se contabilizó en el período en que se cobró el voucher
+        // ORIGINAL externo (días/semanas atrás). Contarlos otra vez infla
+        // KPIs de ingresos / ticket promedio / top services del período actual.
         var vouchers = await _db.PaymentVouchers
             .Where(v => v.TenantId == tenantId
                      && apptIds.Contains(v.AppointmentId)
-                     && v.Status == PaymentVoucherStatus.Validated)
+                     && v.Status == PaymentVoucherStatus.Validated
+                     && !v.IsInternalCredit)
             .Select(v => new { v.AppointmentId, v.ReportedAmount, v.Bank })
             .ToListAsync(ct);
 

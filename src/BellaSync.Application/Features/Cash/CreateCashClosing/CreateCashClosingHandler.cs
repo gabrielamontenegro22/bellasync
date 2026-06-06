@@ -97,12 +97,18 @@ public sealed class CreateCashClosingHandler
         // con uso intenso de anticipos tipo balayage/keratina). La pantalla
         // /caja en vivo SÍ los incluía pero el cierre persistido NO →
         // reportes mensuales mostraban menos plata de la real.
+        //
+        // Bug 2026-06 (auditoría): EXCLUIR vouchers internos (aplicación
+        // de crédito viejo). NO son plata nueva entrando — la pantalla
+        // /caja en vivo los excluye también. Sin este filtro el snapshot
+        // persistido diverge de lo que la admin vio al cerrar.
         var validatedVouchers = await _db.PaymentVouchers
             .AsNoTracking()
             .Where(v => v.Status == PaymentVoucherStatus.Validated
                      && v.DecidedAt != null
                      && v.DecidedAt >= dayStartUtc
-                     && v.DecidedAt < dayEndUtc)
+                     && v.DecidedAt < dayEndUtc
+                     && !v.IsInternalCredit)
             .Select(v => new { Amount = v.ReportedAmount.Amount })
             .ToListAsync(ct);
 
